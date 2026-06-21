@@ -1,0 +1,180 @@
+# Aerie
+
+**A desktop app that runs your local AI coding agents on a GitHub commit or PR, then posts the review back to GitHub — under your explicit confirmation.**
+
+[![CI](https://github.com/korolevmaksim/aerie/actions/workflows/ci.yml/badge.svg)](https://github.com/korolevmaksim/aerie/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+Aerie is GitHub mission-control for developers who already run AI coding-agent CLIs
+(Codex, Claude Code, Cursor, Gemini, and more). Instead of copy-pasting diffs into a
+terminal, you browse your repos, pick a commit or PR, choose an agent + a review prompt,
+and Aerie checks the change out locally, runs the agent against it, streams the output
+live, and — only when you confirm — posts the result as a commit comment, PR comment, or
+issue.
+
+The agents run **locally, on your machine, against an app-owned clone**. Your GitHub token
+never leaves the main process and is never handed to an agent.
+
+> Status: early but functional (v0.1). macOS-first, cross-platform by design.
+
+---
+
+## Why
+
+The commodity GitHub features (Actions, PR dashboards, analytics) already exist. Aerie's
+one job is the part nothing else does well: **turn the local AI coding agents you already
+have into a first-class GitHub review loop**, without shipping your code or token to a
+third-party service.
+
+## Features
+
+- **Multi-account GitHub** — add one or more Personal Access Tokens; tokens are encrypted
+  at rest with the OS keychain (`safeStorage`) and never cross into the UI.
+- **Browse repos, commits, and PRs** — cached with conditional requests (ETags), so
+  re-listing costs ~0 rate limit.
+- **Local checkout** — Aerie clones into an app-owned working copy (or, opt-in, a
+  read-only worktree of your own clone) and builds the unified diff for the agent.
+- **Run any local agent** — a small, editable registry ships templates for Codex,
+  Claude Code, Cursor Agent, opencode, Kimi, Gemini, Mistral Vibe, Grok, Antigravity, and
+  MiMo. Installed agents are auto-detected; pick a model and (where supported) a
+  reasoning/thinking level per agent.
+- **Curated review prompts, out of the box** — Default, Security audit, Tests & edge
+  cases, Performance, Architecture & maintainability, and Quick triage. Edit them or add
+  your own in Settings, then pick one per run. Aerie always prepends the machine context
+  (repo, SHA, working-copy + diff paths) so a custom prompt can never leave the agent
+  without something to review.
+- **Presets** — save an agent + model + reasoning bundle and apply it in one click.
+- **Live output, kill, and history** — watch the agent's transcript stream, stop a run,
+  and reopen any past run's logs and result.
+- **Post back to GitHub — behind a confirm** — every write (commit comment, PR comment, or
+  new issue) requires an explicit in-app confirmation showing the exact body. Optionally
+  `@`-mention the commit/PR author.
+
+## Security model
+
+Aerie handles GitHub tokens and spawns local processes, so the boundaries are deliberate:
+
+- `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`. The renderer is UI
+  only — it never imports Node, touches tokens, or shells out.
+- All GitHub, git, token, and agent work happens in the **main process**. The renderer
+  reaches it solely through a small, typed `contextBridge` IPC surface.
+- Tokens are encrypted at rest via Electron `safeStorage`, are never sent to the renderer,
+  never written to a log, and are **never** placed in an agent's environment.
+- Agents run on **app-owned clones** by default, not your working copies (read-only
+  worktree mode is opt-in, default off).
+- **Every** GitHub write sits behind an explicit confirmation dialog.
+
+Found a security issue? See [SECURITY.md](.github/SECURITY.md).
+
+## Supported agents
+
+Agent templates are plain config (`agents.json` in the app's user-data dir) — adding or
+editing one is a config edit, not a code change. Ships with templates for:
+
+`codex` · `claude-code` · `cursor-agent` · `opencode` · `kimi` · `gemini` · `vibe`
+(Mistral) · `grok` · `agy` (Antigravity) · `mimo`.
+
+Each template was tuned for a **clean, headless, read-only** review invocation (only the
+final review is captured — no chat UI or tool-call transcript in the posted comment). You
+only see and can run the agents whose CLI is actually installed on your PATH.
+
+## Requirements
+
+- **Node.js ≥ 20.19** (CI runs on Node 22; see `.nvmrc`).
+- A **C/C++ toolchain** — `better-sqlite3` is a native module rebuilt for Electron on
+  install:
+  - macOS: `xcode-select --install`
+  - Windows: Visual Studio Build Tools (Desktop C++) + Python 3
+  - Linux: `build-essential` + `python3`
+- At least one supported agent CLI installed and authenticated, if you want to run real
+  reviews. (The registry includes a `dummy`-free, real-agent-only set; install whichever
+  you use.)
+
+## Build from source
+
+```bash
+git clone https://github.com/korolevmaksim/aerie.git
+cd aerie
+npm install            # postinstall rebuilds better-sqlite3 for Electron
+npm run dev            # run the app in development
+```
+
+Other scripts:
+
+```bash
+npm run typecheck      # tsc (node + web projects)
+npm run lint           # eslint
+npm test               # vitest (pure-logic unit tests)
+npm run build          # typecheck + bundle (electron-vite)
+npm run build:unpack   # build an unpacked app into release/
+```
+
+### Packaging a macOS app
+
+Builds are **unsigned** by default. To produce a local unsigned build, disable
+electron-builder's signing auto-discovery:
+
+```bash
+CSC_IDENTITY_AUTO_DISCOVERY=false npm run build:mac
+```
+
+Because the build is unsigned/un-notarized, macOS Gatekeeper will warn on first launch —
+right-click the app → **Open**, or clear the quarantine flag:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Aerie.app
+```
+
+(On Windows an unsigned build triggers SmartScreen → **More info → Run anyway**.)
+
+## Using it
+
+1. **Add an account** — paste a GitHub PAT (classic or fine-grained). It's validated and
+   encrypted locally.
+2. **Pick a repo**, then a **commit or PR**.
+3. (Optional) **Prepare a local checkout** to pre-clone.
+4. Choose an **agent**, **model**, **reasoning level**, and a **review prompt** (or apply a
+   preset), then **Review with agent**.
+5. Watch the live transcript. When it finishes, **Post as commit/PR comment** or **Create
+   issue** — confirm the exact body (optionally tag the author) and it's posted.
+
+### Configuring agents & prompts
+
+- **Agents** — Settings shows the path to `agents.json`; edit it to add an agent, change a
+  command, or adjust model/flags. Per-agent model and reasoning choices are stored
+  separately and persist.
+- **Prompts** — Settings → **Review prompts**: edit the defaults or add focused prompts;
+  the picker on the run screen selects one per review. Power users can reference
+  `{{repo}}`, `{{sha}}`, `{{repoPath}}`, `{{diffFile}}` placeholders in a prompt body.
+
+## Project layout
+
+```
+src/
+  main/      privileged process: GitHub (Octokit), git (simple-git), agent runner,
+             SQLite store, encrypted tokens, IPC handlers
+  preload/   the typed contextBridge API — the only renderer ↔ main seam
+  renderer/  React UI (no Node, no tokens, no shelling out)
+  shared/    types, IPC channel names, validators shared across processes
+.github/     CI, security policy, Dependabot
+SPEC.md      the build specification (source of truth)
+```
+
+Built on Electron 42 · electron-vite · React 19 · TypeScript (strict) · better-sqlite3 ·
+Octokit · simple-git. All bundled dependencies are MIT/BSD/Apache-2.0/ISC.
+
+## Roadmap / non-goals
+
+v1 is intentionally focused on the review loop. Out of scope for now: Actions/workflow
+dashboards, analytics, org-admin actions, GitHub writes beyond commit/PR comments +
+optional issue creation, and real-time webhooks — GitHub already does those well.
+
+## Contributing
+
+Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). In short: keep the
+security boundaries intact, run `npm run typecheck && npm run lint && npm test` before a
+PR, and match the existing TypeScript-strict, English-comment style.
+
+## License
+
+[MIT](LICENSE) © 2026 Maksim Korolyov.
