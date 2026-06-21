@@ -215,6 +215,21 @@ export interface RunStatusUpdate {
   outputPath?: string | null
 }
 
+/**
+ * Main → renderer push: the tray (or a finish notification) asks the UI to open a
+ * specific run. The renderer switches to History and selects that run.
+ */
+export interface TrayOpenRun {
+  runId: number
+}
+
+/**
+ * The only settings keys the renderer may read or write through the typed bridge.
+ * Backed by the key/value `settings` table in the main-process store; main owns
+ * the privileged behavior these gate (close-to-tray, finish notifications).
+ */
+export type SettingKey = 'ui.closeToTray' | 'ui.notifyOnFinish' | 'ui.closeToTrayHintShown'
+
 // --- posting results to GitHub (Stage 6) -------------------------------------
 
 export type PostKind = 'commitComment' | 'prComment' | 'issue'

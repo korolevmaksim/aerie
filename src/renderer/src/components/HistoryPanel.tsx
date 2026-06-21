@@ -1,13 +1,24 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { RunHistoryItem } from '@shared/types'
 import { formatRelativeTime } from '../lib/format'
 import RunView from './RunView'
 
-function HistoryPanel(): React.JSX.Element {
+function HistoryPanel({
+  externalRunId = null,
+  onConsumed
+}: {
+  /** A run the tray asked to open; selected automatically when present. */
+  externalRunId?: number | null
+  /** Called once the external run id has been handled (found or not). */
+  onConsumed?: () => void
+} = {}): React.JSX.Element {
   const [runs, setRuns] = useState<RunHistoryItem[]>([])
   const [loaded, setLoaded] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [selected, setSelected] = useState<RunHistoryItem | null>(null)
+  // Remember which external id we've already acted on, so a not-yet-loaded (or
+  // pruned) run never drives an endless reload loop.
+  const handledRunIdRef = useRef<number | null>(null)
 
   const reload = useCallback(async (): Promise<void> => {
     const res = await window.aerie.runner.listAllRuns()
@@ -55,6 +66,35 @@ function HistoryPanel(): React.JSX.Element {
       )
     })
   }, [])
+
+  // Open-from-tray: select the requested run. Try the loaded list first; if it
+  // isn't there yet, reload once and select if it appears. Either way mark the id
+  // handled (single attempt) and notify the parent so it can clear pending state.
+  useEffect(() => {
+    if (externalRunId == null) {
+      // Reset so re-opening the SAME run from the tray (id goes N → null → N) is
+      // handled again rather than ignored as already-seen.
+      handledRunIdRef.current = null
+      return
+    }
+    if (handledRunIdRef.current === externalRunId) return
+    // Wait for the initial load before deciding a missing run needs a refetch.
+    if (!loaded && !runs.some((r) => r.id === externalRunId)) return
+
+    handledRunIdRef.current = externalRunId
+    void (async () => {
+      let match = runs.find((r) => r.id === externalRunId)
+      if (!match) {
+        const res = await window.aerie.runner.listAllRuns()
+        if (res.ok) {
+          setRuns(res.value)
+          match = res.value.find((r) => r.id === externalRunId)
+        }
+      }
+      if (match) setSelected(match)
+      onConsumed?.()
+    })()
+  }, [externalRunId, runs, loaded, onConsumed])
 
   // Safety net: while any run is still active, re-poll the list so a status that
   // settled before this panel mounted (or any missed event) still converges.

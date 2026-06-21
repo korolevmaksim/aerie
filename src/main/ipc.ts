@@ -23,6 +23,7 @@ import type {
   ReposResult,
   RunHistoryItem,
   RunRecord,
+  SettingKey,
   StartRunParams,
   SystemInfo
 } from '../shared/types'
@@ -35,8 +36,7 @@ import {
   readRunOutput,
   setAgentModel,
   setAgentReasoning,
-  startRun,
-  type RunHooks
+  startRun
 } from './agentRunner'
 import {
   decryptToken,
@@ -64,6 +64,8 @@ import {
   deleteAccount,
   findAccountByLogin,
   getAccount,
+  getSetting,
+  setSetting,
   deletePreset,
   deletePrompt,
   getRepoById,
@@ -510,17 +512,11 @@ export function registerIpcHandlers(): void {
       return fail('A run for this commit and agent is already in progress.')
     }
 
-    const wc = event.sender
-    const hooks: RunHooks = {
-      onOutput: (runId, stream, chunk) => {
-        if (!wc.isDestroyed()) wc.send(CHANNELS.runnerOutput, { runId, stream, chunk })
-      },
-      onStatus: (runId, status, extra) => {
-        if (!wc.isDestroyed()) wc.send(CHANNELS.runnerStatus, { runId, status, ...extra })
-      }
-    }
+    // Output and status now flow through the central run-events hub, which the
+    // main process broadcasts to ALL windows (so a re-shown window keeps streaming)
+    // and the tray subscribes to. No per-sender wiring here.
     try {
-      return ok(startRun(p as StartRunParams, hooks))
+      return ok(startRun(p as StartRunParams))
     } catch (error) {
       return fail(error instanceof Error ? error.message : 'Failed to start run.')
     }
@@ -655,6 +651,38 @@ export function registerIpcHandlers(): void {
       return ok(true)
     }
   )
+
+  // --- UI settings (close-to-tray, finish notifications) ---------------------
+  // Boolean-only, stored as '1'/'0' in the existing key/value settings table. The
+  // renderer may only touch this hardcoded allowlist of keys — never an arbitrary
+  // settings key (which would expose, e.g., per-agent model state). Defaults are
+  // ON for the two behavior toggles and OFF for the one-time hint flag.
+  ipcMain.handle(CHANNELS.settingsGet, (event, key: unknown): ApiResult<boolean> => {
+    if (!isTrustedSender(event)) return fail('Untrusted sender.')
+    if (!isAllowedSettingKey(key)) return fail('Unknown setting.')
+    const value = getSetting(key)
+    return ok(value === undefined ? UI_SETTING_DEFAULTS[key] : value === '1')
+  })
+
+  ipcMain.handle(CHANNELS.settingsSet, (event, key: unknown, value: unknown): ApiResult<true> => {
+    if (!isTrustedSender(event)) return fail('Untrusted sender.')
+    if (!isAllowedSettingKey(key)) return fail('Unknown setting.')
+    if (typeof value !== 'boolean') return fail('A boolean value is required.')
+    setSetting(key, value ? '1' : '0')
+    return ok(true)
+  })
+}
+
+/** The renderer-writable settings keys and their default (when unset) values. */
+const UI_SETTING_DEFAULTS: Record<SettingKey, boolean> = {
+  'ui.closeToTray': true,
+  'ui.notifyOnFinish': true,
+  'ui.closeToTrayHintShown': false
+}
+
+/** Prototype-safe membership test for the settings allowlist (guards 'constructor' etc.). */
+function isAllowedSettingKey(key: unknown): key is SettingKey {
+  return typeof key === 'string' && Object.prototype.hasOwnProperty.call(UI_SETTING_DEFAULTS, key)
 }
 
 function rowToPreset(row: PresetRow): Preset {

@@ -20,6 +20,7 @@ import {
 import { decryptToken } from './auth'
 import { cleanupCheckout, prepareCheckout, type PreparedCheckout } from './gitEngine'
 import { log } from './logger'
+import { activeCount, noteOutput, noteStatus, registerRun } from './runEvents'
 import {
   getAccount,
   getPrompt,
@@ -44,15 +45,6 @@ import {
  * config edit, never a code change. The GitHub token is NEVER passed to the
  * agent's environment.
  */
-
-export interface RunHooks {
-  onOutput: (runId: number, stream: 'stdout' | 'stderr' | 'system', chunk: string) => void
-  onStatus: (
-    runId: number,
-    status: RunStatus,
-    extra?: { exitCode?: number | null; outputPath?: string | null }
-  ) => void
-}
 
 function agentsPath(): string {
   return join(app.getPath('userData'), 'agents.json')
@@ -157,9 +149,11 @@ function rowToRecord(row: RunRow): RunRecord {
 
 /**
  * Starts a run: inserts the `runs` row and kicks off the async prepare+spawn.
- * Returns the queued record immediately; progress arrives via the hooks.
+ * Returns the queued record immediately; progress is broadcast through the
+ * central run-events hub (`runEvents`), which both the tray and the renderer
+ * fan-out subscribe to.
  */
-export function startRun(params: StartRunParams, hooks: RunHooks): RunRecord {
+export function startRun(params: StartRunParams): RunRecord {
   const agent = loadAgents().find((a) => a.id === params.agentId)
   if (!agent) throw new Error(`Unknown agent "${params.agentId}".`)
   const repo = getRepoById(params.repoId)
@@ -178,9 +172,22 @@ export function startRun(params: StartRunParams, hooks: RunHooks): RunRecord {
     authorLogin: params.authorLogin ?? null
   })
 
+  // Register the queued run in the hub up front so the tray reflects it (and the
+  // quit drain treats it as active) even before the agent process is spawned.
+  registerRun({
+    runId: run.id,
+    repoFullName: repo.full_name,
+    shortSha: params.sha.slice(0, 7),
+    agentId: params.agentId,
+    refType: params.refType,
+    refId: params.refId,
+    status: 'queued',
+    startedAt: run.started_at
+  })
+
   // Defer one tick so the caller receives the runId (and the renderer wires its
   // output listener) before the first status/output events are emitted.
-  setImmediate(() => void execute(run.id, params, agent, repo, account.token_blob, hooks))
+  setImmediate(() => void execute(run.id, params, agent, repo, account.token_blob))
   return rowToRecord(run)
 }
 
@@ -221,8 +228,7 @@ async function execute(
   params: StartRunParams,
   agent: Agent,
   repo: RepoRow,
-  tokenBlob: Buffer,
-  hooks: RunHooks
+  tokenBlob: Buffer
 ): Promise<void> {
   // The full console transcript (stdout+stderr+system) is buffered live so a
   // re-opened panel (or the History view) can show progress for a RUNNING run;
@@ -231,11 +237,11 @@ async function execute(
     const prev = liveTranscripts.get(runId) ?? ''
     const next = prev + chunk
     liveTranscripts.set(runId, next.length > MAX_TRANSCRIPT ? next.slice(-MAX_TRANSCRIPT) : next)
-    hooks.onOutput(runId, stream, chunk)
+    noteOutput({ runId, stream, chunk })
   }
   const finish = (status: RunStatus, exitCode: number | null, outputPath: string | null): void => {
     updateRunStatus(runId, { status, exitCode, finishedAt: new Date().toISOString(), outputPath })
-    hooks.onStatus(runId, status, { exitCode, outputPath })
+    noteStatus(runId, status, { exitCode, outputPath })
   }
 
   const runsDir = join(app.getPath('userData'), 'runs')
@@ -288,7 +294,7 @@ async function execute(
 
   try {
     updateRunStatus(runId, { status: 'running' })
-    hooks.onStatus(runId, 'running')
+    noteStatus(runId, 'running')
     emit('system', '[aerie] preparing local checkout…\n')
 
     prepared = await prepareCheckout({
@@ -434,6 +440,15 @@ export function killRun(runId: number): boolean {
 
 export function hasRunningAgents(): boolean {
   return running.size > 0
+}
+
+/**
+ * True if any run is queued OR running (per the hub), not just spawned. The quit
+ * drain gates on this so a run that is queued/preparing but has not spawned its
+ * child yet still gets the shutdown grace window.
+ */
+export function hasActiveRuns(): boolean {
+  return activeCount() > 0
 }
 
 /** Signals every in-flight agent's process group (used on app quit). */

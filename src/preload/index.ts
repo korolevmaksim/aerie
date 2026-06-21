@@ -23,8 +23,10 @@ import type {
   RunOutputChunk,
   RunRecord,
   RunStatusUpdate,
+  SettingKey,
   StartRunParams,
-  SystemInfo
+  SystemInfo,
+  TrayOpenRun
 } from '../shared/types'
 
 /**
@@ -171,6 +173,21 @@ const api = {
     info: (): Promise<ApiResult<SystemInfo>> => ipcRenderer.invoke(CHANNELS.systemInfo),
     openPath: (which: OpenTarget): Promise<ApiResult<true>> =>
       ipcRenderer.invoke(CHANNELS.systemOpenPath, which)
+  },
+
+  /** UI behavior toggles (close-to-tray, finish notifications). Booleans only. */
+  settings: {
+    get: (key: SettingKey): Promise<ApiResult<boolean>> =>
+      ipcRenderer.invoke(CHANNELS.settingsGet, key),
+    set: (key: SettingKey, value: boolean): Promise<ApiResult<true>> =>
+      ipcRenderer.invoke(CHANNELS.settingsSet, key, value)
+  },
+
+  /** Main → renderer: the tray (or a finish notification) asks the UI to open a run. */
+  onTrayOpenRun: (cb: (payload: TrayOpenRun) => void): (() => void) => {
+    const listener = (_e: IpcRendererEvent, payload: TrayOpenRun): void => cb(payload)
+    ipcRenderer.on(CHANNELS.trayOpenRun, listener)
+    return () => ipcRenderer.removeListener(CHANNELS.trayOpenRun, listener)
   }
 } as const
 

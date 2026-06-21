@@ -40,7 +40,10 @@ export const CHANNELS = {
   githubPost: 'github:post',
   systemInfo: 'system:info',
   systemOpenPath: 'system:openPath',
+  settingsGet: 'settings:get',
+  settingsSet: 'settings:set',
   // main → renderer push channels
   runnerOutput: 'runner:output',
-  runnerStatus: 'runner:status'
+  runnerStatus: 'runner:status',
+  trayOpenRun: 'tray:openRun'
 } as const

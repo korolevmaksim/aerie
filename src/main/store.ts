@@ -489,6 +489,11 @@ export function listAllRuns(limit = 200): RunRowWithRepo[] {
 }
 
 // --- settings (Stage 7) ------------------------------------------------------
+// NOTE: this is a generic key/value table shared with main-only keys (e.g.
+// `agent.model:*`). The renderer can only reach it through the settings IPC
+// handlers, which restrict access to a hardcoded `ui.*` allowlist — that IPC
+// allowlist, not this layer, is the trust boundary. Do not add a renderer path
+// that reads/writes arbitrary keys.
 
 export function getSetting(key: string): string | undefined {
   const row = requireDb().prepare(`SELECT value FROM settings WHERE key = ?`).get(key) as

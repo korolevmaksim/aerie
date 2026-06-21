@@ -2,15 +2,26 @@ import { app, dialog, shell, BrowserWindow, safeStorage } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
-import { initStore } from './store'
+import { CHANNELS } from '../shared/channels'
+import { initStore, getSetting, setSetting } from './store'
 import { registerIpcHandlers } from './ipc'
 import { isInternalUrl, isSafeExternalUrl } from './security'
 import { log } from './logger'
-import { hasRunningAgents, killAllRuns } from './agentRunner'
+import { hasActiveRuns, killAllRuns } from './agentRunner'
 import { pruneAllWorktreesAndDiffs } from './gitEngine'
+import { onChange, onFinished, onOutput, onStatus } from './runEvents'
+import { initTray, destroyTray } from './tray'
+import { notifyRunFinished, showCloseToTrayHint } from './notifications'
+
+// The single main window. Held at module scope so the tray/notifications and the
+// lifecycle helpers can show, hide, and re-create it.
+let mainWindow: BrowserWindow | null = null
+// Set true once a real quit begins, so the close-to-tray intercept lets the window
+// actually close instead of re-hiding it.
+let isQuitting = false
 
 function createWindow(): void {
-  const mainWindow = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1100,
     height: 760,
     show: false,
@@ -27,7 +38,23 @@ function createWindow(): void {
   })
 
   mainWindow.on('ready-to-show', () => {
-    mainWindow.show()
+    mainWindow?.show()
+  })
+
+  // Close-to-tray: a window close (Cmd+W / the red button) hides the window and
+  // keeps the app alive in the menu bar, unless we are really quitting or the user
+  // turned the behavior off. The first time it happens we explain it once.
+  mainWindow.on('close', (event) => {
+    if (isQuitting || !closeToTraySetting()) return
+    event.preventDefault()
+    mainWindow?.hide()
+    if (!boolSetting('ui.closeToTrayHintShown', false)) {
+      showCloseToTrayHint(() => setSetting('ui.closeToTrayHintShown', '1'))
+    }
+  })
+
+  mainWindow.on('closed', () => {
+    mainWindow = null
   })
 
   // Open external links in the OS browser — but only http(s), never file:// or
@@ -55,6 +82,55 @@ function createWindow(): void {
   }
 }
 
+// --- settings helpers (main owns the privileged close/notify decisions) -------
+
+function boolSetting(key: string, fallback: boolean): boolean {
+  const value = getSetting(key)
+  return value === undefined ? fallback : value === '1'
+}
+
+function closeToTraySetting(): boolean {
+  return boolSetting('ui.closeToTray', true)
+}
+
+function notifyOnFinishSetting(): boolean {
+  return boolSetting('ui.notifyOnFinish', true)
+}
+
+// --- window helpers used by the tray, notifications, and app events -----------
+
+/** Restores and focuses the main window, re-creating it if it was destroyed. */
+function showMainWindow(): void {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    createWindow()
+    return
+  }
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  mainWindow.show()
+  mainWindow.focus()
+}
+
+/** Shows the window and tells the renderer to open a specific run in History. */
+function openRun(runId: number): void {
+  showMainWindow()
+  const wc = mainWindow?.webContents
+  if (!wc) return
+  const send = (): void => {
+    if (!wc.isDestroyed()) wc.send(CHANNELS.trayOpenRun, { runId })
+  }
+  // A freshly created window has not loaded yet — wait so the renderer's listener
+  // is mounted before the navigation message arrives.
+  if (wc.isLoading()) wc.once('did-finish-load', send)
+  else send()
+}
+
+/** Sends a push payload to every live window (status/output fan-out). */
+function broadcast(channel: string, payload: unknown): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) win.webContents.send(channel, payload)
+  }
+}
+
 // Stabilize the userData dir name across dev and packaged builds.
 app.setName('Aerie')
 
@@ -63,11 +139,8 @@ if (!app.requestSingleInstanceLock()) {
   app.quit()
 } else {
   app.on('second-instance', () => {
-    const [win] = BrowserWindow.getAllWindows()
-    if (win) {
-      if (win.isMinimized()) win.restore()
-      win.focus()
-    }
+    // Re-surface the window — including un-hiding it from the tray.
+    showMainWindow()
   })
 
   // Last-resort handlers so the main process never dies invisibly.
@@ -98,6 +171,24 @@ if (!app.requestSingleInstanceLock()) {
       initStore()
       // Fresh process → no run is live; drop leftover worktrees/diffs from a prior session.
       pruneAllWorktreesAndDiffs()
+
+      // Wire the central run-events hub BEFORE IPC/agents so no early run can emit
+      // status/output/finish into a hub with no subscriber:
+      //  - status + output fan out to ALL windows (re-shown windows keep streaming),
+      //  - a finished run fires a desktop notification,
+      //  - the tray reflects live state and drives show/open/quit.
+      onStatus((update) => broadcast(CHANNELS.runnerStatus, update))
+      onOutput((chunk) => broadcast(CHANNELS.runnerOutput, chunk))
+      onFinished((run) => notifyRunFinished(run, openRun, notifyOnFinishSetting()))
+      initTray(icon, {
+        showMainWindow,
+        openRun,
+        quit: () => {
+          isQuitting = true
+          app.quit()
+        }
+      })
+
       registerIpcHandlers()
       log.info('app ready')
       createWindow()
@@ -113,26 +204,61 @@ if (!app.requestSingleInstanceLock()) {
     }
 
     app.on('activate', function () {
-      if (BrowserWindow.getAllWindows().length === 0) createWindow()
+      // On macOS a Dock click reactivates the app — re-surface (or re-create) the
+      // window, including un-hiding it from the tray.
+      showMainWindow()
     })
   })
 
   // Drain in-flight agents (and their subprocess trees) before quitting.
   let quitting = false
   app.on('before-quit', (event) => {
+    // before-quit fires before the window 'close', so flagging here makes the
+    // close-to-tray intercept let the window actually close during a real quit.
+    isQuitting = true
     // A second quit during the drain window force-quits (skips the grace).
-    if (quitting || !hasRunningAgents()) return
+    if (quitting || !hasActiveRuns()) return
     event.preventDefault()
     quitting = true
     log.info('quitting — killing in-flight agents')
     killAllRuns()
-    // NOT unref'd: this timer must hold the process open for the grace window so
-    // the killed children can exit and finalize before we exit.
-    setTimeout(() => app.exit(0), 2500)
+
+    let exited = false
+    const finishQuit = (): void => {
+      if (exited) return
+      exited = true
+      destroyTray()
+      app.exit(0)
+    }
+    // Exit the instant the active set drains to zero: a run only leaves the set
+    // after its `finalize()` has persisted output + the DB status, so this both
+    // shortens the common case and guarantees we don't cut off a slow process
+    // tree's output writes. The 2.5s timer is a hard ceiling so an agent that
+    // never dies can't block shutdown forever; a final kill sweep catches any run
+    // that spawned during the grace. The timer is NOT unref'd — it must hold the
+    // process open across the grace window.
+    const offDrain = onChange(() => {
+      if (!hasActiveRuns()) {
+        offDrain()
+        finishQuit()
+      }
+    })
+    setTimeout(() => {
+      offDrain()
+      killAllRuns()
+      finishQuit()
+    }, 2500)
+  })
+
+  // Remove the OS tray icon promptly on a normal (non-drain) quit.
+  app.on('will-quit', () => {
+    destroyTray()
   })
 
   app.on('window-all-closed', () => {
-    // On macOS apps stay active until the user quits with Cmd+Q.
+    // With close-to-tray on, the window hides rather than closes, so this rarely
+    // fires; honor the setting and the platform convention when it does.
+    if (closeToTraySetting()) return
     if (process.platform !== 'darwin') {
       app.quit()
     }

@@ -1,7 +1,52 @@
 import { useEffect, useState } from 'react'
-import type { OpenTarget, SystemInfo } from '@shared/types'
+import type { OpenTarget, SettingKey, SystemInfo } from '@shared/types'
 import PresetsSettings from './PresetsSettings'
 import PromptsSettings from './PromptsSettings'
+
+/** A labelled boolean toggle backed by a main-process UI setting. */
+function SettingToggle({
+  settingKey,
+  label,
+  hint
+}: {
+  settingKey: SettingKey
+  label: string
+  hint: string
+}): React.JSX.Element {
+  const [value, setValue] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      const res = await window.aerie.settings.get(settingKey)
+      if (!cancelled && res.ok) setValue(res.value)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [settingKey])
+
+  const onToggle = async (next: boolean): Promise<void> => {
+    setValue(next) // optimistic
+    const res = await window.aerie.settings.set(settingKey, next)
+    if (!res.ok) setValue(!next) // revert on failure
+  }
+
+  return (
+    <div className="mapping__row">
+      <label className="mapping__toggle">
+        <input
+          type="checkbox"
+          checked={value ?? false}
+          disabled={value === null}
+          onChange={(e) => void onToggle(e.target.checked)}
+        />
+        {label}
+      </label>
+      <span className="muted">{hint}</span>
+    </div>
+  )
+}
 
 function PathRow({
   label,
@@ -57,6 +102,21 @@ function SettingsPanel(): React.JSX.Element {
           </p>
         </div>
       )}
+
+      <h3 className="subhead">Background &amp; notifications</h3>
+      <div className="mapping">
+        <SettingToggle
+          settingKey="ui.closeToTray"
+          label="Keep running in the menu bar"
+          hint="Closing the window hides Aerie to the tray instead of quitting, so reviews keep running."
+        />
+        <SettingToggle
+          settingKey="ui.notifyOnFinish"
+          label="Notify when a review finishes"
+          hint="Desktop notification with the repo, commit, and result when an agent run completes."
+        />
+      </div>
+
       <PromptsSettings />
       <PresetsSettings />
     </section>

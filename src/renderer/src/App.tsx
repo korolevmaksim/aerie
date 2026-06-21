@@ -13,6 +13,8 @@ function App(): React.JSX.Element {
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [view, setView] = useState<View>('accounts')
   const [openRepo, setOpenRepo] = useState<RepoSummary | null>(null)
+  // A run the tray (or a finish notification) asked us to open; consumed by History.
+  const [pendingRunId, setPendingRunId] = useState<number | null>(null)
 
   const reloadAccounts = useCallback(async (): Promise<void> => {
     const list = await window.aerie.accounts.list()
@@ -34,6 +36,16 @@ function App(): React.JSX.Element {
     return () => {
       cancelled = true
     }
+  }, [])
+
+  // Open-from-tray / open-from-notification: jump to History and let it select
+  // the run. Guard the payload so a malformed message can't drive a refetch loop.
+  useEffect(() => {
+    return window.aerie.onTrayOpenRun((payload) => {
+      if (typeof payload?.runId !== 'number') return
+      setView('history')
+      setPendingRunId(payload.runId)
+    })
   }, [])
 
   const goRepos = (): void => {
@@ -103,7 +115,7 @@ function App(): React.JSX.Element {
         {view === 'accounts' || !reposReady ? (
           <AccountsPanel onAccountsChanged={reloadAccounts} />
         ) : view === 'history' ? (
-          <HistoryPanel />
+          <HistoryPanel externalRunId={pendingRunId} onConsumed={() => setPendingRunId(null)} />
         ) : view === 'settings' ? (
           <SettingsPanel />
         ) : openRepo ? (
