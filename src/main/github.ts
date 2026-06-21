@@ -76,12 +76,18 @@ function rowToSummary(row: RepoRow): RepoSummary {
     remoteUrl: row.remote_url,
     htmlUrl: row.html_url,
     isPrivate: row.is_private === 1,
-    pushedAt: row.pushed_at
+    pushedAt: row.pushed_at,
+    isFavorite: row.favorite === 1
   }
 }
 
 function cachedResult(accountId: number, fromCache: boolean): ReposResult {
   return { repos: listReposForAccount(accountId).map(rowToSummary), fromCache }
+}
+
+/** The account's repos straight from the local cache (re-sorted), no network call. */
+export function reposFromCache(accountId: number): ReposResult {
+  return cachedResult(accountId, true)
 }
 
 /**

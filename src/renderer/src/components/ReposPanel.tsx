@@ -56,6 +56,15 @@ function ReposPanel({
     }
   }
 
+  // Local-only favorite: pins the repo to the top. The backend returns the
+  // re-sorted list, so a just-favorited repo jumps up immediately.
+  const onToggleFavorite = async (e: React.MouseEvent, repo: RepoSummary): Promise<void> => {
+    e.stopPropagation()
+    const res = await window.aerie.repos.setFavorite(repo.id, !repo.isFavorite)
+    if (res.ok) setRepos(res.value.repos)
+    else setError(res.error)
+  }
+
   const filtered = useMemo(() => {
     const q = filter.trim().toLowerCase()
     return q ? repos.filter((r) => r.fullName.toLowerCase().includes(q)) : repos
@@ -68,7 +77,12 @@ function ReposPanel({
           Repositories <span className="muted">({filtered.length})</span>
           {fromCache && <span className="chip">cached</span>}
         </h2>
-        <button className="btn btn--ghost" onClick={onRefresh} disabled={refreshing || loading}>
+        <button
+          type="button"
+          className="btn btn--ghost"
+          onClick={onRefresh}
+          disabled={refreshing || loading}
+        >
           {refreshing ? 'Refreshing…' : 'Refresh'}
         </button>
       </div>
@@ -92,6 +106,16 @@ function ReposPanel({
           {filtered.map((repo) => (
             <li key={repo.id} className="repo repo--clickable" onClick={() => onOpenRepo(repo)}>
               <div className="repo__main">
+                <button
+                  type="button"
+                  className={`repo__fav${repo.isFavorite ? ' repo__fav--on' : ''}`}
+                  onClick={(e) => onToggleFavorite(e, repo)}
+                  title={repo.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                  aria-label={repo.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                  aria-pressed={repo.isFavorite}
+                >
+                  {repo.isFavorite ? '★' : '☆'}
+                </button>
                 <span className="repo__name">{repo.fullName}</span>
                 <span className={`badge badge--${repo.isPrivate ? 'private' : 'public'}`}>
                   {repo.isPrivate ? 'private' : 'public'}

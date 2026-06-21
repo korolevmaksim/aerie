@@ -49,6 +49,8 @@ export interface RepoSummary {
   htmlUrl: string | null
   isPrivate: boolean
   pushedAt: string | null
+  /** Local-only favorite (pins to the top of the list; not a GitHub star). */
+  isFavorite: boolean
 }
 
 export interface ReposResult {

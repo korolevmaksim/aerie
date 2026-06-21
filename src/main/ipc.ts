@@ -48,7 +48,8 @@ import {
   listBranches,
   listCommits,
   listPullRequests,
-  listRepos
+  listRepos,
+  reposFromCache
 } from './github'
 import { clonePathFor, prepareCheckout } from './gitEngine'
 import { isTrustedSender } from './security'
@@ -71,6 +72,7 @@ import {
   type PresetRow,
   type PromptRow,
   setRepoClonePath,
+  setRepoFavorite,
   setRepoLocalPath,
   setRepoUseLocalWorktree,
   setRunPostedUrl,
@@ -205,6 +207,20 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(CHANNELS.reposList, handleReposList(false))
   ipcMain.handle(CHANNELS.reposRefresh, handleReposList(true))
+
+  // Local-only favorite toggle (pins a repo to the top; not a GitHub star).
+  // Returns the re-sorted cached list — no network call.
+  ipcMain.handle(
+    CHANNELS.reposSetFavorite,
+    (event, repoId: unknown, value: unknown): ApiResult<ReposResult> => {
+      if (!isTrustedSender(event)) return fail('Untrusted sender.')
+      if (!isValidId(repoId)) return fail('Invalid repository id.')
+      const repo = getRepoById(repoId)
+      if (!repo) return fail('Repository not found.')
+      setRepoFavorite(repoId, value === true)
+      return ok(reposFromCache(repo.account_id))
+    }
+  )
 
   // --- commit / PR drill-in (read-only) --------------------------------------
 

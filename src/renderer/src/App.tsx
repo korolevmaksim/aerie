@@ -111,7 +111,7 @@ function App(): React.JSX.Element {
         ) : openRepo ? (
           <RepoView accountId={selectedId} repo={openRepo} onBack={() => setOpenRepo(null)} />
         ) : (
-          <ReposPanel accountId={selectedId} onOpenRepo={setOpenRepo} />
+          <ReposPanel key={selectedId} accountId={selectedId} onOpenRepo={setOpenRepo} />
         )}
       </main>
     </div>

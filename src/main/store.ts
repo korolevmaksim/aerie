@@ -149,6 +149,10 @@ const MIGRATIONS: ReadonlyArray<(db: Database.Database) => void> = [
       DEFAULT_REVIEW_INSTRUCTIONS,
       LEGACY_DEFAULT_REVIEW_INSTRUCTIONS
     )
+  },
+  // v10 — local-only repo favorites (pin to the top of the list; not GitHub stars)
+  (db) => {
+    db.exec(`ALTER TABLE repos ADD COLUMN favorite INTEGER NOT NULL DEFAULT 0;`)
   }
 ]
 
@@ -262,6 +266,7 @@ export interface RepoRow {
   app_clone_path: string | null
   last_synced_at: string | null
   use_local_worktree: number
+  favorite: number
 }
 
 export interface NewRepo {
@@ -275,8 +280,19 @@ export interface NewRepo {
 
 export function listReposForAccount(accountId: number): RepoRow[] {
   return requireDb()
-    .prepare(`SELECT * FROM repos WHERE account_id = ? ORDER BY pushed_at DESC, full_name ASC`)
+    .prepare(
+      // Local favorites pin to the top; the rest keep the default pushed-desc order.
+      `SELECT * FROM repos WHERE account_id = ?
+       ORDER BY favorite DESC, pushed_at DESC, full_name ASC`
+    )
     .all(accountId) as RepoRow[]
+}
+
+/** Sets/clears a repo's local favorite flag (pins it to the top; not a GitHub star). */
+export function setRepoFavorite(id: number, value: boolean): void {
+  requireDb()
+    .prepare(`UPDATE repos SET favorite = ? WHERE id = ?`)
+    .run(value ? 1 : 0, id)
 }
 
 export function getRepoById(id: number): RepoRow | undefined {
@@ -299,8 +315,13 @@ export function setRepoClonePath(id: number, appClonePath: string): void {
 
 /**
  * Replaces an account's cached repo set with the freshly fetched list in one
- * transaction: upserts each repo (preserving local-path columns set in later
- * stages) and removes repos that no longer exist remotely.
+ * transaction: upserts each repo and removes repos that no longer exist remotely.
+ *
+ * IMPORTANT: the upsert below intentionally lists ONLY GitHub-sourced columns. The
+ * local-only columns — `favorite`, `use_local_worktree`, `user_local_path`,
+ * `app_clone_path` — are deliberately excluded from both the INSERT list and the
+ * ON CONFLICT DO UPDATE SET clause so a refresh never clobbers them (a new repo
+ * gets their DEFAULTs; an existing repo keeps its values). Do NOT add them here.
  */
 export function syncReposForAccount(accountId: number, repos: NewRepo[], syncedAt: string): void {
   const database = requireDb()

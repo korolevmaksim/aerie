@@ -64,7 +64,10 @@ const api = {
     list: (accountId: number): Promise<ApiResult<ReposResult>> =>
       ipcRenderer.invoke(CHANNELS.reposList, accountId),
     refresh: (accountId: number): Promise<ApiResult<ReposResult>> =>
-      ipcRenderer.invoke(CHANNELS.reposRefresh, accountId)
+      ipcRenderer.invoke(CHANNELS.reposRefresh, accountId),
+    /** Toggle a repo's local favorite (pins to top); returns the re-sorted list. */
+    setFavorite: (repoId: number, value: boolean): Promise<ApiResult<ReposResult>> =>
+      ipcRenderer.invoke(CHANNELS.reposSetFavorite, repoId, value)
   },
 
   /** Read-only commit / PR drill-in for a single repo (Stage 3). */

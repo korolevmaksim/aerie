@@ -436,6 +436,29 @@ body {
   min-width: 0;
 }
 
+.repo__fav {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0 0.05rem;
+  font-size: 1.05rem;
+  line-height: 1;
+  color: var(--muted);
+  transition:
+    color 0.12s ease,
+    transform 0.12s ease;
+}
+
+.repo__fav:hover {
+  color: var(--fg);
+  transform: scale(1.15);
+}
+
+.repo__fav--on {
+  color: #e3b341;
+}
+
 .repo__name {
   font-weight: 600;
   font-size: 0.92rem;

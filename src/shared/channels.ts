@@ -10,6 +10,7 @@ export const CHANNELS = {
   accountsUpdateToken: 'accounts:updateToken',
   reposList: 'repos:list',
   reposRefresh: 'repos:refresh',
+  reposSetFavorite: 'repos:setFavorite',
   repoBranches: 'repo:branches',
   repoCommits: 'repo:commits',
   repoCommit: 'repo:commit',
