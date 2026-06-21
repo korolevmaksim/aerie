@@ -6,6 +6,7 @@ import RunView from './RunView'
 function HistoryPanel(): React.JSX.Element {
   const [runs, setRuns] = useState<RunHistoryItem[]>([])
   const [loaded, setLoaded] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
   const [selected, setSelected] = useState<RunHistoryItem | null>(null)
 
   const reload = useCallback(async (): Promise<void> => {
@@ -13,6 +14,15 @@ function HistoryPanel(): React.JSX.Element {
     if (res.ok) setRuns(res.value)
     setLoaded(true)
   }, [])
+
+  const refresh = useCallback(async (): Promise<void> => {
+    setRefreshing(true)
+    try {
+      await reload()
+    } finally {
+      setRefreshing(false)
+    }
+  }, [reload])
 
   useEffect(() => {
     let cancelled = false
@@ -26,6 +36,34 @@ function HistoryPanel(): React.JSX.Element {
       cancelled = true
     }
   }, [])
+
+  // Live status: a run started in this window pushes status updates here too, so
+  // patch the matching row in place (running → done/error/killed) without a refetch.
+  useEffect(() => {
+    return window.aerie.runner.onStatus((p) => {
+      setRuns((prev) =>
+        prev.map((r) =>
+          r.id === p.runId
+            ? {
+                ...r,
+                status: p.status,
+                exitCode: p.exitCode ?? r.exitCode,
+                outputPath: p.outputPath ?? r.outputPath
+              }
+            : r
+        )
+      )
+    })
+  }, [])
+
+  // Safety net: while any run is still active, re-poll the list so a status that
+  // settled before this panel mounted (or any missed event) still converges.
+  const hasActive = runs.some((r) => r.status === 'queued' || r.status === 'running')
+  useEffect(() => {
+    if (!hasActive) return
+    const id = setInterval(() => void reload(), 3000)
+    return () => clearInterval(id)
+  }, [hasActive, reload])
 
   if (selected) {
     return (
@@ -55,7 +93,17 @@ function HistoryPanel(): React.JSX.Element {
 
   return (
     <section className="panel">
-      <h2 className="panel__title">Run history</h2>
+      <div className="panel__head">
+        <h2 className="panel__title">Run history</h2>
+        <button
+          className="btn btn--ghost"
+          onClick={() => void refresh()}
+          disabled={refreshing}
+          title="Refresh run statuses"
+        >
+          {refreshing ? 'Refreshing…' : hasActive ? 'Refresh · live' : 'Refresh'}
+        </button>
+      </div>
       {!loaded ? (
         <p className="empty">Loading…</p>
       ) : runs.length === 0 ? (

@@ -116,19 +116,23 @@ function PromptsSettings(): React.JSX.Element {
       {prompts.length === 0 ? (
         <p className="empty">No prompts yet.</p>
       ) : (
-        <ul className="accounts">
+        <ul className="prompt-list">
           {prompts.map((p) => (
-            <li key={p.id} className="account">
-              <div className="account__main">
-                <span className="account__login">{p.name}</span>
-                <span className="account__label account__label--clamp">{p.body}</span>
+            <li key={p.id} className="prompt-item">
+              <div className="prompt-item__head">
+                <span className="prompt-item__name" title={p.name}>
+                  {p.name}
+                </span>
+                <div className="prompt-item__actions">
+                  <button className="btn btn--ghost" onClick={() => onEdit(p)}>
+                    Edit
+                  </button>
+                  <button className="btn btn--danger" onClick={() => onDelete(p.id)}>
+                    Delete
+                  </button>
+                </div>
               </div>
-              <button className="btn btn--ghost" onClick={() => onEdit(p)}>
-                Edit
-              </button>
-              <button className="btn btn--danger" onClick={() => onDelete(p.id)}>
-                Delete
-              </button>
+              <p className="prompt-item__body">{p.body}</p>
             </li>
           ))}
         </ul>

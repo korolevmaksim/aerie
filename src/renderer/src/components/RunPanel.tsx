@@ -27,6 +27,7 @@ function RunPanel({
   const [agents, setAgents] = useState<AgentInfo[]>([])
   const [agentId, setAgentId] = useState('')
   const [presets, setPresets] = useState<Preset[]>([])
+  const [selectedPresetId, setSelectedPresetId] = useState('')
   const [prompts, setPrompts] = useState<Prompt[]>([])
   const [promptId, setPromptId] = useState<number | null>(null)
   const [currentRun, setCurrentRun] = useState<RunRecord | null>(null)
@@ -89,20 +90,37 @@ function RunPanel({
     ? promptId
     : (prompts[0]?.id ?? null)
 
+  // A manual agent/model/reasoning change means the selection no longer matches a
+  // preset, so the preset picker returns to its "Preset…" placeholder.
+  const onChangeAgent = (id: string): void => {
+    setAgentId(id)
+    setSelectedPresetId('')
+  }
+
   const onChangeModel = async (model: string): Promise<void> => {
+    setSelectedPresetId('')
     const res = await window.aerie.runner.setAgentModel(agentId, model)
     if (res.ok) setAgents(res.value)
   }
 
   const onChangeReasoning = async (level: string): Promise<void> => {
+    setSelectedPresetId('')
     const res = await window.aerie.runner.setAgentReasoning(agentId, level)
     if (res.ok) setAgents(res.value)
   }
 
-  // Apply a saved preset: select its agent and persist its model + reasoning.
+  // Apply a saved preset: select its agent, persist its model + reasoning, and
+  // reflect the choice in the picker.
   const onApplyPreset = async (presetId: string): Promise<void> => {
     const preset = presets.find((p) => String(p.id) === presetId)
     if (!preset) return
+    // The preset's agent may no longer be in the registry (removed/renamed). Don't
+    // apply a selection that would leave the controls in an invalid state.
+    if (!agents.some((a) => a.id === preset.agentId)) {
+      setError(`Preset "${preset.name}" uses an agent that is no longer available.`)
+      return
+    }
+    setError(null)
     setAgentId(preset.agentId)
     let latest = agents
     if (preset.model) {
@@ -114,6 +132,7 @@ function RunPanel({
       if (r.ok) latest = r.value
     }
     setAgents(latest)
+    setSelectedPresetId(presetId)
   }
 
   const onStart = async (): Promise<void> => {
@@ -147,7 +166,7 @@ function RunPanel({
         {presets.length > 0 && (
           <select
             className="field"
-            value=""
+            value={selectedPresetId}
             onChange={(e) => onApplyPreset(e.target.value)}
             disabled={active || starting}
             title="Apply a saved preset"
@@ -165,7 +184,7 @@ function RunPanel({
         <select
           className="field"
           value={agentId}
-          onChange={(e) => setAgentId(e.target.value)}
+          onChange={(e) => onChangeAgent(e.target.value)}
           disabled={active || starting}
         >
           {agents.map((a) => (
@@ -223,7 +242,7 @@ function RunPanel({
         <button
           className="btn btn--primary"
           onClick={onStart}
-          disabled={!agentId || active || starting || selectedAgent?.available === false}
+          disabled={!agentId || !selectedAgent || active || starting || !selectedAgent.available}
         >
           {active || starting ? 'Running…' : 'Review with agent'}
         </button>
