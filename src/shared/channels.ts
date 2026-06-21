@@ -7,6 +7,7 @@ export const CHANNELS = {
   accountsList: 'accounts:list',
   accountsRemove: 'accounts:remove',
   accountsRefresh: 'accounts:refresh',
+  accountsRateLimit: 'accounts:rateLimit',
   accountsUpdateToken: 'accounts:updateToken',
   reposList: 'repos:list',
   reposRefresh: 'repos:refresh',

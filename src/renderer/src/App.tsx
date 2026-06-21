@@ -13,7 +13,6 @@ function App(): React.JSX.Element {
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [view, setView] = useState<View>('accounts')
   const [openRepo, setOpenRepo] = useState<RepoSummary | null>(null)
-  const { electron } = window.aerie.versions
 
   const reloadAccounts = useCallback(async (): Promise<void> => {
     const list = await window.aerie.accounts.list()
@@ -98,7 +97,6 @@ function App(): React.JSX.Element {
               Settings
             </button>
           </nav>
-          <span className="env">Electron {electron}</span>
         </div>
       </header>
       <main className="content">

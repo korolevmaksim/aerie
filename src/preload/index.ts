@@ -39,13 +39,6 @@ const api = {
   /** Health check that proves the renderer → main IPC seam is wired. */
   ping: (): Promise<string> => ipcRenderer.invoke(CHANNELS.ping),
 
-  /** Read-only runtime versions, safe to surface to the UI. */
-  versions: {
-    electron: process.versions.electron,
-    chrome: process.versions.chrome,
-    node: process.versions.node
-  },
-
   /** Multi-account auth. Tokens are sent in only on `add`; nothing returns one. */
   accounts: {
     add: (input: AddAccountInput): Promise<ApiResult<AccountSummary>> =>
@@ -55,6 +48,9 @@ const api = {
       ipcRenderer.invoke(CHANNELS.accountsRemove, id),
     refresh: (id: number): Promise<ApiResult<AccountSummary>> =>
       ipcRenderer.invoke(CHANNELS.accountsRefresh, id),
+    /** Quota-free rate-limit read (no identity check) for auto-load on mount. */
+    rateLimit: (id: number): Promise<ApiResult<AccountSummary>> =>
+      ipcRenderer.invoke(CHANNELS.accountsRateLimit, id),
     updateToken: (id: number, token: string): Promise<ApiResult<AccountSummary>> =>
       ipcRenderer.invoke(CHANNELS.accountsUpdateToken, id, token)
   },

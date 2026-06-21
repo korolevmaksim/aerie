@@ -1,8 +1,20 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { AccountSummary, RateLimitInfo } from '@shared/types'
 
-function RateLimit({ rate }: { rate?: RateLimitInfo }): React.JSX.Element {
-  if (!rate) return <span className="rate rate--unknown">rate: —</span>
+function RateLimit({
+  rate,
+  loading
+}: {
+  rate?: RateLimitInfo
+  loading?: boolean
+}): React.JSX.Element {
+  if (!rate) {
+    return loading ? (
+      <span className="rate rate--loading">rate: …</span>
+    ) : (
+      <span className="rate rate--unknown">rate: —</span>
+    )
+  }
   const pct = rate.limit > 0 ? Math.round((rate.remaining / rate.limit) * 100) : 0
   const tone = pct < 10 ? 'low' : pct < 35 ? 'mid' : 'ok'
   return (
@@ -25,17 +37,41 @@ function AccountsPanel({
   const [pendingId, setPendingId] = useState<number | null>(null)
   const [reauthId, setReauthId] = useState<number | null>(null)
   const [reauthToken, setReauthToken] = useState('')
+  const [ratesLoading, setRatesLoading] = useState(true)
 
-  // Load accounts on mount. State is set only after the async call resolves
-  // (never synchronously in the effect body), with a cancel guard for unmount.
+  // Load accounts on mount, then auto-load each account's live rate limit. State
+  // is set only after the async call resolves (never synchronously in the effect
+  // body), with a cancel guard for unmount.
   useEffect(() => {
     let cancelled = false
     void (async () => {
       try {
         const list = await window.aerie.accounts.list()
-        if (!cancelled) setAccounts(list)
+        if (cancelled) return
+        setAccounts(list)
+
+        // `accounts.list()` returns no rate limit (it's only known after a live
+        // read), so the panel would otherwise open showing "rate: —". Auto-load
+        // each one via the quota-free `rateLimit` path (no identity check, ~0
+        // core quota) in parallel: merge each result as it arrives, keep the
+        // action buttons enabled (no pendingId), and stay silent on a single
+        // account's failure so one bad token can't blank the panel — its
+        // Refresh button stays available to surface the real error.
+        await Promise.all(
+          list.map(async (account) => {
+            try {
+              const result = await window.aerie.accounts.rateLimit(account.id)
+              if (cancelled || !result.ok) return
+              setAccounts((prev) => prev.map((a) => (a.id === account.id ? result.value : a)))
+            } catch {
+              // Leave this account showing "rate: —"; manual Refresh remains.
+            }
+          })
+        )
       } catch (e) {
         if (!cancelled) setError(String(e))
+      } finally {
+        if (!cancelled) setRatesLoading(false)
       }
     })()
     return () => {
@@ -165,7 +201,7 @@ function AccountsPanel({
                 <span className={`badge badge--${account.kind}`}>{account.kind}</span>
               </div>
               <div className="account__meta">
-                <RateLimit rate={account.rateLimit} />
+                <RateLimit rate={account.rateLimit} loading={ratesLoading} />
                 <button
                   className="btn btn--ghost"
                   onClick={() => onRefresh(account.id)}

@@ -38,7 +38,13 @@ import {
   startRun,
   type RunHooks
 } from './agentRunner'
-import { decryptToken, describeAuthError, encryptToken, validateToken } from './auth'
+import {
+  decryptToken,
+  describeAuthError,
+  encryptToken,
+  fetchRateLimit,
+  validateToken
+} from './auth'
 import {
   createCommitComment,
   createIssue,
@@ -165,6 +171,25 @@ export function registerIpcHandlers(): void {
       try {
         const identity = await validateToken(decryptToken(row.token_blob))
         return ok({ ...rowToSummary(row), rateLimit: identity.rateLimit })
+      } catch (error) {
+        return fail(describeAuthError(error))
+      }
+    }
+  )
+
+  // Quota-free rate read for auto-loading the display on panel mount. Unlike
+  // `accounts:refresh` this skips the identity check (`users.getAuthenticated`),
+  // so opening the panel costs ~0 core quota regardless of account count.
+  ipcMain.handle(
+    CHANNELS.accountsRateLimit,
+    async (event, id: unknown): Promise<ApiResult<AccountSummary>> => {
+      if (!isTrustedSender(event)) return fail('Untrusted sender.')
+      if (!isValidId(id)) return fail('Invalid account id.')
+      const row = getAccount(id)
+      if (!row) return fail('Account not found.')
+      try {
+        const rateLimit = await fetchRateLimit(decryptToken(row.token_blob))
+        return ok({ ...rowToSummary(row), rateLimit })
       } catch (error) {
         return fail(describeAuthError(error))
       }

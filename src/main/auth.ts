@@ -87,6 +87,22 @@ export async function validateToken(token: string): Promise<ValidatedIdentity> {
 }
 
 /**
+ * Reads only the current rate limit (`rateLimit.get`) for a token. Unlike
+ * {@link validateToken} this skips `users.getAuthenticated`, so it does NOT spend
+ * a core-quota point — the `rateLimit.get` endpoint is free. Used to auto-load
+ * the rate display on panel mount without burning quota to measure quota.
+ */
+export async function fetchRateLimit(token: string): Promise<RateLimitInfo> {
+  const octokit = await createOctokit(token)
+  const { data: rate } = await octokit.rest.rateLimit.get()
+  return {
+    limit: rate.rate.limit,
+    remaining: rate.rate.remaining,
+    reset: rate.rate.reset
+  }
+}
+
+/**
  * Normalizes a GitHub/Octokit error into a renderer-safe message. Maps the
  * common auth failures to something actionable and returns a GENERIC message for
  * anything else — the raw Octokit error can carry request details (and its
