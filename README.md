@@ -42,6 +42,11 @@ third-party service.
   Claude Code, Cursor Agent, opencode, Kimi, Gemini, Mistral Vibe, Grok, Antigravity, and
   MiMo. Installed agents are auto-detected; pick a model and (where supported) a
   reasoning/thinking level per agent.
+- **Reviews grounded in local tools** — before an agent reviews a change, Aerie runs your
+  installed, change-relevant quality tools (ESLint, oxlint, Biome, `tsc`, Ruff, Bandit, yamllint,
+  actionlint, Gitleaks) 100% locally, scopes their findings to the diff, de-duplicates them, and
+  hands them to the agent as ground truth to confirm/refute/merge — so it triages real findings
+  instead of inventing noise. Best-effort; toggle off in Settings → "Ground reviews with local tools".
 - **Curated review prompts, out of the box** — Default, Security audit, Tests & edge
   cases, Performance, Architecture & maintainability, and Quick triage. Edit them or add
   your own in Settings, then pick one per run. Aerie always prepends the machine context

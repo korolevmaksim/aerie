@@ -21,9 +21,13 @@ import { whichOnPath } from './pathLookup'
 // (e.g. gitleaks — secrets can be anywhere) is always relevant.
 const RELEVANT_EXT: Record<string, string[]> = {
   eslint: ['.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs'],
+  oxlint: ['.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs'],
   biome: ['.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs', '.json', '.jsonc'],
   tsc: ['.ts', '.tsx', '.mts', '.cts'],
-  ruff: ['.py', '.pyi']
+  ruff: ['.py', '.pyi'],
+  bandit: ['.py', '.pyi'],
+  yamllint: ['.yml', '.yaml'],
+  actionlint: ['.yml', '.yaml']
 }
 
 /** True if a tool is worth running given the files the change touches. */
@@ -121,6 +125,8 @@ export interface GroundingResult {
   /** Findings before the noise filter (for an "X of Y" message). */
   rawCount: number
   toolsRun: number
+  /** Relevant+installed tools NOT run because the cap was hit (0 = none dropped). */
+  toolsSkipped: number
 }
 
 /**
@@ -141,9 +147,15 @@ export async function gatherGroundTruth(args: {
   consensusMin?: number
   minSeverity?: Severity
 }): Promise<GroundingResult> {
-  const selected = selectGroundingTools(args.agents, args.changedFiles).slice(0, args.maxTools ?? 4)
+  // Relevance gating is the real limiter (only tools matching the changed files run);
+  // the cap is a safety ceiling above the current catalog (9 tools) so even a polyglot
+  // diff isn't truncated in practice. If the cap is ever hit, `toolsSkipped` makes the
+  // drop visible (never silent) — the runner surfaces it.
+  const relevant = selectGroundingTools(args.agents, args.changedFiles)
+  const selected = relevant.slice(0, args.maxTools ?? 12)
+  const toolsSkipped = relevant.length - selected.length
   if (selected.length === 0) {
-    return { groundTruth: '', findingsCount: 0, rawCount: 0, toolsRun: 0 }
+    return { groundTruth: '', findingsCount: 0, rawCount: 0, toolsRun: 0, toolsSkipped: 0 }
   }
 
   const ranges = parseChangedLineRanges(args.diff)
@@ -174,6 +186,7 @@ export async function gatherGroundTruth(args: {
     groundTruth: renderFindingsForPrompt(agg.kept),
     findingsCount: agg.kept.length,
     rawCount: findings.length,
-    toolsRun: selected.length
+    toolsRun: selected.length,
+    toolsSkipped
   }
 }

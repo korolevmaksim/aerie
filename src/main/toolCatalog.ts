@@ -10,16 +10,23 @@
 //
 // Deferred after research (not added, and why):
 //  - semgrep, osv-scanner : need network by default (registry rules / osv.dev).
-//  - golangci-lint, mypy, pyright : current flags/exit-codes failed verification.
-//  - shellcheck, hadolint : need explicit per-file targets (lands with M4 changed-files).
+//  - golangci-lint : must compile the module — needs the Go toolchain and pulls
+//    uncached modules (network); overloaded non-zero exit codes (3/5/7 ≠ findings).
+//  - mypy, pylint : noisy/unusable as a config-less drop-in (flood import-stub errors
+//    in a bare environment); pylint's exit code is a summed bitmask, not a clean set.
+//  - shellcheck, hadolint : no tree/recursive scan — require explicit file targets,
+//    which the static-argv contract can't enumerate (hadolint reads stdin with no arg).
+//  - stylelint : errors "No configuration provided" when no config file is present.
 //
 // NOTE: detection is PATH-based, so a project-local eslint/tsc (node_modules/.bin) is
 // only detected when also installed globally — per-repo bin detection is a follow-up.
 //
 // SECURITY (residual, accepted for M3): some tools execute the REPO's OWN config when
 // run — ESLint loads/executes eslint.config.js, tsc resolves tsconfig `extends`, Biome
-// reads its config — so running them on an UNTRUSTED repo/PR executes that repo's config
-// code inside the worktree. This is a strictly SMALLER capability than the LLM agents
+// reads its config, and oxlint auto-loads/executes an oxlint.config.ts if present — so
+// running them on an UNTRUSTED repo/PR executes that repo's config code inside the
+// worktree. (bandit/yamllint/actionlint read only DATA config, no code execution.)
+// This is a strictly SMALLER capability than the LLM agents
 // Aerie already runs there (auto-approved tools with shell access), is confined to the
 // disposable app-owned worktree with no token, and true process sandboxing is a later
 // stage. Review only repos you trust. As of M5b these tools also run AUTOMATICALLY as
@@ -109,6 +116,41 @@ export const TOOL_CATALOG: Agent[] = [
     // Text diagnostics `file(line,col): error TSxxxx: msg` to stdout (no JSON mode).
     // Exit 1 = type errors (findings); exit 2 = config/CLI error (a real failure → 'error').
     args: ['--noEmit', '--pretty', 'false', '--incremental', 'false'],
+    successExitCodes: [0, 1]
+  }),
+  tool({
+    id: 'bandit',
+    label: 'Bandit (Python SAST)',
+    command: 'bandit',
+    // Recursive AST scan → JSON to stdout; -q drops non-finding chatter. Offline.
+    // Exit 1 = issues at/above threshold (findings); exit 2 = a real processing error.
+    args: ['-r', '.', '-f', 'json', '-q'],
+    successExitCodes: [0, 1]
+  }),
+  tool({
+    id: 'oxlint',
+    label: 'oxlint (fast JS/TS lint)',
+    command: 'oxlint',
+    // Runs with no config, but auto-loads/executes a repo oxlint.config.ts if present
+    // (see the SECURITY note above). JSON diagnostics to stdout; exit 1 = error findings.
+    args: ['-f', 'json', '.'],
+    successExitCodes: [0, 1]
+  }),
+  tool({
+    id: 'yamllint',
+    label: 'yamllint (YAML lint)',
+    command: 'yamllint',
+    // Parsable text `path:line:col: [level] message (rule)` to stdout. Exit 1 on errors.
+    args: ['-f', 'parsable', '.'],
+    successExitCodes: [0, 1]
+  }),
+  tool({
+    id: 'actionlint',
+    label: 'actionlint (GitHub Actions lint)',
+    command: 'actionlint',
+    // With no path it auto-discovers .github/workflows/*.yml; JSON array via a Go template.
+    // shellcheck/pyflakes integrations are optional (skipped if absent). Exit 1 on problems.
+    args: ['-format', '{{json .}}'],
     successExitCodes: [0, 1]
   })
 ]

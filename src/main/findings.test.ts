@@ -4,13 +4,17 @@ import {
   extractSecrets,
   fingerprintOf,
   inChangedRange,
+  parseActionlint,
+  parseBandit,
   parseBiome,
   parseChangedLineRanges,
   parseEslint,
   parseGitleaks,
+  parseOxlint,
   parseRuff,
   parseToolOutput,
   parseTsc,
+  parseYamllint,
   renderFindingsForPrompt,
   scopeToChanges,
   type Finding,
@@ -185,12 +189,138 @@ describe('parseTsc', () => {
   })
 })
 
+describe('parseBandit', () => {
+  const SAMPLE = JSON.stringify({
+    results: [
+      {
+        filename: 'app/views.py',
+        line_number: 12,
+        test_id: 'B602',
+        issue_severity: 'HIGH',
+        issue_text: 'subprocess call with shell=True identified, security issue.'
+      },
+      {
+        filename: 'app/util.py',
+        line_number: 3,
+        test_id: 'B311',
+        issue_severity: 'LOW',
+        issue_text: 'Standard pseudo-random generators are not suitable for security.'
+      }
+    ]
+  })
+  it('maps results with HIGH/LOW severity, file/line/test_id', () => {
+    const f = parseBandit(SAMPLE)
+    expect(f).toHaveLength(2)
+    expect(f[0]).toMatchObject({
+      tool: 'bandit',
+      file: 'app/views.py',
+      line: 12,
+      ruleId: 'B602',
+      severity: 'high'
+    })
+    expect(f[1].severity).toBe('low')
+  })
+  it('returns [] for malformed/empty output', () => {
+    expect(parseBandit('not json')).toEqual([])
+    expect(parseBandit('{"results":[]}')).toEqual([])
+  })
+})
+
+describe('parseYamllint', () => {
+  const SAMPLE = [
+    '.github/x.yml:6:2: [warning] missing starting space in comment (comments)',
+    '.github/x.yml:10:1: [error] too many blank lines (3 > 2) (empty-lines)'
+  ].join('\n')
+  it('parses parsable lines into file/line/level/rule', () => {
+    const f = parseYamllint(SAMPLE)
+    expect(f).toHaveLength(2)
+    expect(f[0]).toMatchObject({
+      tool: 'yamllint',
+      file: '.github/x.yml',
+      line: 6,
+      ruleId: 'comments',
+      severity: 'low'
+    })
+    expect(f[0].message).toBe('missing starting space in comment')
+    expect(f[1]).toMatchObject({ line: 10, ruleId: 'empty-lines', severity: 'medium' })
+  })
+  it('ignores non-matching lines', () => {
+    expect(parseYamllint('some banner\n\n')).toEqual([])
+  })
+  it('keeps a trailing non-rule paren in the message (no spurious ruleId)', () => {
+    // A message that ends in "(...)" with spaces inside is NOT a rule id.
+    const f = parseYamllint('a.yml:1:1: [error] wrong indentation (4 spaces)')
+    expect(f).toHaveLength(1)
+    expect(f[0].ruleId).toBeNull()
+    expect(f[0].message).toBe('wrong indentation (4 spaces)')
+  })
+})
+
+describe('parseActionlint', () => {
+  const SAMPLE = JSON.stringify([
+    {
+      message: 'property "runs-on" is not defined',
+      filepath: '.github/workflows/ci.yml',
+      line: 14,
+      column: 5,
+      kind: 'syntax-check'
+    }
+  ])
+  it('maps filepath/line/kind, severity medium', () => {
+    const f = parseActionlint(SAMPLE)
+    expect(f).toHaveLength(1)
+    expect(f[0]).toMatchObject({
+      tool: 'actionlint',
+      file: '.github/workflows/ci.yml',
+      line: 14,
+      ruleId: 'syntax-check',
+      severity: 'medium'
+    })
+  })
+  it('returns [] for malformed output', () => {
+    expect(parseActionlint('boom')).toEqual([])
+  })
+})
+
+describe('parseOxlint', () => {
+  const SAMPLE = JSON.stringify({
+    diagnostics: [
+      {
+        message: '`debugger` statement is not allowed',
+        code: 'eslint(no-debugger)',
+        severity: 'error',
+        filename: 'src/a.ts',
+        labels: [{ offset: 10, length: 8, line: 7, column: 1 }]
+      }
+    ]
+  })
+  it('maps diagnostics with code/severity/filename and first label line', () => {
+    const f = parseOxlint(SAMPLE)
+    expect(f).toHaveLength(1)
+    expect(f[0]).toMatchObject({
+      tool: 'oxlint',
+      file: 'src/a.ts',
+      line: 7,
+      ruleId: 'eslint(no-debugger)',
+      severity: 'medium'
+    })
+  })
+  it('returns [] for malformed/empty output', () => {
+    expect(parseOxlint('x')).toEqual([])
+    expect(parseOxlint('{"diagnostics":[]}')).toEqual([])
+  })
+})
+
 describe('parseToolOutput dispatch', () => {
   it('routes each tool id to its parser', () => {
     expect(parseToolOutput('gitleaks', '[]')).toEqual([])
     expect(parseToolOutput('ruff', '[]')).toEqual([])
     expect(parseToolOutput('biome', '{"diagnostics":[]}')).toEqual([])
     expect(parseToolOutput('tsc', '')).toEqual([])
+    expect(parseToolOutput('bandit', '{"results":[]}')).toEqual([])
+    expect(parseToolOutput('yamllint', '')).toEqual([])
+    expect(parseToolOutput('actionlint', '[]')).toEqual([])
+    expect(parseToolOutput('oxlint', '{"diagnostics":[]}')).toEqual([])
     expect(parseToolOutput('unknown', 'x')).toEqual([])
   })
 })

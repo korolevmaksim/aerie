@@ -66,6 +66,16 @@ same change set.
   how much noise was removed. Pure + unit-tested; built so multi-agent consensus (future parallel
   runs) reuses the same aggregator.
 
+- **Broader quality-tool autodiscovery** — four more local, network-free, read-only tools are
+  auto-detected on PATH and run as grounding when relevant: **Bandit** (Python SAST), **oxlint**
+  (fast JS/TS lint), **yamllint** (YAML), and **actionlint** (GitHub Actions workflows). Each was
+  documentation-researched and flag-checked for a clean headless tree-scan with machine-readable
+  output and stable exit codes; schema-verified parsers normalize them into the common finding
+  shape. The grounding tool cap rose above the catalog size and any cap-skip is now reported in the
+  run transcript, so a relevant tool is never *silently* dropped (even on a polyglot diff).
+  (Deferred with reasons: shellcheck/hadolint — no tree scan; golangci-lint — needs the toolchain +
+  network; mypy/pylint — unusable unconfigured; stylelint — mandatory config; semgrep — network.)
+
 - **Agent-output reliability gate** — a finished LLM review is now checked for being a *real*
   review, not just a zero exit code: empty output, output truncated mid-stream, a leaked
   reasoning/tool-call transcript, a too-short body, or a bare Aerie error sentinel are flagged

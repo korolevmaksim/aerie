@@ -122,6 +122,27 @@ describe('gatherGroundTruth', () => {
       diffFile: '',
       changedFiles: ['x.ts']
     })
-    expect(res).toEqual({ groundTruth: '', findingsCount: 0, rawCount: 0, toolsRun: 0 })
+    expect(res).toEqual({
+      groundTruth: '',
+      findingsCount: 0,
+      rawCount: 0,
+      toolsRun: 0,
+      toolsSkipped: 0
+    })
+  })
+
+  it('reports tools skipped when the cap is hit (no silent drop)', async () => {
+    // Three installed, relevant fake tools but a cap of 2 → one is skipped and surfaced.
+    const empty = (id: string): Agent => tool(id, 'node', ['-e', 'process.stdout.write("[]")'])
+    const res = await gatherGroundTruth({
+      agents: [empty('eslint'), empty('biome'), empty('oxlint')],
+      cwd: process.cwd(),
+      diff: '',
+      diffFile: '',
+      changedFiles: ['x.ts'],
+      maxTools: 2
+    })
+    expect(res.toolsRun).toBe(2)
+    expect(res.toolsSkipped).toBe(1)
   })
 })

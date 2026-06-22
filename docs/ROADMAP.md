@@ -129,8 +129,20 @@ same-named directory) + Windows `.exe`/`.cmd`/`.bat` suffixes.
   banner/cost mixed into stdout); `goose` (read-only `chat` mode disables all tools, can't open the
   diff); `llm`/`sgpt` (non-agentic — can't read the file-based diff under the current contract);
   `plandex`/`openhands`/`forge` (no headless review mode).
-- **Still TODO here:** local quality tools (linters/SAST/type-checkers) as `kind:'tool'` entries; and
-  M2 makes the catalog data-driven / externally refreshable so it doesn't rot. **Depends on:** M1.
+- **Shipped (M1b quality-tool expansion):** four more `kind:'tool'` entries — `bandit` (Python SAST,
+  JSON), `oxlint` (zero-config JS/TS, JSON), `yamllint` (parsable text), `actionlint` (Actions
+  workflows, JSON) — each documentation-researched + adversarially flag-checked for a clean,
+  offline, read-only **tree-scan** with stable exit codes; schema-verified parsers in `findings.ts`
+  (`parseBandit`/`parseOxlint`/`parseYamllint`/`parseActionlint`, unit-tested) + relevance gating in
+  `grounding.ts`. The grounding cap was raised above the catalog size and `GroundingResult.toolsSkipped`
+  surfaces any cap-skip in the run transcript, so a relevant tool is never silently dropped (even on a
+  polyglot ts+py+yml diff). oxlint's `oxlint.config.ts` execution is documented in the tool catalog's
+  residual-risk note (same class as eslint.config.js).
+  Deferred with concrete reasons: shellcheck/hadolint (no tree-scan), golangci-lint (toolchain +
+  network), mypy/pylint (unusable unconfigured / bitmask exit), stylelint (mandatory config). The
+  catalog now lists **9 quality tools**.
+- **Still TODO here:** M2 makes the catalog data-driven / externally refreshable so it doesn't rot,
+  plus dynamic model discovery. **Depends on:** M1.
 
 #### M2 — Genuinely data-driven, self-maintaining catalog + dynamic model discovery
 **[correction — this is THE fix so autodiscovery doesn't rot like before]:** a hardcoded
