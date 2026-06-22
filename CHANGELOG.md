@@ -20,6 +20,18 @@ same change set.
 
 ### Added
 
+- **Automation pipelines — poller (engine runs end-to-end)** (ROADMAP M9a): `poller.ts` is a single
+  self-rescheduling timer that, each tick, derives the watches for the enabled pipelines, polls the
+  due ones for a new head (`pollCommitHead`, ETag-cheap), and on a change drives `processDelta`
+  through the live engine — so a commit-trigger pipeline now reviews a new commit automatically.
+  Rate-limit-aware backoff + jitter pace each watch (`planNextPollAt`); a global poll budget caps
+  concurrency; it backs off on errors. Started after the store is ready and **stopped on quit**
+  (clears the timer + disposes the engine ports, never starts a run during shutdown). With no
+  enabled pipelines it idles (no watches → no polls → no writes), and every GitHub write still
+  requires the per-pipeline auto-post opt-in (default off). Pure poll-cycle logic (`pollerLogic.ts`:
+  `deriveWatches`/`selectDueWatches`/`buildCommitDelta`) is unit-tested; the timer/lifecycle is
+  build-smoke verified. (Users can't create pipelines yet — the IPC + Automate UI are next; a PR
+  trigger and per-pipeline branch scoping are follow-ups.)
 - **Automation pipelines — live engine adapter** (ROADMAP M9a): `pipelineEngine.ts` binds the
   engine's ports to the real runner (`startRun`), run-event hub (`runWaiter`), M6 aggregator,
   store, and GitHub writers, plus `loadEnabledPipelines` (parse + validate each config, skip

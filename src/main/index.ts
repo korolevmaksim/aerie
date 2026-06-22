@@ -10,6 +10,7 @@ import { isInternalUrl, isSafeExternalUrl } from './security'
 import { log } from './logger'
 import { hasActiveRuns, killAllRuns } from './agentRunner'
 import { pruneAllWorktreesAndDiffs } from './gitEngine'
+import { startPoller, stopPoller } from './poller'
 import { augmentedPath } from './osPath'
 import { onChange, onFinished, onOutput, onStatus } from './runEvents'
 import { initTray, destroyTray } from './tray'
@@ -201,6 +202,9 @@ if (!app.requestSingleInstanceLock()) {
       })
 
       registerIpcHandlers()
+      // Start the automation poller. Idles cheaply when no pipelines are enabled (no
+      // watches → no polls → no writes); a per-pipeline auto-post opt-in still gates writes.
+      startPoller()
       log.info('app ready')
       createWindow()
     } catch (err) {
@@ -227,6 +231,9 @@ if (!app.requestSingleInstanceLock()) {
     // before-quit fires before the window 'close', so flagging here makes the
     // close-to-tray intercept let the window actually close during a real quit.
     isQuitting = true
+    // Stop the poller first: clears its timer and disposes the engine ports so no new
+    // pipeline run is started during the shutdown drain.
+    stopPoller()
     // A second quit during the drain window force-quits (skips the grace).
     if (quitting || !hasActiveRuns()) return
     event.preventDefault()

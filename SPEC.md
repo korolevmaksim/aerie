@@ -233,7 +233,13 @@ settings(key, value)
 > write path is the pure `dispatchGithubWrite`, which re-asserts `assertMayPost` and routes commit→
 > `createCommitComment` / pr→`createPrComment` / issue→`createIssue`. `loadEnabledPipelines` parses +
 > validates each persisted config (skipping malformed/forged rows and, for now, tool-bearing pipelines).
-> No timer drives the engine until `poller.ts` lands, so the write path is wired but dormant.
+> `poller.ts` is the single self-rescheduling timer that drives it: each tick it derives the watches
+> for the enabled pipelines (commit-trigger → repo default branch), polls the due ones with
+> `pollCommitHead`, and on a new head runs `processDelta` through the live ports — pacing each watch
+> via `planNextPollAt` (rate backoff + jitter) under a global poll budget. It's started after the store
+> is ready and stopped on `before-quit` (clears the timer + disposes the engine ports, never starting a
+> run during shutdown), and idles cheaply with no enabled pipelines. This is a LOCAL poll loop, not a
+> webhook (SPEC §10); auto-post stays a hard per-pipeline opt-in.
 
 > **ETag-cached polling foundation (ROADMAP M8).** The automation engine needs to detect a
 > new commit/PR head cheaply. `listCommits`/`listPullRequests` now mirror `listRepos`' ETag

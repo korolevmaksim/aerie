@@ -460,6 +460,21 @@ pipelines. Validation: vitest (`dispatchGithubWrite` 6 cases — a disabled acti
 enabled one routes to exactly the right writer once) + build smoke (the adapter compiles against the real
 runner/store/GitHub signatures). Code + security review APPROVED. **No poller calls the engine yet** — the
 write path is wired but dormant; `poller.ts` + app-lifecycle start/stop + IPC are next.
+**Shipped (M9a poller slice — the engine now runs end-to-end):** `main/poller.ts` — a single
+self-rescheduling timer (`startPoller`/`stopPoller`, wired into `main/index.ts`: start after the
+store + IPC are ready, stop in `before-quit`). Each tick: `loadEnabledPipelines` → `deriveWatches`
+(commit-trigger pipelines watch their repo default branch; deduped) → `selectDueWatches` (global
+poll budget) → `pollCommitHead` per due watch → on a changed head, `buildCommitDelta` +
+`processDelta(matchingPipelines, delta, ports)`; the next poll is scheduled via `planNextPollAt`
+(rate backoff + jitter). It awaits each pipeline run before re-polling that watch (no double-runs on
+one head), backs off on errors, and idles cheaply when no pipelines are enabled (no watches → no
+polls → no writes). Teardown clears the timer + disposes the engine ports and never starts a run
+during shutdown. Pure poll-cycle logic (`pollerLogic.ts`: `deriveWatches`/`watchKey`/
+`selectDueWatches`/`buildCommitDelta`/`matchingPipelines`) → vitest (9); the timer/lifecycle → build
+smoke. Code + security review APPROVED. **M9a engine is functionally COMPLETE** (poll → detect →
+run → ground → aggregate → gated action). **Still next:** the pipelines IPC surface + the M13
+Automate UI so users can create pipelines (today none exist, so the loop idles); a PR trigger,
+per-pipeline branch scoping, and real catalog/prompt-version dedupe are follow-ups.
 **Shipped (cross-agent consensus):** `aggregateFindings` gained `groupBy:'issue'|'location'` + a
 per-finding `agreement` count; `'location'` (file+line) is the robust cross-agent mode (agents
 phrase differently). `runner:consensus({runIds, consensusMin, minSeverity, groupBy})` aggregates a
