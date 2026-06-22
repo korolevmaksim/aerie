@@ -73,8 +73,9 @@ third-party service.
   and then **notifies**, **stages** the result for you to post, or — only when you flip a per-pipeline
   opt-in — **auto-posts** it. **Create/edit pipelines** in-app (repo, trigger, agent steps, scope
   filters, and the action) — choosing **Post** reveals an explicit auto-post toggle gated behind a
-  distinct danger confirm. The list shows each pipeline's live run status, an enable toggle, and
-  **Run now** / **Dry run** buttons; a dry run never writes to GitHub regardless of the opt-in.
+  distinct danger confirm. The list shows each pipeline's live run status, an enable toggle,
+  **Run now** / **Dry run** buttons, and an expandable **run history**; a dry run never writes to
+  GitHub regardless of the opt-in.
   Auto-post is off by default and enforced in the main process.
 - **Post back to GitHub — behind a confirm** — every write (commit comment, PR comment, or
   new issue) requires an explicit in-app confirmation showing the exact body. Optionally

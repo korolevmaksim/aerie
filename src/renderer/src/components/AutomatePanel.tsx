@@ -4,9 +4,11 @@ import {
   applyLiveChange,
   describeOutcome,
   displayRunStatus,
+  formatRunLine,
   statusLabel,
   statusTone
 } from '../lib/automate'
+import { formatRelativeTime } from '../lib/format'
 import PipelineEditor, { type RepoOption } from './PipelineEditor'
 
 /**
@@ -67,6 +69,25 @@ function PipelineRow({
         <p className="pipeline__msg muted" aria-live="polite">
           {message}
         </p>
+      )}
+      {item.runs.length > 0 && (
+        <details className="pipeline__runs">
+          <summary>
+            Recent runs ({item.runs.length}
+            {item.runs.length >= 20 ? '+' : ''})
+          </summary>
+          <ul className="run-list">
+            {item.runs.map((r) => (
+              <li key={r.id} className="run-line">
+                <span className={`status-pill status-pill--${statusTone(r.status)}`}>
+                  {statusLabel(r.status)}
+                </span>
+                <span className="muted run-line__detail">{formatRunLine(r)}</span>
+                <span className="muted run-line__time">{formatRelativeTime(r.startedAt)}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
     </li>
   )

@@ -628,7 +628,7 @@ console autoscroll-only-near-bottom + "Jump to latest". **Effort:** M. **Depends
   Approve-to-run consent step. Code review done. **Deferred (minor):** `setEnabled` (a per-agent
   disabled flag) + the shared `ConfirmDialog` (the editor's delete still uses `window.confirm`).
 
-#### M13 — Automate section + pipeline editor UI
+#### M13 — Automate section + pipeline editor UI  *(COMPLETE)*
 No-code linear `Watch → Run → Ground → Filter → Act` stepper reusing presets/prompts/agent picklists;
 an Action card (radio Notify / Stage / Post) with **Post behind a distinct danger-styled per-pipeline
 opt-in**, default Notify; a prominent **Run-now (dry-run)** showing what *would* happen without acting;
@@ -676,6 +676,16 @@ repos+agents picklists; `App` passes `accountId`. **No new privileged surface** 
 is UX; the engine's `assertMayPost` is the guard. Pure logic already covered by `pipelineForm.test.ts`;
 the React modal is build-smoke verified — **HUMAN visual + screen-reader sign-off pending**. Code
 review APPROVED. **Still next:** slice 4 — run history + dry-run result panel.
+**Shipped (M13 slice 4 — run history; M13 COMPLETE):** each pipeline row gained an expandable
+**Run history** `<details>` disclosure (native — `aria-expanded` for free) listing the recent
+`pipeline_runs` from `item.runs` newest-first: a status pill (tone + text label), then
+`formatRunLine` (action · posted? · trigger · short SHA), then a live relative time via
+`formatRelativeTime`. Pure `formatRunLine`/`shortSha` (`lib/automate.ts`) → vitest (2); the
+expansion → build smoke. Code review APPROVED. **M13 — Automate section + pipeline editor UI is
+COMPLETE** (form logic → list view → editor modal → run history); a pipeline is created, edited,
+enabled, run/dry-run, and watched entirely from the UI, with auto-post behind the per-pipeline
+danger opt-in. **Pending human sign-off:** visual + screen-reader pass over the Automate view +
+editor (focus order, the long scrolling form, the action radiogroup) and a live GitHub-write dry run.
 
 #### M14 — Command palette, structured launcher, console, IA polish & onboarding
 Command palette (Cmd+K) + keyboard model; structured 2-column run launcher (labeled fields replacing the

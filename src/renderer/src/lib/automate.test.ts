@@ -4,6 +4,8 @@ import {
   applyLiveChange,
   describeOutcome,
   displayRunStatus,
+  formatRunLine,
+  shortSha,
   statusLabel,
   statusTone
 } from './automate'
@@ -96,6 +98,30 @@ describe('statusLabel / statusTone', () => {
     expect(statusTone('error')).toBe('bad')
     expect(statusTone('never')).toBe('muted')
     expect(statusTone('skipped')).toBe('muted')
+  })
+})
+
+describe('shortSha / formatRunLine', () => {
+  it('shortens a sha (or — when absent)', () => {
+    expect(shortSha('a'.repeat(40))).toBe('aaaaaaa')
+    expect(shortSha('')).toBe('—')
+  })
+
+  it('composes action · posted? · trigger · sha (status + time rendered separately)', () => {
+    expect(formatRunLine(run({ action: 'notify', posted: false, trigger: 'commit' }))).toBe(
+      'notify · commit · aaaaaaa'
+    )
+    expect(
+      formatRunLine(
+        run({ action: 'post', posted: true, trigger: 'manual', headSha: 'b'.repeat(40) })
+      )
+    ).toBe('post · posted · manual · bbbbbbb')
+  })
+
+  it('omits the sha when absent', () => {
+    expect(
+      formatRunLine(run({ action: 'notify', posted: false, trigger: 'commit', headSha: '' }))
+    ).toBe('notify · commit')
   })
 })
 

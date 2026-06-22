@@ -6,6 +6,7 @@ import type {
   PipelineRunChange,
   PipelineRunOutcome,
   PipelineRunStatus,
+  PipelineRunSummary,
   PipelineWithRuns
 } from '@shared/types'
 
@@ -71,6 +72,24 @@ const SKIP_REASONS: Record<string, string> = {
   guardrail: 'a guardrail blocked it',
   dedupe: 'already run for this head',
   error: 'an error occurred'
+}
+
+/** First 7 chars of a commit SHA for compact display (or '—' when absent). */
+export function shortSha(sha: string): string {
+  return sha ? sha.slice(0, 7) : '—'
+}
+
+/**
+ * A readable summary of a single run for the run-history list — action, posted flag, trigger,
+ * short SHA. The status is shown separately as a pill (with tone), and the relative time is
+ * rendered live in the component via `formatRelativeTime`, so neither is included here.
+ */
+export function formatRunLine(run: PipelineRunSummary): string {
+  const parts: string[] = [run.action]
+  if (run.posted) parts.push('posted')
+  parts.push(run.trigger)
+  if (run.headSha) parts.push(shortSha(run.headSha))
+  return parts.join(' · ')
 }
 
 /** A short inline summary of a run-now / dry-run outcome for the row. */

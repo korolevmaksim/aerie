@@ -20,6 +20,10 @@ same change set.
 
 ### Added
 
+- **Pipeline run history** (ROADMAP M13): each pipeline row now has an expandable **Run history**
+  disclosure (`<details>`) listing its recent runs — status pill, action, posted flag, trigger, short
+  SHA, and a relative time. Completes the Automate UI (**M13 done**). Pure run-line formatter is
+  unit-tested; the expansion is build-smoke verified.
 - **Pipeline editor** (ROADMAP M13): a focus-trapped create/edit modal (`PipelineEditor.tsx`) over
   the pure `pipelineForm` mapping — name, repo picker (the selected account's repos), trigger, a
   repeatable agent-step list (agent picker from the installed agents + optional model/dependsOn),

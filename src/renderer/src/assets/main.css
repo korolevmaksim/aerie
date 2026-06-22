@@ -1282,6 +1282,9 @@ select.field {
   color: var(--low);
   border-color: var(--low);
 }
+.status-pill--muted {
+  color: var(--muted);
+}
 .pipeline__actions {
   display: flex;
   gap: 0.4rem;
@@ -1291,6 +1294,45 @@ select.field {
 .pipeline__msg {
   margin: 0.45rem 0 0;
   font-size: 0.85rem;
+}
+.pipeline__runs {
+  margin-top: 0.5rem;
+}
+.pipeline__runs > summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.run-list {
+  list-style: none;
+  margin: 0.4rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.run-line {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.82rem;
+}
+/* The base .status-pill pushes itself right (margin-left:auto) for the head row; in a run
+   line it's the LEADING child, so reset that to keep [pill] [detail] … [time] order. */
+.run-line .status-pill {
+  margin-left: 0;
+  flex: none;
+}
+.run-line__detail {
+  font-family: ui-monospace, monospace;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.run-line__time {
+  margin-left: auto;
+  flex: none;
 }
 
 /* Pipeline editor modal */
