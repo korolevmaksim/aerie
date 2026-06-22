@@ -57,7 +57,7 @@ import {
   listRepos,
   reposFromCache
 } from './github'
-import { clonePathFor, prepareCheckout } from './gitEngine'
+import { clonePathFor, headShaOf, prepareCheckout } from './gitEngine'
 import { isTrustedSender } from './security'
 import { isValidId, isValidSha } from '../shared/validators'
 import {
@@ -493,34 +493,66 @@ export function registerIpcHandlers(): void {
     return ok(listPrompts().map(rowToPrompt))
   })
 
-  ipcMain.handle(CHANNELS.runnerStart, (event, params: unknown): ApiResult<RunRecord> => {
-    if (!isTrustedSender(event)) return fail('Untrusted sender.')
-    const p = params as Partial<StartRunParams>
-    if (!p || typeof p !== 'object') return fail('Invalid run parameters.')
-    if (!isValidId(p.accountId) || !isValidId(p.repoId)) return fail('Invalid account or repo id.')
-    if (!isValidSha(p.sha)) return fail('Invalid SHA.')
-    if (p.refType !== 'commit' && p.refType !== 'pr') return fail('Invalid ref type.')
-    if (typeof p.refId !== 'string' || typeof p.agentId !== 'string')
-      return fail('Invalid run parameters.')
-    if (p.promptId !== undefined && p.promptId !== null && !isValidId(p.promptId)) {
-      return fail('Invalid prompt id.')
-    }
-    // Only accept a well-formed GitHub login for the @-mention; anything else → none.
-    p.authorLogin =
-      typeof p.authorLogin === 'string' && isGithubLogin(p.authorLogin) ? p.authorLogin : null
-    if (hasActiveRun(p.repoId, p.sha, p.agentId)) {
-      return fail('A run for this commit and agent is already in progress.')
-    }
+  ipcMain.handle(
+    CHANNELS.runnerStart,
+    async (event, params: unknown): Promise<ApiResult<RunRecord>> => {
+      if (!isTrustedSender(event)) return fail('Untrusted sender.')
+      const p = params as Partial<StartRunParams>
+      if (!p || typeof p !== 'object') return fail('Invalid run parameters.')
+      if (!isValidId(p.accountId) || !isValidId(p.repoId))
+        return fail('Invalid account or repo id.')
+      if (p.refType !== 'commit' && p.refType !== 'pr' && p.refType !== 'working-tree')
+        return fail('Invalid ref type.')
+      if (typeof p.refId !== 'string' || typeof p.agentId !== 'string')
+        return fail('Invalid run parameters.')
+      if (p.promptId !== undefined && p.promptId !== null && !isValidId(p.promptId)) {
+        return fail('Invalid prompt id.')
+      }
 
-    // Output and status now flow through the central run-events hub, which the
-    // main process broadcasts to ALL windows (so a re-shown window keeps streaming)
-    // and the tray subscribes to. No per-sender wiring here.
-    try {
-      return ok(startRun(p as StartRunParams))
-    } catch (error) {
-      return fail(error instanceof Error ? error.message : 'Failed to start run.')
+      // Working-tree runs review uncommitted changes in the user's OWN mapped clone
+      // (read-only, zero GitHub calls). The head sha is NOT renderer-supplied — resolve
+      // the clone's HEAD here (the commit the changes sit on) so the row records a real
+      // sha and isValidSha holds. Hard-requires a mapped local path.
+      if (p.refType === 'working-tree') {
+        if (p.refId !== 'working-tree' && p.refId !== 'staged') {
+          return fail('Invalid working-tree mode.')
+        }
+        const repo = getRepoById(p.repoId)
+        if (!repo) return fail('Repository not found.')
+        if (!repo.user_local_path) {
+          return fail('Map a local clone for this repository to review its working tree.')
+        }
+        try {
+          p.sha = await headShaOf(repo.user_local_path)
+        } catch (e) {
+          return fail(e instanceof Error ? e.message : 'Could not read the local clone HEAD.')
+        }
+      }
+
+      if (!isValidSha(p.sha)) return fail('Invalid SHA.')
+
+      // Only accept a well-formed GitHub login for the @-mention; anything else → none.
+      p.authorLogin =
+        typeof p.authorLogin === 'string' && isGithubLogin(p.authorLogin) ? p.authorLogin : null
+      // Dedup on the resolved HEAD + agent; for working-tree also on the mode (refId),
+      // since 'working-tree' and 'staged' share a HEAD but review different diffs.
+      if (
+        hasActiveRun(p.repoId, p.sha, p.agentId, p.refType === 'working-tree' ? p.refId : undefined)
+      ) {
+        const subject = p.refType === 'working-tree' ? 'working-tree review' : 'commit'
+        return fail(`A run for this ${subject} and agent is already in progress.`)
+      }
+
+      // Output and status now flow through the central run-events hub, which the
+      // main process broadcasts to ALL windows (so a re-shown window keeps streaming)
+      // and the tray subscribes to. No per-sender wiring here.
+      try {
+        return ok(startRun(p as StartRunParams))
+      } catch (error) {
+        return fail(error instanceof Error ? error.message : 'Failed to start run.')
+      }
     }
-  })
+  )
 
   ipcMain.handle(CHANNELS.runnerKill, (event, runId: unknown): ApiResult<true> => {
     if (!isTrustedSender(event)) return fail('Untrusted sender.')

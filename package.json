@@ -44,7 +44,9 @@
     "smoke:stage1": "npm run build && electron scripts/smoke-stage1.cjs",
     "smoke:gitdiff": "node scripts/smoke-gitdiff.cjs",
     "smoke:tooling": "node scripts/smoke-tooling.cjs",
+    "smoke:worktree": "node scripts/smoke-worktree.cjs",
     "smoke:findings": "npm run build && electron scripts/smoke-findings.cjs",
+    "smoke:migration": "electron scripts/smoke-migration-v12.cjs",
     "postinstall": "electron-rebuild -f -w better-sqlite3",
     "build:unpack": "npm run build && electron-builder --dir",
     "build:mac": "electron-vite build && electron-builder --mac"

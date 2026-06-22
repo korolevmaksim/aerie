@@ -294,6 +294,19 @@ truncation status surfaced, per-tool timeout profiles, malformed JSON/SARIF hand
   synthetic-`sha` handling past `isValidSha` (`ipc.ts:501`). Uncommitted changes exist only in the
   user's own clone, so this **hard-requires a mapped local path** (read-only posture); clear error
   if none. Diff via `git diff [--staged]` against `repo.user_local_path` without a worktree/checkout.
+- **Shipped (M7):** `RefType = 'commit'|'pr'|'working-tree'`; `gitEngine.headShaOf` (read-only
+  `rev-parse`) + `prepareWorkingTree` (writes `git diff HEAD` or `--staged`, mode `'working-tree'`,
+  NO worktree; `cleanupCheckout` skips `worktree remove` for it). The async `runnerStart` IPC
+  validates the mode, requires `user_local_path`, and resolves HEAD via `headShaOf` *before*
+  `isValidSha` (renderer passes no sha). `execute()` branches: working-tree runs the agent +
+  grounding with `cwd` = the user's clone (no clone/checkout, no token, no GitHub call), and a clean
+  tree short-circuits with "nothing to review". DB **migration v12** rebuilds `runs` to relax the
+  CHECK; `migrate()` now toggles `foreign_keys` OFF (outside the tx) so the rebuild can't cascade-
+  wipe `findings` — proven by `smoke:migration`. UI: a **Working Tree** tab + mode picker
+  (`WorkingTreeView`), `RunPanel` widened to `RefType`, `RunView` shows only "Create issue" for
+  working-tree (no commit/PR comment). Dedup keys on the mode so staged vs all don't collide.
+  Code review + **security review APPROVED**. Smokes: `smoke:worktree` (real-git read-only +
+  diff semantics), `smoke:migration` (data-safe rebuild). **M7 COMPLETE.**
 
 **Components:** `shared/types.ts`, `main/agentRunner.ts`, `main/gitEngine.ts`, `main/store.ts`
 (CHECK migration), renderer RunPanel/RepoView. **Effort:** M. **Depends on:** M0, M5.

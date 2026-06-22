@@ -103,7 +103,13 @@ function RunView({
       ? `${cleanOutput.slice(0, MAX_BODY)}\n\n[aerie] output truncated for posting]`
       : cleanOutput
   const reviewBody = `${capped.trim()}\n\n---\n_Posted via Aerie · agent \`${run.agentId}\`_`
-  const issueTitle = `Aerie review: ${run.refType === 'pr' ? `PR #${run.refId}` : `commit ${run.headSha.slice(0, 8)}`}`
+  const issueTitle = `Aerie review: ${
+    run.refType === 'pr'
+      ? `PR #${run.refId}`
+      : run.refType === 'working-tree'
+        ? `working tree (${run.headSha.slice(0, 8)})`
+        : `commit ${run.headSha.slice(0, 8)}`
+  }`
   const canPost = isTerminal(status) && cleanOutput.trim().length > 0
 
   const onConfirmPost = async (body: string, title: string): Promise<void> => {
@@ -148,7 +154,9 @@ function RunView({
 
       {canPost && (
         <div className="run__post">
-          {run.refType === 'commit' ? (
+          {/* A working-tree review is of uncommitted LOCAL changes — there is no commit
+              or PR on GitHub to comment on, so only "Create issue" applies. */}
+          {run.refType === 'commit' && (
             <button
               className="btn btn--ghost"
               onClick={() =>
@@ -160,7 +168,8 @@ function RunView({
             >
               Post as commit comment
             </button>
-          ) : (
+          )}
+          {run.refType === 'pr' && (
             <button
               className="btn btn--ghost"
               onClick={() => setPostModal({ kind: 'prComment', targetLabel: `PR #${run.refId}` })}

@@ -188,6 +188,56 @@ export async function writeCommitDiff(
   return diffPath
 }
 
+/**
+ * Resolves the HEAD commit SHA of a local clone (read-only `rev-parse`; no fetch,
+ * no checkout, no mutation). Used by working-tree runs to record the commit the
+ * uncommitted changes sit on. Throws if the path is not a git repo or HEAD is
+ * unborn (a repo with no commits yet).
+ */
+export async function headShaOf(localPath: string): Promise<string> {
+  if (!existsSync(join(localPath, '.git'))) {
+    throw new Error('Mapped local path is not a git repository.')
+  }
+  const sha = (await simpleGit(localPath).revparse(['HEAD'])).trim()
+  if (!/^[0-9a-f]{40}$/i.test(sha)) {
+    throw new Error('Could not resolve the local clone HEAD (no commits yet?).')
+  }
+  return sha
+}
+
+/**
+ * Prepares a working-tree review (M7): writes a diff of the UNCOMMITTED changes in
+ * the user's mapped clone to a file. Creates NO worktree and NEVER mutates the
+ * working copy — only read-only `git diff` runs. The agent later runs with
+ * cwd = the user's clone (uncommitted changes exist only there), zero GitHub calls.
+ *   - staged=false → `git diff HEAD`    (all uncommitted tracked changes)
+ *   - staged=true  → `git diff --staged` (only what is staged for the next commit)
+ */
+export async function prepareWorkingTree(args: {
+  fullName: string
+  userLocalPath: string
+  runTag: string
+  staged: boolean
+}): Promise<PreparedCheckout> {
+  if (!existsSync(join(args.userLocalPath, '.git'))) {
+    throw new Error('Mapped local path is not a git repository.')
+  }
+  const git = simpleGit(args.userLocalPath)
+  const diff = await git.raw(args.staged ? ['diff', '--staged'] : ['diff', 'HEAD'])
+  const { owner, name } = splitFullName(args.fullName)
+  const diffDir = dataDir('diffs')
+  mkdirSync(diffDir, { recursive: true })
+  const tag = args.staged ? 'staged' : 'worktree'
+  const diffPath = join(diffDir, `${owner}-${name}-${tag}-${args.runTag}.diff`)
+  writeFileSync(diffPath, diff, 'utf8')
+  return {
+    mode: 'working-tree',
+    worktreePath: args.userLocalPath,
+    diffPath,
+    baseDir: args.userLocalPath
+  }
+}
+
 /** Internal prepare result, carrying baseDir for cleanup (not exposed to the renderer). */
 export interface PreparedCheckout extends PrepareResult {
   baseDir: string
@@ -219,9 +269,14 @@ export async function prepareCheckout(args: {
 /** Removes a run's worktree (off the repo it was added from) and its diff file. */
 export async function cleanupCheckout(prepared: PreparedCheckout): Promise<void> {
   try {
-    await simpleGit(prepared.baseDir)
-      .raw(['worktree', 'remove', '--force', prepared.worktreePath])
-      .catch(() => undefined)
+    // A working-tree review runs IN the user's own clone — there is no worktree to
+    // remove and `worktreePath` IS their clone, so never run `worktree remove` on it.
+    // Only drop the generated diff file.
+    if (prepared.mode !== 'working-tree') {
+      await simpleGit(prepared.baseDir)
+        .raw(['worktree', 'remove', '--force', prepared.worktreePath])
+        .catch(() => undefined)
+    }
     rmSync(prepared.diffPath, { force: true })
   } catch {
     // cleanup must never throw

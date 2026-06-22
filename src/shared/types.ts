@@ -126,7 +126,7 @@ export interface RepoMapping {
   useLocalWorktree: boolean
 }
 
-export type PrepareMode = 'app-clone' | 'user-worktree'
+export type PrepareMode = 'app-clone' | 'user-worktree' | 'working-tree'
 
 export interface PrepareResult {
   mode: PrepareMode
@@ -137,6 +137,17 @@ export interface PrepareResult {
 // --- agent runner (Stage 5) --------------------------------------------------
 
 export type RunStatus = 'queued' | 'running' | 'done' | 'error' | 'killed'
+
+/**
+ * What a run reviews. 'commit'/'pr' come from GitHub; 'working-tree' reviews the
+ * uncommitted changes in the user's mapped local clone (read-only, zero GitHub
+ * calls). For a working-tree run, `refId` selects the diff: 'working-tree' = all
+ * uncommitted tracked changes (`git diff HEAD`), 'staged' = `git diff --staged`.
+ */
+export type RefType = 'commit' | 'pr' | 'working-tree'
+
+/** The two working-tree review modes, used as `refId` when refType is 'working-tree'. */
+export type WorkingTreeMode = 'working-tree' | 'staged'
 
 /** Renderer-facing agent identity (the full config, incl. command/env, stays in main). */
 export interface AgentInfo {
@@ -176,8 +187,8 @@ export interface StartRunParams {
   accountId: number
   repoId: number
   sha: string
-  refType: 'commit' | 'pr'
-  /** Commit SHA or PR number (as a string). */
+  refType: RefType
+  /** Commit SHA, PR number (as a string), or the WorkingTreeMode for working-tree runs. */
   refId: string
   agentId: string
   /** Selected review prompt; falls back to the built-in default when absent. */
@@ -189,7 +200,7 @@ export interface StartRunParams {
 export interface RunRecord {
   id: number
   repoId: number
-  refType: 'commit' | 'pr'
+  refType: RefType
   refId: string
   headSha: string
   agentId: string

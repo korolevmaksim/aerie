@@ -533,7 +533,36 @@ select.field {
   text-decoration: underline;
 }
 
+/* An inline text button that reads like a link (e.g. "go to the Mapping tab"). */
+.link--button {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
 .repo--clickable {
+  cursor: pointer;
+}
+
+/* Working-tree review (M7): mode picker for which uncommitted diff to review. */
+.worktree {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.worktree__modes {
+  display: flex;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.worktree__mode {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
   cursor: pointer;
 }
 

@@ -1,7 +1,7 @@
 import { join } from 'path'
 import { app } from 'electron'
 import Database from 'better-sqlite3'
-import type { AccountKind } from '../shared/types'
+import type { AccountKind, RefType } from '../shared/types'
 import {
   DEFAULT_REVIEW_INSTRUCTIONS,
   LEGACY_DEFAULT_REVIEW_INSTRUCTIONS,
@@ -172,6 +172,43 @@ const MIGRATIONS: ReadonlyArray<(db: Database.Database) => void> = [
       );
       CREATE INDEX idx_findings_run ON findings (run_id);
     `)
+  },
+  // v12 — allow working-tree runs (M7): relax the runs.ref_type CHECK to include
+  // 'working-tree'. SQLite can't ALTER a CHECK, so rebuild the table (the standard
+  // 12-step procedure). `migrate()` runs each migration with foreign_keys OFF, so
+  // dropping `runs` here does NOT cascade-delete `findings`; the child FK re-binds
+  // to the rebuilt `runs` by name. Column order/values are preserved exactly.
+  (db) => {
+    db.exec(`
+      CREATE TABLE runs_new (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        repo_id     INTEGER NOT NULL REFERENCES repos(id) ON DELETE CASCADE,
+        ref_type    TEXT    NOT NULL CHECK (ref_type IN ('commit', 'pr', 'working-tree')),
+        ref_id      TEXT    NOT NULL,
+        head_sha    TEXT    NOT NULL,
+        agent_id    TEXT    NOT NULL,
+        status      TEXT    NOT NULL CHECK (status IN ('queued','running','done','error','killed')),
+        exit_code   INTEGER,
+        started_at  TEXT    NOT NULL,
+        finished_at TEXT,
+        output_path TEXT,
+        posted_url  TEXT,
+        author_login TEXT
+      );
+      INSERT INTO runs_new (id, repo_id, ref_type, ref_id, head_sha, agent_id, status,
+                            exit_code, started_at, finished_at, output_path, posted_url, author_login)
+        SELECT id, repo_id, ref_type, ref_id, head_sha, agent_id, status,
+               exit_code, started_at, finished_at, output_path, posted_url, author_login
+        FROM runs;
+      DROP TABLE runs;
+      ALTER TABLE runs_new RENAME TO runs;
+      CREATE INDEX idx_runs_repo ON runs (repo_id);
+    `)
+    // Guard against the rebuild leaving any dangling child FK (findings → runs).
+    const violations = db.pragma('foreign_key_check') as unknown[]
+    if (Array.isArray(violations) && violations.length > 0) {
+      throw new Error('v12 migration left dangling foreign keys')
+    }
   }
 ]
 
@@ -182,11 +219,21 @@ function migrate(database: Database.Database): void {
   for (let version = current; version < MIGRATIONS.length; version++) {
     const run = MIGRATIONS[version]
     const next = version + 1
-    const tx = database.transaction(() => {
-      run(database)
-      database.pragma(`user_version = ${next}`)
-    })
-    tx()
+    // Disable FK enforcement around the migration. PRAGMA foreign_keys is a no-op
+    // inside a transaction, so it MUST be toggled out here. A migration that rebuilds
+    // a referenced table (e.g. v12 relaxing a CHECK) relies on this so DROP TABLE
+    // doesn't cascade-delete child rows; for every other migration it's harmless
+    // (migrations are trusted DDL). FK enforcement is restored after each step.
+    database.pragma('foreign_keys = OFF')
+    try {
+      const tx = database.transaction(() => {
+        run(database)
+        database.pragma(`user_version = ${next}`)
+      })
+      tx()
+    } finally {
+      database.pragma('foreign_keys = ON')
+    }
   }
 }
 
@@ -407,7 +454,7 @@ export type RunStatusValue = 'queued' | 'running' | 'done' | 'error' | 'killed'
 export interface RunRow {
   id: number
   repo_id: number
-  ref_type: 'commit' | 'pr'
+  ref_type: RefType
   ref_id: string
   head_sha: string
   agent_id: string
@@ -422,7 +469,7 @@ export interface RunRow {
 
 export interface NewRun {
   repoId: number
-  refType: 'commit' | 'pr'
+  refType: RefType
   refId: string
   headSha: string
   agentId: string
@@ -487,13 +534,26 @@ export interface RunRowWithRepo extends RunRow {
 }
 
 /** True if a run for this repo/sha/agent is already queued or running. */
-export function hasActiveRun(repoId: number, sha: string, agentId: string): boolean {
+/**
+ * True if an equivalent run is already queued/running. Keyed on (repo, head SHA,
+ * agent); when `refId` is given it is also matched, so two working-tree runs on the
+ * same HEAD but different modes ('working-tree' vs 'staged') — which share a head
+ * SHA — are NOT treated as duplicates of each other (or of a commit run on that SHA).
+ */
+export function hasActiveRun(
+  repoId: number,
+  sha: string,
+  agentId: string,
+  refId?: string
+): boolean {
+  const refClause = refId !== undefined ? 'AND ref_id = ?' : ''
+  const params = refId !== undefined ? [repoId, sha, agentId, refId] : [repoId, sha, agentId]
   return !!requireDb()
     .prepare(
-      `SELECT 1 FROM runs WHERE repo_id = ? AND head_sha = ? AND agent_id = ?
+      `SELECT 1 FROM runs WHERE repo_id = ? AND head_sha = ? AND agent_id = ? ${refClause}
        AND status IN ('queued','running') LIMIT 1`
     )
-    .get(repoId, sha, agentId)
+    .get(...params)
 }
 
 /**

@@ -131,11 +131,22 @@ Adding Agy / Kimi / Claude Code = editing `agents.json`. No code change. Ever.
 accounts(id, label, kind['user'|'org'], login, token_blob, created_at)
 repos(id, account_id, full_name, default_branch, remote_url,
       user_local_path, app_clone_path, last_synced_at, etag_cache)
-runs(id, repo_id, ref_type['commit'|'pr'], ref_id, head_sha, agent_id,
+runs(id, repo_id, ref_type['commit'|'pr'|'working-tree'], ref_id, head_sha, agent_id,
      status['queued'|'running'|'done'|'error'|'killed'],
      exit_code, started_at, finished_at, output_path, posted_url)
 settings(key, value)
 ```
+
+> **Working-tree reviews (ROADMAP M7).** A `ref_type` of `'working-tree'` reviews the
+> **uncommitted** changes in the user's mapped local clone — `ref_id` selects the diff
+> (`'working-tree'` = `git diff HEAD`, `'staged'` = `git diff --staged`) and `head_sha` is
+> the commit those changes sit on. This path makes **zero GitHub calls**, creates **no
+> worktree/checkout**, and never mutates the working copy (only read-only `git diff` /
+> `rev-parse` run). It hard-requires a mapped local clone (the changes exist only there),
+> so the agent — and the grounding tools (M5) — run with `cwd` = the user's clone; this is
+> a deliberate, gated extension of §4 (a mapped clone + an explicit working-tree review is
+> the consent), narrower than the `use_local_worktree` checkout mode. Grounding still
+> honours the `ui.groundReviews` opt-out. Findings noise-filtering (M6) applies identically.
 
 ## 9. Staged build plan
 

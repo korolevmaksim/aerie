@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events'
-import type { RunOutputChunk, RunStatus, RunStatusUpdate } from '../shared/types'
+import type { RefType, RunOutputChunk, RunStatus, RunStatusUpdate } from '../shared/types'
 
 /**
  * Central, in-process run lifecycle hub for the MAIN process — the single source
@@ -22,7 +22,7 @@ export interface ActiveRun {
   /** Short head SHA for compact display. */
   shortSha: string
   agentId: string
-  refType: 'commit' | 'pr'
+  refType: RefType
   refId: string
   status: RunStatus
   startedAt: string

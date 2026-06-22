@@ -4,6 +4,7 @@ import { formatRelativeTime } from '../lib/format'
 import CommitDetailView from './CommitDetailView'
 import PrDetailView from './PrDetailView'
 import RepoMappingPanel from './RepoMappingPanel'
+import WorkingTreeView from './WorkingTreeView'
 
 type Detail = { kind: 'commit'; sha: string } | { kind: 'pull'; number: number } | null
 
@@ -216,7 +217,7 @@ function RepoView({
   repo: RepoSummary
   onBack: () => void
 }): React.JSX.Element {
-  const [tab, setTab] = useState<'commits' | 'pulls'>('commits')
+  const [tab, setTab] = useState<'commits' | 'pulls' | 'worktree'>('commits')
   const [detail, setDetail] = useState<Detail>(null)
   const [showMapping, setShowMapping] = useState(false)
 
@@ -267,6 +268,12 @@ function RepoView({
             Pull Requests
           </button>
           <button
+            className={`tab ${tab === 'worktree' ? 'tab--active' : ''}`}
+            onClick={() => setTab('worktree')}
+          >
+            Working Tree
+          </button>
+          <button
             className={`tab ${showMapping ? 'tab--active' : ''}`}
             onClick={() => setShowMapping((m) => !m)}
           >
@@ -283,11 +290,17 @@ function RepoView({
           repo={repo}
           onOpenCommit={(sha) => setDetail({ kind: 'commit', sha })}
         />
-      ) : (
+      ) : tab === 'pulls' ? (
         <PullsTab
           accountId={accountId}
           repo={repo}
           onOpenPull={(number) => setDetail({ kind: 'pull', number })}
+        />
+      ) : (
+        <WorkingTreeView
+          accountId={accountId}
+          repoId={repo.id}
+          onOpenMapping={() => setShowMapping(true)}
         />
       )}
     </section>

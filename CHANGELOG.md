@@ -66,6 +66,17 @@ same change set.
   how much noise was removed. Pure + unit-tested; built so multi-agent consensus (future parallel
   runs) reuses the same aggregator.
 
+- **Working-tree review (a pre-PR pass)** — a new **Working Tree** tab reviews the uncommitted
+  changes in your mapped local clone with any local agent: all uncommitted tracked changes
+  (`git diff HEAD`) or only what's staged (`git diff --staged`). It makes **zero GitHub calls**,
+  creates no checkout/worktree, and never mutates your working copy (read-only `git diff`/
+  `rev-parse` only); the agent runs in your clone since the changes exist only there. Grounding
+  (local-tool findings) and the noise filter apply identically. A clean tree short-circuits with
+  "nothing to review" instead of spawning an agent. Hard-requires a mapped local clone; the run
+  screen offers "Create issue" (no commit/PR comment, since there's nothing on GitHub yet).
+  New `ref_type: 'working-tree'` (DB migration v12 relaxes the `runs.ref_type` CHECK; the rebuild
+  preserves all rows and findings). Two new headless smokes (`smoke:worktree`, `smoke:migration`).
+
 ### Changed
 
 - Removed the retired `dummy` agent from the documentation (`SPEC.md`, `PROMPT.md`,

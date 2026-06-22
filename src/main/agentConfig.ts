@@ -5,6 +5,8 @@
 // code-review invocation (only the final review is captured — no chat UI, no
 // reasoning/tool-call transcript). Adding/editing an agent is a config edit.
 
+import type { RefType } from '../shared/types'
+
 export interface Agent {
   id: string
   label: string
@@ -516,7 +518,7 @@ Output GitHub-flavored markdown. Terse. No preamble.`
 export function buildPrompt(
   ctx: {
     fullName: string
-    refType: 'commit' | 'pr'
+    refType: RefType
     refId: string
     sha: string
     repoPath: string
@@ -528,7 +530,12 @@ export function buildPrompt(
   },
   instructions: string = DEFAULT_REVIEW_INSTRUCTIONS
 ): string {
-  const subject = ctx.refType === 'pr' ? `pull request #${ctx.refId}` : `commit ${ctx.sha}`
+  const subject =
+    ctx.refType === 'pr'
+      ? `pull request #${ctx.refId}`
+      : ctx.refType === 'working-tree'
+        ? `uncommitted working-tree changes${ctx.refId === 'staged' ? ' (staged)' : ''} on ${ctx.sha}`
+        : `commit ${ctx.sha}`
   const changed = (ctx.changedFiles ?? []).filter(Boolean)
   const context = [
     `Repository: ${ctx.fullName}`,

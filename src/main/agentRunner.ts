@@ -23,7 +23,12 @@ import {
 import { decryptToken } from './auth'
 import { extractSecrets, parseChangedLineRanges, parseToolOutput, scopeToChanges } from './findings'
 import { getPullRequestBaseSha } from './github'
-import { cleanupCheckout, prepareCheckout, type PreparedCheckout } from './gitEngine'
+import {
+  cleanupCheckout,
+  prepareCheckout,
+  prepareWorkingTree,
+  type PreparedCheckout
+} from './gitEngine'
 import { gatherGroundTruth } from './grounding'
 import { log } from './logger'
 import { whichOnPath } from './pathLookup'
@@ -360,37 +365,53 @@ async function execute(
   try {
     updateRunStatus(runId, { status: 'running' })
     noteStatus(runId, 'running')
-    emit('system', '[aerie] preparing local checkout…\n')
 
     // For a PR, diff the WHOLE PR (merge-base..head), not just its head commit.
     // The base SHA is resolved authoritatively from GitHub, never renderer-supplied.
     let prBaseSha: string | undefined
-    if (params.refType === 'pr') {
-      const prNumber = Number(params.refId)
-      if (Number.isInteger(prNumber) && prNumber > 0) {
-        try {
-          prBaseSha = await getPullRequestBaseSha(params.accountId, repo.full_name, prNumber)
-        } catch (e) {
-          emit(
-            'system',
-            `[aerie] could not resolve PR base — diffing the head commit only: ${
-              e instanceof Error ? e.message : String(e)
-            }\n`
-          )
+    if (params.refType === 'working-tree') {
+      // Review the user's UNCOMMITTED changes in their mapped clone — no checkout, no
+      // worktree, no GitHub call, never mutating the working copy. Hard-requires a
+      // mapped local path (the changes exist only there).
+      if (!repo.user_local_path) {
+        throw new Error('Map a local clone for this repository to review its working tree.')
+      }
+      emit('system', '[aerie] preparing working-tree diff (read-only, no checkout)…\n')
+      prepared = await prepareWorkingTree({
+        fullName: repo.full_name,
+        userLocalPath: repo.user_local_path,
+        runTag: String(runId),
+        staged: params.refId === 'staged'
+      })
+    } else {
+      emit('system', '[aerie] preparing local checkout…\n')
+      if (params.refType === 'pr') {
+        const prNumber = Number(params.refId)
+        if (Number.isInteger(prNumber) && prNumber > 0) {
+          try {
+            prBaseSha = await getPullRequestBaseSha(params.accountId, repo.full_name, prNumber)
+          } catch (e) {
+            emit(
+              'system',
+              `[aerie] could not resolve PR base — diffing the head commit only: ${
+                e instanceof Error ? e.message : String(e)
+              }\n`
+            )
+          }
         }
       }
-    }
 
-    prepared = await prepareCheckout({
-      fullName: repo.full_name,
-      sha: params.sha,
-      remoteUrl: repo.remote_url!,
-      runTag: String(runId),
-      token: decryptToken(tokenBlob),
-      userLocalPath: repo.user_local_path,
-      useLocalWorktree: repo.use_local_worktree === 1,
-      baseSha: prBaseSha
-    })
+      prepared = await prepareCheckout({
+        fullName: repo.full_name,
+        sha: params.sha,
+        remoteUrl: repo.remote_url!,
+        runTag: String(runId),
+        token: decryptToken(tokenBlob),
+        userLocalPath: repo.user_local_path,
+        useLocalWorktree: repo.use_local_worktree === 1,
+        baseSha: prBaseSha
+      })
+    }
 
     // The diff content (read once) drives both {{changedFiles}} and pre-run grounding.
     let diffContent = ''
@@ -400,6 +421,15 @@ async function execute(
       /* best-effort */
     }
     const changedFiles = [...parseChangedLineRanges(diffContent).keys()]
+
+    // A working-tree review with a clean tree has nothing to review — don't burn an
+    // agent invocation on an empty diff. (Commit/PR refs always have a non-empty diff.)
+    if (params.refType === 'working-tree' && diffContent.trim() === '') {
+      const which = params.refId === 'staged' ? 'staged' : 'uncommitted'
+      emit('system', `[aerie] no ${which} changes to review — nothing to do.\n`)
+      finalize('done', 0, `[aerie] No ${which} changes in the working tree to review.`)
+      return
+    }
 
     // Ground an LLM review on deterministic local-tool findings (best-effort): run the
     // installed, repo-relevant quality tools on the change and give the agent their
@@ -462,7 +492,9 @@ async function execute(
       outFile: join(runsDir, `${runId}.agentout`),
       model: resolveModel(agent),
       reasoning: resolveReasoning(agent),
-      baseSha: prBaseSha ?? `${params.sha}^`,
+      // Working-tree changes are measured against HEAD (params.sha); commit/PR runs
+      // use the PR base or the commit's first parent.
+      baseSha: params.refType === 'working-tree' ? params.sha : (prBaseSha ?? `${params.sha}^`),
       headSha: params.sha,
       changedFiles: changedFiles.join('\n'),
       prompt: promptText

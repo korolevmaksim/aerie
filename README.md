@@ -34,6 +34,10 @@ third-party service.
   re-listing costs ~0 rate limit.
 - **Local checkout** — Aerie clones into an app-owned working copy (or, opt-in, a
   read-only worktree of your own clone) and builds the unified diff for the agent.
+- **Review your working tree before the PR** — point an agent at the **uncommitted**
+  changes in your mapped local clone (all changes via `git diff HEAD`, or just what's
+  staged) for a pre-PR pass. Zero GitHub calls, no checkout, never touches your working
+  copy — read-only `git diff` only.
 - **Run any local agent** — a small, editable registry ships templates for Codex,
   Claude Code, Cursor Agent, opencode, Kimi, Gemini, Mistral Vibe, Grok, Antigravity, and
   MiMo. Installed agents are auto-detected; pick a model and (where supported) a

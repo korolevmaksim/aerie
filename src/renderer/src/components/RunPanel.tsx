@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
-import type { AgentInfo, Preset, Prompt, RunRecord, RunStatus } from '@shared/types'
+import type { AgentInfo, Preset, Prompt, RefType, RunRecord, RunStatus } from '@shared/types'
 import RunView from './RunView'
 
 /**
- * Launcher for a run on a commit/PR: pick an agent (installed ones marked), a
- * model, and a review prompt, start it, and show its live RunView. A run already
- * in flight for this ref is rehydrated so it can be controlled after navigating
- * away and back.
+ * Launcher for a run on a commit/PR/working-tree: pick an agent (installed ones
+ * marked), a model, and a review prompt, start it, and show its live RunView. A run
+ * already in flight for this ref is rehydrated so it can be controlled after
+ * navigating away and back.
  */
 function RunPanel({
   accountId,
@@ -18,8 +18,9 @@ function RunPanel({
 }: {
   accountId: number
   repoId: number
-  sha: string
-  refType: 'commit' | 'pr'
+  /** Head SHA for commit/PR runs; for working-tree runs the main process resolves it. */
+  sha?: string
+  refType: RefType
   refId: string
   /** Commit/PR author login — persisted on the run so a comment can @-mention them. */
   authorLogin?: string | null
@@ -69,8 +70,11 @@ function RunPanel({
     void (async () => {
       const res = await window.aerie.runner.listRuns(repoId)
       if (cancelled || !res.ok) return
+      // commit runs are keyed by head SHA; PR and working-tree runs by refId
+      // (the PR number, or the working-tree mode), since their head SHA varies.
       const match = res.value.find(
-        (r) => r.refType === refType && (refType === 'pr' ? r.refId === refId : r.headSha === sha)
+        (r) =>
+          r.refType === refType && (refType === 'commit' ? r.headSha === sha : r.refId === refId)
       )
       if (match) {
         setCurrentRun(match)
@@ -142,7 +146,8 @@ function RunPanel({
       const res = await window.aerie.runner.start({
         accountId,
         repoId,
-        sha,
+        // Working-tree runs have no renderer-known SHA — main resolves the clone HEAD.
+        sha: sha ?? '',
         refType,
         refId,
         agentId,
