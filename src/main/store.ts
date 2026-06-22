@@ -464,6 +464,7 @@ export function listRunsForRepo(repoId: number): RunRow[] {
 
 export interface RunRowWithRepo extends RunRow {
   full_name: string
+  account_id: number
 }
 
 /** True if a run for this repo/sha/agent is already queued or running. */
@@ -476,11 +477,14 @@ export function hasActiveRun(repoId: number, sha: string, agentId: string): bool
     .get(repoId, sha, agentId)
 }
 
-/** All runs across repos, newest first, with the repo's full name (history view). */
+/**
+ * All runs across repos, newest first, with the repo's full name and owning
+ * account id (the latter lets the history view scope runs per account).
+ */
 export function listAllRuns(limit = 200): RunRowWithRepo[] {
   return requireDb()
     .prepare(
-      `SELECT runs.*, repos.full_name FROM runs
+      `SELECT runs.*, repos.full_name, repos.account_id FROM runs
        JOIN repos ON repos.id = runs.repo_id
        ORDER BY runs.started_at DESC, runs.id DESC
        LIMIT ?`

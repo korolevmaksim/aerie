@@ -257,6 +257,8 @@ export interface PostResult {
 
 export interface RunHistoryItem extends RunRecord {
   repoFullName: string
+  /** Owning account, derived from the run's repo — lets History scope per account. */
+  accountId: number
 }
 
 export interface SystemInfo {

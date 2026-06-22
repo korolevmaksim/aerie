@@ -1,12 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { RunHistoryItem } from '@shared/types'
 import { formatRelativeTime } from '../lib/format'
 import RunView from './RunView'
 
 function HistoryPanel({
+  accountId = null,
   externalRunId = null,
   onConsumed
 }: {
+  /** Scope the list to this account; runs from other accounts are hidden. */
+  accountId?: number | null
   /** A run the tray asked to open; selected automatically when present. */
   externalRunId?: number | null
   /** Called once the external run id has been handled (found or not). */
@@ -16,6 +19,9 @@ function HistoryPanel({
   const [loaded, setLoaded] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [selected, setSelected] = useState<RunHistoryItem | null>(null)
+  // Repo sub-filter: a repo id, or 'all'. Options are built from the runs that
+  // actually exist for this account (never the full repo list).
+  const [repoFilter, setRepoFilter] = useState<number | 'all'>('all')
   // Remember which external id we've already acted on, so a not-yet-loaded (or
   // pruned) run never drives an endless reload loop.
   const handledRunIdRef = useRef<number | null>(null)
@@ -70,6 +76,8 @@ function HistoryPanel({
   // Open-from-tray: select the requested run. Try the loaded list first; if it
   // isn't there yet, reload once and select if it appears. Either way mark the id
   // handled (single attempt) and notify the parent so it can clear pending state.
+  // Note: this matches against the FULL run list, so a tray run from another
+  // account still opens even though the visible list is scoped to one account.
   useEffect(() => {
     if (externalRunId == null) {
       // Reset so re-opening the SAME run from the tray (id goes N → null → N) is
@@ -96,9 +104,41 @@ function HistoryPanel({
     })()
   }, [externalRunId, runs, loaded, onConsumed])
 
-  // Safety net: while any run is still active, re-poll the list so a status that
-  // settled before this panel mounted (or any missed event) still converges.
-  const hasActive = runs.some((r) => r.status === 'queued' || r.status === 'running')
+  // Runs for the active account only — the spine the visible list and the repo
+  // dropdown are both built from.
+  const accountRuns = useMemo(
+    () => (accountId == null ? [] : runs.filter((r) => r.accountId === accountId)),
+    [runs, accountId]
+  )
+
+  // Repos that have at least one run for this account, sorted by name so a
+  // specific repo is easy to find in the dropdown (the run list itself stays
+  // newest-first; this only orders the filter options).
+  const repoOptions = useMemo(() => {
+    const seen = new Map<number, string>()
+    for (const r of accountRuns) if (!seen.has(r.repoId)) seen.set(r.repoId, r.repoFullName)
+    return [...seen]
+      .map(([repoId, repoFullName]) => ({ repoId, repoFullName }))
+      .sort((a, b) => a.repoFullName.localeCompare(b.repoFullName))
+  }, [accountRuns])
+
+  // Guard against a stale selection (e.g. a repo whose runs vanished): fall back
+  // to "all" rather than silently showing an empty list.
+  const effectiveRepoFilter =
+    repoFilter !== 'all' && repoOptions.some((o) => o.repoId === repoFilter) ? repoFilter : 'all'
+
+  const visibleRuns = useMemo(
+    () =>
+      effectiveRepoFilter === 'all'
+        ? accountRuns
+        : accountRuns.filter((r) => r.repoId === effectiveRepoFilter),
+    [accountRuns, effectiveRepoFilter]
+  )
+
+  // Safety net: while any run for THIS account is still active, re-poll the list
+  // so a status that settled before this panel mounted (or any missed event)
+  // still converges.
+  const hasActive = accountRuns.some((r) => r.status === 'queued' || r.status === 'running')
   useEffect(() => {
     if (!hasActive) return
     const id = setInterval(() => void reload(), 3000)
@@ -135,22 +175,47 @@ function HistoryPanel({
     <section className="panel">
       <div className="panel__head">
         <h2 className="panel__title">Run history</h2>
-        <button
-          className="btn btn--ghost"
-          onClick={() => void refresh()}
-          disabled={refreshing}
-          title="Refresh run statuses"
-        >
-          {refreshing ? 'Refreshing…' : hasActive ? 'Refresh · live' : 'Refresh'}
-        </button>
+        <div className="panel__head-actions">
+          {repoOptions.length > 0 && (
+            <select
+              className="field history-repo-filter"
+              value={effectiveRepoFilter === 'all' ? 'all' : String(effectiveRepoFilter)}
+              onChange={(e) => {
+                const v = e.target.value
+                setRepoFilter(v === 'all' ? 'all' : Number(v))
+              }}
+              title="Filter by repository"
+              aria-label="Filter run history by repository"
+            >
+              <option value="all">All repositories</option>
+              {repoOptions.map((o) => (
+                <option key={o.repoId} value={String(o.repoId)}>
+                  {o.repoFullName}
+                </option>
+              ))}
+            </select>
+          )}
+          <button
+            className="btn btn--ghost"
+            onClick={() => void refresh()}
+            disabled={refreshing}
+            title="Refresh run statuses"
+          >
+            {refreshing ? 'Refreshing…' : hasActive ? 'Refresh · live' : 'Refresh'}
+          </button>
+        </div>
       </div>
       {!loaded ? (
         <p className="empty">Loading…</p>
-      ) : runs.length === 0 ? (
-        <p className="empty">No runs yet. Use “Review with agent” on a commit or PR.</p>
+      ) : accountRuns.length === 0 ? (
+        <p className="empty">
+          No runs yet for this account. Use “Review with agent” on a commit or PR.
+        </p>
+      ) : visibleRuns.length === 0 ? (
+        <p className="empty">No runs for the selected repository.</p>
       ) : (
         <ul className="commits">
-          {runs.map((r) => (
+          {visibleRuns.map((r) => (
             <li
               key={r.id}
               className="commit-row history-row history-row--clickable"

@@ -409,6 +409,21 @@ select.field {
   gap: 0.5rem;
 }
 
+.panel__head-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+/* Repo filter in the History header. Inherits the custom chevron + right padding
+   from `select.field`; only the compact size and a max-width (so long repo names
+   don't stretch the header) are set here. */
+.history-repo-filter {
+  font-size: 0.85rem;
+  padding: 0.4rem 0.6rem;
+  max-width: 280px;
+}
+
 .chip {
   font-size: 0.65rem;
   text-transform: uppercase;

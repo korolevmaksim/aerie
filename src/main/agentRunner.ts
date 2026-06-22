@@ -482,5 +482,9 @@ export function listRunRecords(repoId: number): RunRecord[] {
 }
 
 export function listAllRunHistory(): RunHistoryItem[] {
-  return listAllRuns().map((r) => ({ ...rowToRecord(r), repoFullName: r.full_name }))
+  return listAllRuns().map((r) => ({
+    ...rowToRecord(r),
+    repoFullName: r.full_name,
+    accountId: r.account_id
+  }))
 }

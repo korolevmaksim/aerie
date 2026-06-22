@@ -72,7 +72,9 @@ function App(): React.JSX.Element {
               onChange={(e) => {
                 setSelectedId(Number(e.target.value))
                 setOpenRepo(null)
-                setView('repos')
+                // Switching account is the way to re-scope History, so stay on it
+                // when it's open; otherwise fall back to the account's repo list.
+                setView((v) => (v === 'history' ? 'history' : 'repos'))
               }}
             >
               {accounts.map((a) => (
@@ -115,7 +117,12 @@ function App(): React.JSX.Element {
         {view === 'accounts' || !reposReady ? (
           <AccountsPanel onAccountsChanged={reloadAccounts} />
         ) : view === 'history' ? (
-          <HistoryPanel externalRunId={pendingRunId} onConsumed={() => setPendingRunId(null)} />
+          <HistoryPanel
+            key={selectedId}
+            accountId={selectedId}
+            externalRunId={pendingRunId}
+            onConsumed={() => setPendingRunId(null)}
+          />
         ) : view === 'settings' ? (
           <SettingsPanel />
         ) : openRepo ? (
