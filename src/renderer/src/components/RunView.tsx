@@ -111,6 +111,13 @@ function RunView({
         : `commit ${run.headSha.slice(0, 8)}`
   }`
   const canPost = isTerminal(status) && cleanOutput.trim().length > 0
+  // The runner (M-Q) flags an empty/truncated/transcript-leaked LLM review in the
+  // transcript; surface that verdict here so the user reviews before posting. Reading
+  // the marker keeps a single source of truth (the main-process assessment).
+  // Anchored to line start (the runner emits it on its own line) so a review whose
+  // own prose happens to quote the marker can't false-trigger the banner.
+  const lowQualityMatch = output.match(/^\[aerie\] ⚠ low-quality review:\s*(.+)$/m)
+  const lowQualityNote = lowQualityMatch ? lowQualityMatch[1].trim() : null
 
   const onConfirmPost = async (body: string, title: string): Promise<void> => {
     if (!postModal) return
@@ -151,6 +158,12 @@ function RunView({
       <pre className="run__console" ref={consoleRef}>
         {output || (active ? '…' : 'No output recorded.')}
       </pre>
+
+      {isTerminal(status) && lowQualityNote && (
+        <p className="run__warn" role="alert">
+          ⚠ This review looks low-quality: {lowQualityNote} Check it before posting.
+        </p>
+      )}
 
       {canPost && (
         <div className="run__post">

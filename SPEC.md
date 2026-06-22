@@ -148,6 +148,14 @@ settings(key, value)
 > the consent), narrower than the `use_local_worktree` checkout mode. Grounding still
 > honours the `ui.groundReviews` opt-out. Findings noise-filtering (M6) applies identically.
 
+> **Agent-output reliability gate (ROADMAP M-Q).** Run status comes from the agent's exit
+> code, but exit 0 ≠ a usable review. A pure, shared `assessReviewQuality(output)` classifies
+> a spawned LLM run's captured output as `ok` or `low` (empty / truncated mid-stream / leaked
+> reasoning-or-tool-call transcript / too short / a bare `[aerie]` error sentinel). `low` runs
+> are surfaced as a caution in the run view and are **ineligible for auto-posting** once
+> automation (M9) lands. Tool runs are not gated here — malformed tool JSON already degrades to
+> "no findings" without failing the run; per-tool timeouts come from each agent's `timeoutSec`.
+
 ## 9. Staged build plan
 
 Each stage: implement → meet acceptance criteria → commit (`stage-N: …`) → STOP.

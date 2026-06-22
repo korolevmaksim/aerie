@@ -66,6 +66,14 @@ same change set.
   how much noise was removed. Pure + unit-tested; built so multi-agent consensus (future parallel
   runs) reuses the same aggregator.
 
+- **Agent-output reliability gate** — a finished LLM review is now checked for being a *real*
+  review, not just a zero exit code: empty output, output truncated mid-stream, a leaked
+  reasoning/tool-call transcript, a too-short body, or a bare Aerie error sentinel are flagged
+  **low-quality** with an amber caution in the run view (so you check before posting). Pure +
+  unit-tested (`shared/quality.ts`); the same verdict will gate auto-posting once automation lands.
+  Tool runs aren't gated here (malformed tool JSON already degrades to "no findings" without
+  failing the run). The deliberate "nothing to review" outcome (clean working tree) is not flagged.
+
 - **Working-tree review (a pre-PR pass)** — a new **Working Tree** tab reviews the uncommitted
   changes in your mapped local clone with any local agent: all uncommitted tracked changes
   (`git diff HEAD`) or only what's staged (`git diff --staged`). It makes **zero GitHub calls**,

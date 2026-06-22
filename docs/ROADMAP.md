@@ -281,6 +281,16 @@ enables auto-post, publish it. Add: empty-output detection, transcript/garbage h
 truncation status surfaced, per-tool timeout profiles, malformed JSON/SARIF handling. **Effort:** M.
 **Depends on:** M4. **Accept:** an empty/garbage/truncated run is flagged "low-quality" and is
 **ineligible** for stage/auto-post; malformed tool JSON degrades to text without failing the run.
+- **Shipped (M-Q):** pure `shared/quality.ts` — `assessReviewQuality(output, {kind})` →
+  `{level:'ok'|'low', reasons[]}`: flags empty output, the runner's truncation marker, a too-short
+  body (<40 non-ws chars), a leaked transcript (`<thinking>` or >60% tool-call/envelope lines), and
+  a bare `[aerie]` sentinel; tool runs are never gated. Shared so the renderer badge AND the future
+  M9 auto-post gate use one verdict. The runner emits a `⚠ low-quality review` transcript line for
+  spawned LLM runs only (the empty-tree "nothing to review" short-circuit is excluded); `RunView`
+  surfaces it as an amber caution above the post controls (line-anchored marker match, no false
+  trigger). 12 unit tests incl. negative cases (code-block/table reviews stay `ok`). Malformed tool
+  JSON already degrades to `[]` in the parsers; per-tool timeouts already exist via the agent
+  contract's `timeoutSec`. Code review **APPROVED**. **M-Q COMPLETE.**
 
 ---
 

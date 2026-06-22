@@ -9,6 +9,7 @@ import type {
   RunStatus,
   StartRunParams
 } from '../shared/types'
+import { assessReviewQuality } from '../shared/quality'
 import { AGENT_CATALOG } from './agentCatalog'
 import {
   buildPrompt,
@@ -283,6 +284,10 @@ async function execute(
   const runsDir = join(app.getPath('userData'), 'runs')
   let prepared: PreparedCheckout | null = null
   let promptFile: string | null = null
+  // True once the agent process is actually spawned, so the reliability gate (M-Q)
+  // assesses only real review ATTEMPTS — not the deliberate "nothing to review"
+  // short-circuit (empty working tree), which never spawns an agent.
+  let agentSpawned = false
 
   // Free the run's worktree + diff + prompt once it has terminated (the durable
   // review stays in runs/<id>.out). Runs after the process tree is dead, so file
@@ -347,6 +352,16 @@ async function execute(
           runId,
           error: e instanceof Error ? e.message : String(e)
         })
+      }
+    }
+    // Reliability gate (M-Q): an LLM review that exits 0 can still be empty, truncated,
+    // or a leaked transcript. Flag it in the transcript so the user sees it isn't a real
+    // review (and so the future auto-post path, M9, can refuse to publish it). The exit
+    // status is unchanged — this is advisory, not a failure.
+    if (agentSpawned && agent.kind !== 'tool' && status === 'done') {
+      const quality = assessReviewQuality(output, { kind: 'agent' })
+      if (quality.level === 'low') {
+        emit('system', `\n[aerie] ⚠ low-quality review: ${quality.reasons.join(' ')}\n`)
       }
     }
     liveTranscripts.delete(runId)
@@ -510,6 +525,7 @@ async function execute(
     // detached → the child leads its own process group so killTree reaches its
     // subprocesses. Not unref'd: we still track and reap it.
     const child = spawn(agent.command, args, { cwd: prepared.worktreePath, env, detached: true })
+    agentSpawned = true
     running.set(runId, child)
 
     let captured = ''
