@@ -12,6 +12,7 @@
 import type {
   ConsensusResult,
   Pipeline,
+  PipelineAction,
   PipelineActionKind,
   PipelineRunStatus,
   PipelineStep,
@@ -77,8 +78,17 @@ export interface EnginePorts {
   waitForRun(runId: number): Promise<'done' | 'error' | 'killed'>
   /** M6 aggregation over the panel's persisted findings. */
   aggregate(runIds: number[]): ConsensusResult
-  /** The ONLY GitHub-write port. Reached solely from the gated `post` branch. */
-  post(target: PostTarget, delta: DeltaContext, body: string): Promise<string>
+  /**
+   * The ONLY GitHub-write port — reached solely from the gated `post` branch. Receives the
+   * `action` so the adapter can RE-assert `assertMayPost` independently (defense-in-depth:
+   * even a future engine bug can't write unless the adapter also agrees it's an enabled post).
+   */
+  post(
+    action: PipelineAction,
+    target: PostTarget,
+    delta: DeltaContext,
+    body: string
+  ): Promise<string>
   /** notify/stage surface (no GitHub write). */
   notify(pipeline: Pipeline, summary: string): void
   /** Advances the watch's last-seen SHA — called once per delta AFTER all pipelines settle. */
@@ -195,7 +205,7 @@ export async function runPipelineForDelta(
       assertMayPost(pipeline.action)
       const target: PostTarget =
         pipeline.action.target ?? (delta.refType === 'pr' ? 'pr' : 'commit')
-      await ports.post(target, delta, body)
+      await ports.post(pipeline.action, target, delta, body)
       ports.setPipelineRunPosted(pipelineRunId)
       posted = true
     } else {

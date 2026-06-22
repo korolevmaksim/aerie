@@ -435,6 +435,18 @@ write port, an enabled-post writes exactly once, gates skip without running, the
 and the watch only advances after clean processing. Code + security review APPROVED. **Still next:**
 the live `poller.ts` timer + the real port adapter (bind `startRun`/`runEvents`/store/GitHub) +
 teardown-on-quit + IPC.
+**Shipped (M9a live-wiring building blocks):** the tested units the real adapter binds. Pure
+`main/pipelineEngineLogic.ts` (vitest): `parsePipelineRow` (JSON-parse + `isPipelineDraft`-validate a
+persisted `config` blob, overlay the row id, null on invalid — the engine validates every loaded
+config before acting), `prNumberFromRef`, `splitIssueBody`, `assembleGuardrailState`. `main/runWaiter.ts`
+(vitest — `runEvents` is electron-free): one `onFinished` subscription resolving per-runId promises =
+the engine's `waitForRun`. Store guardrail inputs (smoke): `countActivePipelineRuns`,
+`recentPipelineRunStarts`, `lastRepoPipelineRunStart`. The engine's `post` port now takes the `action`
+so the adapter re-asserts `assertMayPost` independently (defense-in-depth). Validation: vitest
+(`pipelineEngineLogic.test.ts` 14, `runWaiter.test.ts` 4) + `smoke:pipelines` (the guardrail queries) +
+build smoke. Code review APPROVED. **Still next:** the thin electron `buildEnginePorts` glue (bind
+`startRun`/`runWaiter`/`aggregateRunFindings`/the gated GitHub-writer dispatch/store), then `poller.ts`
++ teardown-on-quit, then IPC.
 **Shipped (cross-agent consensus):** `aggregateFindings` gained `groupBy:'issue'|'location'` + a
 per-finding `agreement` count; `'location'` (file+line) is the robust cross-agent mode (agents
 phrase differently). `runner:consensus({runIds, consensusMin, minSeverity, groupBy})` aggregates a

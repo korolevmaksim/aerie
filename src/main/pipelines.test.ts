@@ -95,7 +95,7 @@ function fakePorts(
       return 'done'
     },
     aggregate: () => emptyAgg,
-    post: async (target, _delta, body) => {
+    post: async (_action, target, _delta, body) => {
       rec.posts.push({ target, body })
       return 'https://github.test/comment/1'
     },

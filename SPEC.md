@@ -223,6 +223,12 @@ settings(key, value)
 > unprocessed delta is never skipped past. Every side effect (runner, store, GitHub writers) arrives
 > through `EnginePorts`, so the security flow is proven by deterministic vitest with fakes; the live
 > `poller.ts` timer and the real port adapter (binding `startRun`/`runEvents`/store/GitHub) are next.
+> The tested building blocks for that adapter are `pipelineEngineLogic.ts` (`parsePipelineRow` —
+> JSON-parse + `isPipelineDraft`-validate every persisted `config` blob before the engine acts on it,
+> so a corrupt/forged row is rejected — plus PR-number/issue-title/guardrail-state helpers) and
+> `runWaiter.ts` (one `onFinished` subscription = the engine's per-run `await`). The single write port
+> takes the `action` so the adapter re-asserts `assertMayPost` independently (defense-in-depth — the
+> only engine→GitHub write call site stays gated even against a future engine bug).
 
 > **ETag-cached polling foundation (ROADMAP M8).** The automation engine needs to detect a
 > new commit/PR head cheaply. `listCommits`/`listPullRequests` now mirror `listRepos`' ETag

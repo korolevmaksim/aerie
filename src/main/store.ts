@@ -1087,3 +1087,44 @@ export function findCompletedPipelineRunByDedupe(dedupeKey: string): PipelineRun
     )
     .get(dedupeKey) as PipelineRunRow | undefined
 }
+
+// --- guardrail inputs (M9a engine) -------------------------------------------
+// These feed the pure `checkGuardrails` via `assembleGuardrailState`.
+
+/** Runs this pipeline currently has in flight (pending/running) — the concurrency cap input. */
+export function countActivePipelineRuns(pipelineId: number): number {
+  return (
+    requireDb()
+      .prepare(
+        `SELECT COUNT(*) c FROM pipeline_runs WHERE pipeline_id = ? AND status IN ('pending','running')`
+      )
+      .get(pipelineId) as { c: number }
+  ).c
+}
+
+/**
+ * This pipeline's run-start timestamps at/after `sinceIso` — the runs-per-hour input. The
+ * lexical `started_at >= sinceIso` compare is valid because every timestamp is a fixed-width
+ * `Date.toISOString()` (ms precision), so lexical order == chronological order.
+ */
+export function recentPipelineRunStarts(pipelineId: number, sinceIso: string): string[] {
+  return (
+    requireDb()
+      .prepare(
+        `SELECT started_at FROM pipeline_runs WHERE pipeline_id = ? AND started_at >= ?
+         ORDER BY started_at DESC`
+      )
+      .all(pipelineId, sinceIso) as { started_at: string }[]
+  ).map((r) => r.started_at)
+}
+
+/** Most recent pipeline-run start for ANY pipeline of this repo — the per-repo cooldown input. */
+export function lastRepoPipelineRunStart(repoId: number): string | null {
+  const row = requireDb()
+    .prepare(
+      `SELECT pr.started_at FROM pipeline_runs pr JOIN pipelines p ON p.id = pr.pipeline_id
+       WHERE p.repo_id = ? ORDER BY pr.started_at DESC LIMIT 1`
+    )
+    .get(repoId) as { started_at: string } | undefined
+  return row?.started_at ?? null
+}

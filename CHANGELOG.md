@@ -20,6 +20,15 @@ same change set.
 
 ### Added
 
+- **Automation pipelines — live-wiring building blocks** (ROADMAP M9a): the tested units the
+  real engine adapter binds next — `pipelineEngineLogic.ts` (parse + `isPipelineDraft`-validate a
+  persisted pipeline config on load so a corrupt/forged blob can never reach the engine; resolve a
+  PR number / issue title; assemble the guardrail snapshot), `runWaiter.ts` (bridges
+  `runEvents.onFinished` to the engine's per-run `await`), and the store queries that feed the
+  guardrails (`countActivePipelineRuns` / `recentPipelineRunStarts` / `lastRepoPipelineRunStart`).
+  The engine's single write port now also receives the action, so the adapter can independently
+  re-assert the auto-post gate (defense-in-depth — even a future engine bug can't write unless the
+  adapter agrees it's an enabled post). No real GitHub binding yet (still zero write path).
 - **Automation pipelines — engine core** (ROADMAP M9a): the dependency-injected, electron-free
   engine (`runPipelineForDelta` / `processDelta`) that drives a detected change through
   scope-filter → graph/guardrail/dedupe gates → the step waves (wait-for-all barrier) → the M6

@@ -252,6 +252,51 @@ app.whenReady().then(() => {
     db.prepare(`UPDATE pipeline_runs SET status='error' WHERE dedupe_key='k2'`).run()
     assert(!findDone.get('k2'), 'an errored run is NOT treated as already-processed (retryable)')
 
+    // --- guardrail inputs (countActivePipelineRuns / recentPipelineRunStarts /
+    //     lastRepoPipelineRunStart), exactly as the store helpers query them. ---
+    // k1 is 'done', k2 is 'error' so far → 0 active for pid2. Add one running.
+    insertRun.run({
+      pipelineId: pid2,
+      trigger: 'commit',
+      refType: 'commit',
+      ref: 'main',
+      headSha: 'd'.repeat(40),
+      action: 'notify',
+      dedupeKey: 'kactive',
+      startedAt: '2026-06-22T05:00:00Z'
+    })
+    db.prepare(`UPDATE pipeline_runs SET status='running' WHERE dedupe_key='kactive'`).run()
+    const active = db
+      .prepare(
+        `SELECT COUNT(*) c FROM pipeline_runs WHERE pipeline_id = ? AND status IN ('pending','running')`
+      )
+      .get(pid2).c
+    assert(active === 1, `expected 1 active run for pid2, got ${active}`)
+
+    const recent = db
+      .prepare(
+        `SELECT started_at FROM pipeline_runs WHERE pipeline_id = ? AND started_at >= ?
+         ORDER BY started_at DESC`
+      )
+      .all(pid2, '2026-06-22T02:00:00Z')
+      .map((r) => r.started_at)
+    // started_at of k2 (02:00), kactive (05:00) are >= cutoff; k1 (01:00) is not.
+    assert(recent.length === 2, `expected 2 recent starts, got ${recent.length}`)
+    assert(recent[0] === '2026-06-22T05:00:00Z', 'recent starts are newest-first')
+
+    const lastRepo = db
+      .prepare(
+        `SELECT pr.started_at FROM pipeline_runs pr JOIN pipelines p ON p.id = pr.pipeline_id
+         WHERE p.repo_id = ? ORDER BY pr.started_at DESC LIMIT 1`
+      )
+      .get(repoId)
+    assert(
+      lastRepo && lastRepo.started_at === '2026-06-22T05:00:00Z',
+      'last repo run-start is the newest across the repo'
+    )
+    // Settle kactive so the crash-recovery assertion below sees exactly one interrupted run.
+    db.prepare(`UPDATE pipeline_runs SET status='done' WHERE dedupe_key='kactive'`).run()
+
     // --- crash recovery: a pending + a running run -> error. ---
     insertRun.run({
       pipelineId: pid2,
