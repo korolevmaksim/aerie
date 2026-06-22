@@ -229,6 +229,12 @@ describe('diff scoping', () => {
     expect(inChangedRange('/work/tree/src/x.ts', null, r)).toBe(false) // no line
   })
 
+  it('anchors path matching on a segment boundary (pp.ts is not app.ts)', () => {
+    const ranges = new Map<string, Array<[number, number]>>([['src/app.ts', [[1, 5]]]])
+    expect(inChangedRange('/wt/src/app.ts', 2, ranges)).toBe(true)
+    expect(inChangedRange('/wt/src/pp.ts', 2, ranges)).toBe(false)
+  })
+
   it('scopeToChanges keeps only findings inside the changed ranges', () => {
     const r = parseChangedLineRanges(diff)
     const findings = parseEslint(

@@ -42,6 +42,11 @@ same change set.
   `successExitCodes` so a linter that exits non-zero *with findings* is recorded `done`, not
   `error`. (Foundation for grounding the LLM review on deterministic findings.)
 
+- Tool runs now produce **structured findings**: a `kind:'tool'` run's output is normalized into a
+  common `Finding` (tool/ruleId/severity/file/line/message + a stable dedup fingerprint), scoped to
+  the diff's changed lines, and persisted per run (new `findings` table). gitleaks findings never
+  carry the matched secret value. Foundation for grounding the LLM review and filtering noise.
+
 ### Changed
 
 - Removed the retired `dummy` agent from the documentation (`SPEC.md`, `PROMPT.md`,

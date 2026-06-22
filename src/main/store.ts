@@ -7,6 +7,7 @@ import {
   LEGACY_DEFAULT_REVIEW_INSTRUCTIONS,
   SEED_PROMPTS
 } from './agentConfig'
+import type { Finding } from './findings'
 
 /**
  * SQLite store for Aerie. Lives in the main process only. The DB file sits under
@@ -153,6 +154,24 @@ const MIGRATIONS: ReadonlyArray<(db: Database.Database) => void> = [
   // v10 — local-only repo favorites (pin to the top of the list; not GitHub stars)
   (db) => {
     db.exec(`ALTER TABLE repos ADD COLUMN favorite INTEGER NOT NULL DEFAULT 0;`)
+  },
+  // v11 — structured findings per run (M4): normalized tool/agent findings, scoped
+  // to the change. Cascades away with the run.
+  (db) => {
+    db.exec(`
+      CREATE TABLE findings (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        run_id      INTEGER NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+        tool        TEXT    NOT NULL,
+        rule_id     TEXT,
+        severity    TEXT    NOT NULL CHECK (severity IN ('critical','high','medium','low','info')),
+        file        TEXT    NOT NULL,
+        line        INTEGER,
+        message     TEXT    NOT NULL,
+        fingerprint TEXT    NOT NULL
+      );
+      CREATE INDEX idx_findings_run ON findings (run_id);
+    `)
   }
 ]
 
@@ -490,6 +509,51 @@ export function listAllRuns(limit = 200): RunRowWithRepo[] {
        LIMIT ?`
     )
     .all(limit) as RunRowWithRepo[]
+}
+
+// --- structured findings (M4) ------------------------------------------------
+
+export interface FindingRow {
+  id: number
+  run_id: number
+  tool: string
+  rule_id: string | null
+  severity: string
+  file: string
+  line: number | null
+  message: string
+  fingerprint: string
+}
+
+/** Persists a run's normalized findings (one transaction). No-op for an empty set. */
+export function insertFindings(runId: number, findings: Finding[]): void {
+  if (findings.length === 0) return
+  const database = requireDb()
+  const stmt = database.prepare(
+    `INSERT INTO findings (run_id, tool, rule_id, severity, file, line, message, fingerprint)
+     VALUES (@runId, @tool, @ruleId, @severity, @file, @line, @message, @fingerprint)`
+  )
+  const tx = database.transaction((fs: Finding[]) => {
+    for (const f of fs) {
+      stmt.run({
+        runId,
+        tool: f.tool,
+        ruleId: f.ruleId,
+        severity: f.severity,
+        file: f.file,
+        line: f.line,
+        message: f.message,
+        fingerprint: f.fingerprint
+      })
+    }
+  })
+  tx(findings)
+}
+
+export function listFindingsForRun(runId: number): FindingRow[] {
+  return requireDb()
+    .prepare(`SELECT * FROM findings WHERE run_id = ? ORDER BY id ASC`)
+    .all(runId) as FindingRow[]
 }
 
 // --- settings (Stage 7) ------------------------------------------------------

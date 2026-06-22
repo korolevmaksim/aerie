@@ -21,6 +21,7 @@ import {
   type Agent
 } from './agentConfig'
 import { decryptToken } from './auth'
+import { parseChangedLineRanges, parseToolOutput, scopeToChanges } from './findings'
 import { getPullRequestBaseSha } from './github'
 import { cleanupCheckout, prepareCheckout, type PreparedCheckout } from './gitEngine'
 import { log } from './logger'
@@ -33,6 +34,7 @@ import {
   getPrompt,
   getRepoById,
   getSetting,
+  insertFindings,
   insertRun,
   listAllRuns,
   listRunsForRepo,
@@ -311,6 +313,25 @@ async function execute(
       if (transcript !== undefined) writeFileSync(join(runsDir, `${runId}.log`), transcript, 'utf8')
     } catch {
       /* transcript is best-effort */
+    }
+    // For a deterministic tool run, normalize the captured output into structured
+    // findings, scope them to the change, and persist them. Best-effort — must never
+    // break the run. LLM runs stay prose-only until agents emit structured output.
+    if (agent.kind === 'tool') {
+      try {
+        let findings = parseToolOutput(agent.id, output)
+        const diffPath = prepared?.diffPath
+        if (diffPath && existsSync(diffPath)) {
+          const ranges = parseChangedLineRanges(readFileSync(diffPath, 'utf8'))
+          if (ranges.size > 0) findings = scopeToChanges(findings, ranges)
+        }
+        insertFindings(runId, findings)
+      } catch (e) {
+        log.warn('could not persist findings', {
+          runId,
+          error: e instanceof Error ? e.message : String(e)
+        })
+      }
     }
     liveTranscripts.delete(runId)
     finish(status, exitCode, outputPath)

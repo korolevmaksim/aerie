@@ -191,9 +191,12 @@ through the unchanged runner (`kind:'tool'`, no runner-path divergence); catalog
   ruff, biome, tsc) verified against real / schema-checked output (gitleaks deliberately **drops the
   matched secret value**), severity normalization, and diff-scoping (`parseChangedLineRanges`/
   `scopeToChanges`, abs↔relative path match). All unit-tested (incl. a secret-exclusion test).
-  **Next (M4c):** persist findings per run (store migration), wire the runner finalize to
-  parse+scope+store, add `{{changedFiles}}`, redact secrets in on-disk `runs/*.out|*.log` (M3
-  security item) — then the full M4 code + security review.
+  **Shipped (M4c):** v11 `findings` table (FK-cascades with the run; severity CHECK) +
+  `insertFindings`/`listFindingsForRun`; the runner `finalize` now parses a `kind:'tool'` run's
+  output → scopes to the diff → persists structured findings (best-effort, never breaks a run);
+  real-SQLite Electron smoke (`smoke:findings`). Path-match anchored on a segment boundary.
+  Code-review APPROVED. **Remaining (M4c-β):** redact secrets in on-disk `runs/*.out|*.log` (gitleaks
+  raw output) + add `{{changedFiles}}` + the focused security review.
 - Normalize tool JSON/SARIF and agent output to a common shape and **persist** it per run
   (new migration appended to `MIGRATIONS`, `store.ts:157`) alongside the existing raw text.
 - **[correction — richer provenance]:** carry `tool id+version`, exact command, exit code,
