@@ -252,6 +252,20 @@ the run still succeeds if a grounding tool is missing.
   Reused by both manual multi-agent runs and pipelines.
 - **[correction]:** the **wait-for-all-parallel-steps barrier** before aggregation is owned by
   the engine (M9), since `runEvents.onFinished` fires per-run. Correlation key = `repoId+headSha+refId`.
+- **Shipped (M6):** `aggregate.ts` (electron-free, unit-tested) — `aggregateFindings(findings,
+  {consensusMin, minSeverity})`: (1) exact dedup by `tool+fingerprint`; (2) collapse the SAME issue
+  (source-agnostic key `file+line+normalized-message`) to one most-severe representative, dropping
+  groups with fewer than `consensusMin` **distinct sources** (the count is over distinct tools, not
+  raw occurrences — test-locked); (3) `minSeverity` floor. Returns `{kept, total, filtered, deduped,
+  belowConsensus, belowSeverity, bySeverity}`. Defaults (`consensusMin=1`, `minSeverity='info'`) =
+  pure dedup/collapse, non-destructive. Wired into `gatherGroundTruth`, which now filters tool
+  findings before injecting `{{groundTruth}}` and returns `rawCount`; the runner's grounding line
+  reports "(N filtered)". Designed so cross-AGENT consensus (M9 multi-agent runs) drops in by passing
+  the agents' findings alongside the tools'. Code review **APPROVED**. **M6 COMPLETE.**
+- **Deferred to M9:** persisting the aggregate + a renderer RunView "X of Y (Z filtered)" surface +
+  user-configurable `consensusMin`/`minSeverity` settings — there is no multi-agent finding set to
+  aggregate until the engine runs agents in parallel, so the aggregator currently applies on the
+  single tool-grounding path (params, defaults off).
 
 **Components:** `main/aggregate.ts` (new), `main/store.ts`, `shared/types.ts`, renderer RunView.
 **Effort:** M. **Depends on:** M4, M5.

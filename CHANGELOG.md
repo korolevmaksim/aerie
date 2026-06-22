@@ -59,6 +59,13 @@ same change set.
   refute, or merge — so it triages real findings instead of inventing noise. Best-effort (never
   blocks a review) and 100% local. Toggle off in Settings → "Ground reviews with local tools".
 
+- Grounding findings now pass through a **noise filter** (`aggregate.ts`): exact duplicates are
+  dropped, the same issue flagged at one location is collapsed to a single most-severe entry, and
+  optional cross-source **consensus** (keep only issues ≥K distinct tools agree on) and a
+  **minimum-severity** floor are supported. The grounding line reports "(N filtered)" so you see
+  how much noise was removed. Pure + unit-tested; built so multi-agent consensus (future parallel
+  runs) reuses the same aggregator.
+
 ### Changed
 
 - Removed the retired `dummy` agent from the documentation (`SPEC.md`, `PROMPT.md`,

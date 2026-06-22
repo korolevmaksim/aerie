@@ -5,13 +5,15 @@
 // it is unit-testable end to end.
 
 import { spawn, type ChildProcess } from 'child_process'
+import { aggregateFindings } from './aggregate'
 import { substitute, type Agent } from './agentConfig'
 import {
   parseChangedLineRanges,
   parseToolOutput,
   renderFindingsForPrompt,
   scopeToChanges,
-  type Finding
+  type Finding,
+  type Severity
 } from './findings'
 import { whichOnPath } from './pathLookup'
 
@@ -114,7 +116,10 @@ export function runToolCapture(
 
 export interface GroundingResult {
   groundTruth: string
+  /** Findings after the noise filter (dedup/consensus/severity). */
   findingsCount: number
+  /** Findings before the noise filter (for an "X of Y" message). */
+  rawCount: number
   toolsRun: number
 }
 
@@ -132,9 +137,14 @@ export async function gatherGroundTruth(args: {
   changedFiles: string[]
   maxTools?: number
   timeoutMs?: number
+  /** Noise-filter knobs (M6); default off — pure dedup. */
+  consensusMin?: number
+  minSeverity?: Severity
 }): Promise<GroundingResult> {
   const selected = selectGroundingTools(args.agents, args.changedFiles).slice(0, args.maxTools ?? 4)
-  if (selected.length === 0) return { groundTruth: '', findingsCount: 0, toolsRun: 0 }
+  if (selected.length === 0) {
+    return { groundTruth: '', findingsCount: 0, rawCount: 0, toolsRun: 0 }
+  }
 
   const ranges = parseChangedLineRanges(args.diff)
   const vars: Record<string, string> = {
@@ -154,9 +164,16 @@ export async function gatherGroundTruth(args: {
     if (ranges.size > 0) f = scopeToChanges(f, ranges)
     findings.push(...f)
   }
+  // Filter noise before injecting: dedup + collapse the same issue reported by
+  // multiple tools. Consensus/severity thresholds are off by default.
+  const agg = aggregateFindings(findings, {
+    consensusMin: args.consensusMin,
+    minSeverity: args.minSeverity
+  })
   return {
-    groundTruth: renderFindingsForPrompt(findings),
-    findingsCount: findings.length,
+    groundTruth: renderFindingsForPrompt(agg.kept),
+    findingsCount: agg.kept.length,
+    rawCount: findings.length,
     toolsRun: selected.length
   }
 }

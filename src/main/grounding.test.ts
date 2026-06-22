@@ -122,6 +122,6 @@ describe('gatherGroundTruth', () => {
       diffFile: '',
       changedFiles: ['x.ts']
     })
-    expect(res).toEqual({ groundTruth: '', findingsCount: 0, toolsRun: 0 })
+    expect(res).toEqual({ groundTruth: '', findingsCount: 0, rawCount: 0, toolsRun: 0 })
   })
 })

@@ -421,7 +421,9 @@ async function execute(
         groundTruth = g.groundTruth
         emit(
           'system',
-          `[aerie] grounding: ${g.findingsCount} finding(s) from ${g.toolsRun} tool(s).\n`
+          `[aerie] grounding: ${g.findingsCount} finding(s) from ${g.toolsRun} tool(s)${
+            g.rawCount > g.findingsCount ? ` (${g.rawCount - g.findingsCount} filtered)` : ''
+          }.\n`
         )
       } catch (e) {
         emit('system', `[aerie] grounding skipped: ${e instanceof Error ? e.message : String(e)}\n`)
