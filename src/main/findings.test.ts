@@ -3,9 +3,13 @@ import {
   compareSeverity,
   fingerprintOf,
   inChangedRange,
+  parseBiome,
   parseChangedLineRanges,
   parseEslint,
+  parseGitleaks,
+  parseRuff,
   parseToolOutput,
+  parseTsc,
   scopeToChanges,
   type Severity
 } from './findings'
@@ -58,6 +62,119 @@ describe('parseEslint', () => {
   it('parseToolOutput dispatches eslint and ignores unknown tools', () => {
     expect(parseToolOutput('eslint', ESLINT_SAMPLE)).toHaveLength(2)
     expect(parseToolOutput('not-a-tool', ESLINT_SAMPLE)).toEqual([])
+  })
+})
+
+describe('parseGitleaks', () => {
+  // Real gitleaks v8 JSON shape (PascalCase array, no severity field).
+  const SECRET = '60f41f67-b43b-4552-bb80-f2f29b861ef0'
+  const sample = JSON.stringify([
+    {
+      RuleID: 'generic-api-key',
+      Description: 'Generic API Key',
+      StartLine: 2,
+      Match: `Secret: "${SECRET}"`,
+      Secret: SECRET,
+      File: 'data.json'
+    }
+  ])
+
+  it('maps the PascalCase shape and treats every finding as high severity', () => {
+    const f = parseGitleaks(sample)
+    expect(f).toHaveLength(1)
+    expect(f[0]).toMatchObject({
+      tool: 'gitleaks',
+      ruleId: 'generic-api-key',
+      severity: 'high',
+      file: 'data.json',
+      line: 2,
+      message: 'Generic API Key'
+    })
+  })
+
+  it('NEVER carries the matched secret value into the Finding (security)', () => {
+    const f = parseGitleaks(sample)
+    expect(JSON.stringify(f)).not.toContain(SECRET)
+  })
+
+  it('tolerates an empty / null scan result', () => {
+    expect(parseGitleaks('[]')).toEqual([])
+    expect(parseGitleaks('null')).toEqual([])
+    expect(parseGitleaks('nope')).toEqual([])
+  })
+})
+
+describe('parseRuff', () => {
+  const sample = JSON.stringify([
+    {
+      code: 'F401',
+      severity: 'error',
+      filename: '/p/file.py',
+      location: { row: 1, column: 8 },
+      message: '`os` imported but unused'
+    }
+  ])
+  it('maps the array shape with nested location.row', () => {
+    const f = parseRuff(sample)
+    expect(f[0]).toMatchObject({
+      tool: 'ruff',
+      ruleId: 'F401',
+      severity: 'medium', // ruff "error" → medium
+      file: '/p/file.py',
+      line: 1
+    })
+  })
+})
+
+describe('parseBiome', () => {
+  const sample = JSON.stringify({
+    diagnostics: [
+      {
+        severity: 'error',
+        message:
+          'This import is unused.\nUnused imports might be the result of an incomplete refactoring.\n',
+        category: 'lint/correctness/noUnusedImports',
+        location: { path: 'index.ts', start: { line: 1, column: 8 } }
+      }
+    ]
+  })
+  it('reads diagnostics[] with nested location.start.line and first-line message', () => {
+    const f = parseBiome(sample)
+    expect(f[0]).toMatchObject({
+      tool: 'biome',
+      ruleId: 'lint/correctness/noUnusedImports',
+      severity: 'medium',
+      file: 'index.ts',
+      line: 1,
+      message: 'This import is unused.'
+    })
+  })
+  it('returns [] when there is no diagnostics array', () => {
+    expect(parseBiome('{}')).toEqual([])
+  })
+})
+
+describe('parseTsc', () => {
+  it('parses `file(line,col): error TSxxxx: msg` text diagnostics', () => {
+    const f = parseTsc("src/x.ts(3,5): error TS2304: Cannot find name 'foo'.\n(noise line)")
+    expect(f).toHaveLength(1)
+    expect(f[0]).toMatchObject({
+      tool: 'tsc',
+      ruleId: 'TS2304',
+      severity: 'medium',
+      file: 'src/x.ts',
+      line: 3
+    })
+  })
+})
+
+describe('parseToolOutput dispatch', () => {
+  it('routes each tool id to its parser', () => {
+    expect(parseToolOutput('gitleaks', '[]')).toEqual([])
+    expect(parseToolOutput('ruff', '[]')).toEqual([])
+    expect(parseToolOutput('biome', '{"diagnostics":[]}')).toEqual([])
+    expect(parseToolOutput('tsc', '')).toEqual([])
+    expect(parseToolOutput('unknown', 'x')).toEqual([])
   })
 })
 
