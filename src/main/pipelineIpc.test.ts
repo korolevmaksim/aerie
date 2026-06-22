@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import type { PipelineDraft } from '../shared/types'
-import { rowToRunSummary, toPipelineWithRuns, validateSaveRequest } from './pipelineIpc'
-import type { PipelineRow, PipelineRunRow } from './store'
+import type { Pipeline, PipelineDraft } from '../shared/types'
+import {
+  planManualRun,
+  rowToRunSummary,
+  toPipelineWithRuns,
+  validateSaveRequest
+} from './pipelineIpc'
+import type { PipelineRow, PipelineRunRow, RepoRow } from './store'
 
 const draft: PipelineDraft = {
   name: 'CI',
@@ -138,5 +143,29 @@ describe('toPipelineWithRuns', () => {
     expect(
       toPipelineWithRuns(pipelineRow({ config: JSON.stringify({ name: 'x' }) }), [])
     ).toBeNull()
+  })
+})
+
+describe('planManualRun', () => {
+  const pipeline = (over: Partial<Pipeline> = {}): Pipeline => ({ id: 3, ...draft, ...over })
+  const repo = (over: Partial<RepoRow> = {}): RepoRow =>
+    ({ id: 7, account_id: 5, full_name: 'o/r', default_branch: 'main', ...over }) as RepoRow
+
+  it('resolves a commit pipeline to its repo default-branch watch spec', () => {
+    const r = planManualRun(pipeline(), repo())
+    expect(r).toEqual({
+      ok: true,
+      spec: { repoId: 7, accountId: 5, repoFullName: 'o/r', refType: 'commit', ref: 'main' }
+    })
+  })
+
+  it('rejects a non-commit trigger', () => {
+    expect(planManualRun(pipeline({ trigger: 'pr' }), repo())).toMatchObject({ ok: false })
+    expect(planManualRun(pipeline({ trigger: 'manual' }), repo())).toMatchObject({ ok: false })
+  })
+
+  it('rejects a missing repo or one with no default branch', () => {
+    expect(planManualRun(pipeline(), undefined)).toMatchObject({ ok: false })
+    expect(planManualRun(pipeline(), repo({ default_branch: null }))).toMatchObject({ ok: false })
   })
 })

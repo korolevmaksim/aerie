@@ -50,6 +50,8 @@ export const CHANNELS = {
   pipelinesSave: 'pipelines:save',
   pipelinesDelete: 'pipelines:delete',
   pipelinesSetEnabled: 'pipelines:setEnabled',
+  pipelinesRunNow: 'pipelines:runNow',
+  pipelinesDryRun: 'pipelines:dryRun',
   githubPost: 'github:post',
   systemInfo: 'system:info',
   systemOpenPath: 'system:openPath',

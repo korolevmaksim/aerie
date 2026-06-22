@@ -14,6 +14,7 @@ import type {
   PostResult,
   PostRunParams,
   PrepareResult,
+  PipelineRunOutcome,
   PipelineWithRuns,
   Preset,
   Prompt,
@@ -205,7 +206,13 @@ const api = {
     delete: (id: number): Promise<ApiResult<true>> =>
       ipcRenderer.invoke(CHANNELS.pipelinesDelete, id),
     setEnabled: (id: number, enabled: boolean): Promise<ApiResult<true>> =>
-      ipcRenderer.invoke(CHANNELS.pipelinesSetEnabled, id, enabled)
+      ipcRenderer.invoke(CHANNELS.pipelinesSetEnabled, id, enabled),
+    /** Run one pass now against the repo's current head. May post per the pipeline's opt-in. */
+    runNow: (id: number): Promise<ApiResult<PipelineRunOutcome>> =>
+      ipcRenderer.invoke(CHANNELS.pipelinesRunNow, id),
+    /** Like runNow but NEVER writes to GitHub, regardless of the auto-post opt-in. */
+    dryRun: (id: number): Promise<ApiResult<PipelineRunOutcome>> =>
+      ipcRenderer.invoke(CHANNELS.pipelinesDryRun, id)
   },
 
   /** App info + opening data locations (Stage 7 settings). */

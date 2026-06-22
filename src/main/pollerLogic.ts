@@ -81,6 +81,14 @@ export interface DeltaMeta {
   promptHash: string
 }
 
+/**
+ * The delta metadata the engine dedup-keys on, shared by the poller and the run-now/dry-run
+ * handlers so a manual run and an auto run on the same head produce the same dedupe key.
+ * TODO(post-M9a): derive from the real tool/agent catalog + per-pipeline prompt so a catalog
+ * or prompt change re-runs an unchanged head (constant for now).
+ */
+export const DELTA_META: DeltaMeta = { catalogVersion: '1', promptHash: '' }
+
 /** Builds the commit `DeltaContext` for a due watch whose head moved to `headSha`. */
 export function buildCommitDelta(spec: WatchSpec, headSha: string, meta: DeltaMeta): DeltaContext {
   return {

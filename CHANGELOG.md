@@ -20,6 +20,17 @@ same change set.
 
 ### Added
 
+- **Automation pipelines — run-now / dry-run** (ROADMAP M9a): `isTrustedSender`-guarded
+  `pipelines:runNow` and `pipelines:dryRun` so the renderer can trigger one pass on demand. Both
+  resolve the repo's current default-branch head in the main process (the renderer supplies only the
+  pipeline id — never a repo or SHA) and run through the same engine. **Run-now** goes through the
+  full gate — an enabled-post pipeline run manually MAY post per its opt-in. **Dry-run** is provably
+  write-free: a new engine `dryRun` option forces the action's `autoPost` off, so `effectiveAction`
+  can never resolve to `post` and the GitHub-write branch is unreachable — a dry run on an
+  enabled-post pipeline writes nothing (unit-proven) and its run row is salted so it can never make
+  the poller skip a real auto run. A manual run also bypasses the auto-only gates (trigger/scope/
+  guardrail/dedupe), since the user explicitly triggered it. (A live status push + the Automate UI
+  are next.)
 - **Automation pipelines — config IPC (CRUD)** (ROADMAP M9a): an `isTrustedSender`-guarded IPC
   surface so the renderer can manage pipelines — `pipelines:list` (each pipeline + its recent runs),
   `pipelines:save` (create/update; the incoming draft is `isPipelineDraft`-validated and rejected if

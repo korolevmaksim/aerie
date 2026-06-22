@@ -14,6 +14,7 @@ import type {
   Pipeline,
   PipelineAction,
   PipelineActionKind,
+  PipelineRunOutcome,
   PipelineRunStatus,
   PipelineStep,
   PipelineTrigger,
@@ -29,6 +30,9 @@ import {
   type ScopeContext
 } from './pipelineModel'
 import { checkGuardrails, planWaves, type GuardrailState } from './pipelinePlan'
+
+/** @deprecated use `PipelineRunOutcome` (kept as an alias for in-module readability). */
+export type PipelineOutcome = PipelineRunOutcome
 
 /** A detected change to drive one or more pipelines against. */
 export interface DeltaContext {
@@ -96,19 +100,14 @@ export interface EnginePorts {
   log(event: string, data?: Record<string, unknown>): void
 }
 
-export type PipelineOutcome =
-  | {
-      ran: false
-      reason: 'scope' | 'invalid' | 'no-steps' | 'guardrail' | 'dedupe' | 'error'
-      detail?: string
-    }
-  | {
-      ran: true
-      pipelineRunId: number
-      action: PipelineActionKind
-      posted: boolean
-      findings: number
-    }
+/** Options for a single pipeline run (the poller passes none; the IPC run-now/dry-run set these). */
+export interface RunOptions {
+  /** Explicit user run: skip the AUTO gates (trigger/scope/guardrail/dedupe) so it always runs. */
+  manual?: boolean
+  /** Force no GitHub write regardless of the action; the run row is salted so it can't make
+   *  the poller skip a real auto run on the same head. */
+  dryRun?: boolean
+}
 
 function triggerMatches(pipeline: Pipeline, delta: DeltaContext): boolean {
   if (pipeline.repoId !== delta.repoId) return false
@@ -141,13 +140,19 @@ export function formatActionBody(name: string, agg: ConsensusResult): string {
 export async function runPipelineForDelta(
   pipeline: Pipeline,
   delta: DeltaContext,
-  ports: EnginePorts
+  ports: EnginePorts,
+  opts: RunOptions = {}
 ): Promise<PipelineOutcome> {
   // Track the inserted run so a throw AFTER insert marks it 'error'; a throw BEFORE insert
   // (a store/guardrail port failure) still resolves to reason:'error' with no run to mark.
   let pipelineRunId: number | null = null
   try {
-    if (!triggerMatches(pipeline, delta) || !matchesScope(pipeline.scope, delta.scope)) {
+    // A manual run (the user explicitly triggered it) bypasses the AUTO gates — trigger,
+    // scope, guardrail, dedupe — so it always runs. The poller path passes no opts.
+    if (
+      !opts.manual &&
+      (!triggerMatches(pipeline, delta) || !matchesScope(pipeline.scope, delta.scope))
+    ) {
       return { ran: false, reason: 'scope' }
     }
 
@@ -155,8 +160,10 @@ export async function runPipelineForDelta(
     if (!plan.ok) return { ran: false, reason: 'invalid', detail: plan.error }
     if (pipeline.steps.length === 0) return { ran: false, reason: 'no-steps' }
 
-    const guard = checkGuardrails(pipeline.guardrails, ports.guardrailState(pipeline))
-    if (!guard.allowed) return { ran: false, reason: 'guardrail', detail: guard.reason }
+    if (!opts.manual) {
+      const guard = checkGuardrails(pipeline.guardrails, ports.guardrailState(pipeline))
+      if (!guard.allowed) return { ran: false, reason: 'guardrail', detail: guard.reason }
+    }
 
     const key = dedupeKey({
       repoId: delta.repoId,
@@ -168,17 +175,28 @@ export async function runPipelineForDelta(
       promptHash: delta.promptHash,
       configHash: pipelineConfigHash(pipeline.steps, pipeline.action.kind)
     })
-    if (ports.findCompletedDedupe(key)) return { ran: false, reason: 'dedupe' }
+    // A dry run always runs (you're testing) and a manual run is explicit — both bypass the
+    // dedupe gate. Only the auto (poller) path skips already-completed work.
+    if (!opts.manual && !opts.dryRun && ports.findCompletedDedupe(key)) {
+      return { ran: false, reason: 'dedupe' }
+    }
 
-    const effective = effectiveAction(pipeline.action)
+    // A dry run forces the action to never post (autoPost off), so `effective` can never be
+    // 'post' → the write branch is unreachable.
+    const action = opts.dryRun ? { ...pipeline.action, autoPost: false } : pipeline.action
+    const effective = effectiveAction(action)
+    // Dedupe-key policy: a DRY run is salted (`dryrun:`) so it can NEVER make the poller skip a
+    // real auto run on the same head. A non-dry MANUAL run (run-now) keeps the CANONICAL key on
+    // purpose — it did the real work (and posted, if opted in), so a later auto run on the same
+    // head SHOULD dedupe-skip it rather than redo/re-post identical work.
     pipelineRunId = ports.insertPipelineRun({
       pipelineId: pipeline.id,
-      trigger: pipeline.trigger,
+      trigger: opts.manual ? 'manual' : pipeline.trigger,
       refType: delta.refType,
       ref: delta.ref,
       headSha: delta.headSha,
       action: effective,
-      dedupeKey: key,
+      dedupeKey: opts.dryRun ? `dryrun:${key}` : key,
       startedAt: ports.nowIso()
     })
 
@@ -199,13 +217,12 @@ export async function runPipelineForDelta(
 
     let posted = false
     if (effective === 'post') {
-      // Belt-and-suspenders: `effective` is only 'post' for an enabled auto-post, but
-      // assert again immediately before the write so no future edit can slip a non-enabled
-      // action into this branch.
-      assertMayPost(pipeline.action)
-      const target: PostTarget =
-        pipeline.action.target ?? (delta.refType === 'pr' ? 'pr' : 'commit')
-      await ports.post(pipeline.action, target, delta, body)
+      // Belt-and-suspenders: `effective` is only 'post' for an enabled auto-post (and a dry
+      // run forces `action` to autoPost:false, so it can never reach here), but assert again
+      // immediately before the write so no future edit can slip a non-enabled action in.
+      assertMayPost(action)
+      const target: PostTarget = action.target ?? (delta.refType === 'pr' ? 'pr' : 'commit')
+      await ports.post(action, target, delta, body)
       ports.setPipelineRunPosted(pipelineRunId)
       posted = true
     } else {

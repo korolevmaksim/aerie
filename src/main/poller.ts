@@ -18,6 +18,7 @@ import {
   matchingPipelines,
   selectDueWatches,
   watchKey,
+  DELTA_META,
   type RepoInfo,
   type WatchSpec
 } from './pollerLogic'
@@ -29,10 +30,6 @@ const MAX_INTERVAL_MS = 15 * 60_000
 const IDLE_INTERVAL_MS = 5 * 60_000
 const MAX_CONCURRENT_POLLS = 8
 const JITTER_RATIO = 0.1
-// TODO(post-M9a): derive from the real tool/agent catalog + per-pipeline prompt so a catalog
-// or prompt change re-runs an unchanged head. Constant for now (dedup keys on repo+ref+sha+config).
-const CATALOG_VERSION = '1'
-const PROMPT_HASH = ''
 
 let timer: NodeJS.Timeout | null = null
 let engine: { ports: EnginePorts; dispose: () => void } | null = null
@@ -133,10 +130,7 @@ async function tick(): Promise<void> {
         // last_seen, so the same head is re-detected next cycle — that retry is safe because
         // the engine's dedupe gate skips any already-completed identical work (no double write).
         if (result.changed && result.headSha && !stopped) {
-          const delta = buildCommitDelta(watch, result.headSha, {
-            catalogVersion: CATALOG_VERSION,
-            promptHash: PROMPT_HASH
-          })
+          const delta = buildCommitDelta(watch, result.headSha, DELTA_META)
           await processDelta(matchingPipelines(pipelines, watch), delta, ports)
         }
       } catch (err) {

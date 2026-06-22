@@ -243,7 +243,13 @@ settings(key, value)
 > through an `isTrustedSender`-guarded IPC surface — `pipelines:list`/`save`/`delete`/`setEnabled`
 > (`aerie.pipelines.*`); `save` re-validates the draft with `isPipelineDraft` and requires a known
 > repo. These handlers persist config only and NEVER write to GitHub — a proposed `autoPost:true` just
-> stores the flag; the engine's gate still decides whether anything is posted.
+> stores the flag; the engine's gate still decides whether anything is posted. Two more guarded
+> handlers run a pipeline once on demand: `pipelines:runNow` and `pipelines:dryRun` (the renderer
+> sends only the pipeline id; the repo + current head are resolved in main). The engine's `RunOptions`
+> support these — `manual` bypasses the auto-only gates (trigger/scope/guardrail/dedupe), and `dryRun`
+> forces `action.autoPost` off so the write branch is unreachable (a dry run NEVER posts, regardless of
+> the opt-in, and its run row is salted so it can't suppress a real auto run). Run-now goes through the
+> normal gate, so an enabled-post pipeline run manually may post per its opt-in.
 
 > **ETag-cached polling foundation (ROADMAP M8).** The automation engine needs to detect a
 > new commit/PR head cheaply. `listCommits`/`listPullRequests` now mirror `listRepos`' ETag

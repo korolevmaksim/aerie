@@ -486,6 +486,20 @@ picks up changes each tick. Pure `pipelineIpc.ts` (`validateSaveRequest`/`rowToR
 `toPipelineWithRuns`) → vitest (10); the handlers/preload → build smoke. Code + security review
 APPROVED. **Still next:** `runNow`/`dryRun` (dry-run forces stage/notify — no auto-post on a manual
 run) + a `pipeline:status` push, then the M13 Automate UI.
+**Shipped (M9a run-now/dry-run slice):** `isTrustedSender`-guarded `pipelines:runNow`/`pipelines:dryRun`
+handlers (the renderer sends only the pipeline id; the repo + current head are resolved in main via
+`getRepoById` + `pollCommitHead`). New engine `RunOptions` (`pipelines.ts`): `manual` bypasses the auto
+gates (trigger/scope/guardrail/dedupe — the user explicitly ran it); `dryRun` forces `action.autoPost`
+off so `effectiveAction` can never be `post` (the write branch is unreachable) and salts the run's
+dedupe key so it can't suppress a real auto run. Pure `planManualRun` (`pipelineIpc.ts`) validates the
+pipeline is runnable (commit trigger + known repo + default branch) → the watch spec; `DELTA_META`
+moved to `pollerLogic.ts` (shared by the poller + run-now so keys match); `PipelineRunOutcome` moved to
+`shared/types.ts` (the run reply). Validation: vitest — the engine `dryRun` on an enabled-post pipeline
+writes NOTHING + records `action:stage` + salts the key (proven with fakes), `manual` bypasses gates +
+non-dry manual run-now posts/keeps the canonical dedupe key, and 3 `planManualRun` cases; handlers/
+preload → build smoke. Code + security review APPROVED.
+**Run-now MAY post** for an enabled-post pipeline (documented, per the opt-in); **dry-run NEVER posts**.
+**Still next:** the `pipeline:status` push (live UI updates), then the M13 Automate UI.
 **Shipped (cross-agent consensus):** `aggregateFindings` gained `groupBy:'issue'|'location'` + a
 per-finding `agreement` count; `'location'` (file+line) is the robust cross-agent mode (agents
 phrase differently). `runner:consensus({runIds, consensusMin, minSeverity, groupBy})` aggregates a

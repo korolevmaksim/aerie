@@ -238,6 +238,21 @@ export interface PipelineWithRuns {
   runs: PipelineRunSummary[]
 }
 
+/** The outcome of running one pipeline once (engine result; also the run-now/dry-run reply). */
+export type PipelineRunOutcome =
+  | {
+      ran: false
+      reason: 'scope' | 'invalid' | 'no-steps' | 'guardrail' | 'dedupe' | 'error'
+      detail?: string
+    }
+  | {
+      ran: true
+      pipelineRunId: number
+      action: PipelineActionKind
+      posted: boolean
+      findings: number
+    }
+
 /** The `pipelines:save` request: a validated draft, with an `id` to update or null to insert. */
 export interface SavePipelineRequest {
   id?: number | null

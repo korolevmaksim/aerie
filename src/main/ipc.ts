@@ -20,6 +20,7 @@ import type {
   Prompt,
   ConsensusParams,
   ConsensusResult,
+  PipelineRunOutcome,
   PipelineWithRuns,
   PullRequestDetail,
   PullRequestSummary,
@@ -72,10 +73,15 @@ import {
   listCommits,
   listPullRequests,
   listRepos,
+  pollCommitHead,
   reposFromCache
 } from './github'
 import { clonePathFor, headShaOf, prepareCheckout } from './gitEngine'
-import { toPipelineWithRuns, validateSaveRequest } from './pipelineIpc'
+import { parsePipelineRow } from './pipelineEngineLogic'
+import { buildEnginePorts } from './pipelineEngine'
+import { planManualRun, toPipelineWithRuns, validateSaveRequest } from './pipelineIpc'
+import { runPipelineForDelta } from './pipelines'
+import { buildCommitDelta, DELTA_META } from './pollerLogic'
 import { isTrustedSender } from './security'
 import { isValidId, isValidSha } from '../shared/validators'
 import {
@@ -899,6 +905,50 @@ export function registerIpcHandlers(): void {
       }
     }
   )
+
+  // run-now / dry-run: run one pass of a pipeline against its repo's CURRENT default-branch
+  // head, resolved here in main (the renderer supplies only the pipeline id — never a repo/sha).
+  // run-now goes through the same gate (an enabled-post pipeline MAY post per its opt-in);
+  // dry-run forces no GitHub write regardless of auto_post (engine `dryRun`: action autoPost
+  // off → effectiveAction can never be 'post' → the write branch is unreachable).
+  const runPipelineHandler =
+    (dryRun: boolean) =>
+    async (
+      event: Electron.IpcMainInvokeEvent,
+      id: unknown
+    ): Promise<ApiResult<PipelineRunOutcome>> => {
+      if (!isTrustedSender(event)) return fail('Untrusted sender.')
+      if (!isValidId(id)) return fail('Invalid pipeline id.')
+      const row = getPipelineRow(id)
+      if (!row) return fail('Pipeline not found.')
+      const pipeline = parsePipelineRow(row)
+      if (!pipeline) return fail('Pipeline configuration is invalid.')
+      const plan = planManualRun(pipeline, getRepoById(pipeline.repoId))
+      if (!plan.ok) return fail(plan.error)
+      const engine = buildEnginePorts()
+      try {
+        const head = await pollCommitHead(
+          plan.spec.accountId,
+          plan.spec.repoId,
+          plan.spec.repoFullName,
+          plan.spec.ref
+        )
+        if (!head.headSha) return fail('Could not resolve the branch head.')
+        const delta = buildCommitDelta(plan.spec, head.headSha, DELTA_META)
+        const outcome = await runPipelineForDelta(pipeline, delta, engine.ports, {
+          manual: true,
+          dryRun
+        })
+        return ok(outcome)
+      } catch (error) {
+        return fail(error instanceof Error ? error.message : 'Pipeline run failed.')
+      } finally {
+        engine.dispose()
+      }
+    }
+
+  ipcMain.handle(CHANNELS.pipelinesRunNow, runPipelineHandler(false))
+  ipcMain.handle(CHANNELS.pipelinesDryRun, runPipelineHandler(true))
 
   ipcMain.handle(CHANNELS.systemInfo, (event): ApiResult<SystemInfo> => {
     if (!isTrustedSender(event)) return fail('Untrusted sender.')

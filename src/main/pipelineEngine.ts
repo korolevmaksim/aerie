@@ -69,9 +69,10 @@ function startStep(step: PipelineStep, delta: DeltaContext): number {
 }
 
 /**
- * Builds the live `EnginePorts` plus a `dispose` (drops the run-event subscription). The
- * caller (the poller) owns the lifecycle and disposes on teardown. Call once per app
- * lifecycle and `dispose` before rebuilding — each call adds a `runEvents` subscription.
+ * Builds the live `EnginePorts` plus a `dispose` (drops the run-event subscription). Each call
+ * adds a `runEvents` subscription, so the caller owns the lifecycle and MUST `dispose`. The
+ * poller builds one for its lifetime; an on-demand run-now/dry-run builds one and disposes it
+ * in a `finally` (a brief second subscription that coexists harmlessly with the poller's).
  */
 export function buildEnginePorts(): { ports: EnginePorts; dispose: () => void } {
   const waiter = createRunWaiter()

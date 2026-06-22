@@ -3,10 +3,11 @@
 // store, and shape store rows into the renderer DTOs. The IPC handlers in `ipc.ts` stay a
 // thin guard + store-call layer over these.
 
-import type { PipelineDraft, PipelineRunSummary, PipelineWithRuns } from '../shared/types'
+import type { Pipeline, PipelineDraft, PipelineRunSummary, PipelineWithRuns } from '../shared/types'
 import { parsePipelineRow, stripDangerousKeys } from './pipelineEngineLogic'
 import { isPipelineDraft } from './pipelineModel'
-import type { PipelineRow, PipelineRunRow } from './store'
+import type { WatchSpec } from './pollerLogic'
+import type { PipelineRow, PipelineRunRow, RepoRow } from './store'
 
 export interface ValidatedSave {
   /** Non-null = update that pipeline; null = insert a new one. */
@@ -72,4 +73,31 @@ export function toPipelineWithRuns(
   const pipeline = parsePipelineRow(row)
   if (!pipeline) return null
   return { pipeline, runs: runs.map(rowToRunSummary) }
+}
+
+/**
+ * Resolves whether a pipeline can be run manually (run-now / dry-run) and the commit watch
+ * spec to run it against. Currently supports commit-trigger pipelines on the repo's default
+ * branch; the repo must be one the user has added (so the account is authorized) and have a
+ * default branch. The handler then resolves that branch's current head and runs one pass.
+ */
+export function planManualRun(
+  pipeline: Pipeline,
+  repo: RepoRow | undefined
+): { ok: true; spec: WatchSpec } | { ok: false; error: string } {
+  if (pipeline.trigger !== 'commit') {
+    return { ok: false, error: 'Run-now currently supports commit-trigger pipelines.' }
+  }
+  if (!repo) return { ok: false, error: 'Unknown repository.' }
+  if (!repo.default_branch) return { ok: false, error: 'Repository has no default branch.' }
+  return {
+    ok: true,
+    spec: {
+      repoId: repo.id,
+      accountId: repo.account_id,
+      repoFullName: repo.full_name,
+      refType: 'commit',
+      ref: repo.default_branch
+    }
+  }
 }

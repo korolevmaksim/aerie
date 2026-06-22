@@ -42,6 +42,7 @@ interface Recorder {
   notifies: string[]
   startedSteps: string[]
   inserted: number
+  inserts: Array<{ trigger: string; action: string; dedupeKey: string }>
   statusUpdates: Array<{ id: number; status: string }>
   postedFlags: number[]
   advanced: number
@@ -55,6 +56,7 @@ function fakePorts(
     notifies: [],
     startedSteps: [],
     inserted: 0,
+    inserts: [],
     statusUpdates: [],
     postedFlags: [],
     advanced: 0,
@@ -67,8 +69,13 @@ function fakePorts(
     nowIso: () => '2026-06-22T00:00:00Z',
     nowMs: () => 1_000_000,
     findCompletedDedupe: () => false,
-    insertPipelineRun: () => {
+    insertPipelineRun: (input) => {
       rec.inserted += 1
+      rec.inserts.push({
+        trigger: input.trigger,
+        action: input.action,
+        dedupeKey: input.dedupeKey
+      })
       return 500 + rec.inserted
     },
     updatePipelineRunStatus: (id, status) => {
@@ -309,5 +316,65 @@ describe('processDelta — watch advancement', () => {
     expect(result.advanced).toBe(true)
     expect(rec.advanced).toBe(1)
     expect(result.outcomes).toHaveLength(0)
+  })
+})
+
+describe('runPipelineForDelta — manual + dryRun options', () => {
+  it('a manual run bypasses scope, guardrail, and dedupe gates', async () => {
+    const { ports, rec } = fakePorts({
+      findCompletedDedupe: () => true, // would dedupe-skip a normal run
+      guardrailState: () => ({
+        nowMs: 1_000_000,
+        lastRepoRunStartedAtMs: null,
+        pipelineRunStartsLastHourMs: [],
+        activeRunCount: 9
+      })
+    })
+    const out = await runPipelineForDelta(
+      pipeline({ scope: { branches: ['release'] }, guardrails: { maxConcurrentRuns: 1 } }),
+      delta({ scope: { branch: 'main' } }), // scope miss for an auto run
+      ports,
+      { manual: true }
+    )
+    expect(out.ran).toBe(true)
+    expect(rec.inserts[0].trigger).toBe('manual') // recorded as a manual run
+  })
+
+  it('a dryRun on an ENABLED-post pipeline writes NOTHING and records action=stage', async () => {
+    const { ports, rec } = fakePorts()
+    const out = await runPipelineForDelta(
+      pipeline({ action: action({ kind: 'post', autoPost: true, target: 'commit' }) }),
+      delta(),
+      ports,
+      { manual: true, dryRun: true }
+    )
+    expect(rec.posts).toHaveLength(0) // the write port was NEVER reached
+    expect(rec.postedFlags).toHaveLength(0)
+    expect(out).toMatchObject({ ran: true, action: 'stage', posted: false })
+    expect(rec.inserts[0].action).toBe('stage')
+  })
+
+  it('a dryRun salts the dedupe key so it cannot suppress a real auto run', async () => {
+    const { ports, rec } = fakePorts()
+    await runPipelineForDelta(pipeline(), delta(), ports, { manual: true, dryRun: true })
+    expect(rec.inserts[0].dedupeKey.startsWith('dryrun:')).toBe(true)
+  })
+
+  it('a non-dry run-now on an enabled-post pipeline DOES post (per the opt-in)', async () => {
+    const { ports, rec } = fakePorts()
+    const out = await runPipelineForDelta(
+      pipeline({ action: action({ kind: 'post', autoPost: true, target: 'commit' }) }),
+      delta(),
+      ports,
+      { manual: true } // run-now, not dry-run
+    )
+    expect(rec.posts).toHaveLength(1)
+    expect(out).toMatchObject({ ran: true, action: 'post', posted: true })
+  })
+
+  it('a non-dry run-now keeps the CANONICAL dedupe key (so a later auto run correctly skips)', async () => {
+    const { ports, rec } = fakePorts()
+    await runPipelineForDelta(pipeline(), delta(), ports, { manual: true })
+    expect(rec.inserts[0].dedupeKey.startsWith('dryrun:')).toBe(false) // un-salted = real work done
   })
 })
