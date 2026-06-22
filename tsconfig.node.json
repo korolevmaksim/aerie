@@ -4,6 +4,7 @@
   "compilerOptions": {
     "composite": true,
     "strict": true,
+    "resolveJsonModule": true,
     "types": ["electron-vite/node"]
   }
 }

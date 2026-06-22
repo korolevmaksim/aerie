@@ -11,6 +11,20 @@ same change set.
 
 ## [Unreleased]
 
+### Changed
+
+- **Agent-CLI catalog is now data-driven** (ROADMAP M2): the broad autodiscovery catalog
+  (the agents surfaced only when their CLI is on PATH) moved from hardcoded TypeScript to a
+  bundled, schema-versioned JSON (`main/data/agentCatalog.json`) loaded through a new pure,
+  electron-free validator (`main/catalogSchema.ts` — `parseCatalog` / `isCatalogEntry`).
+  Behavior-preserving: the same two entries (`qwen`, `cn`) with byte-identical exec
+  signatures, so M12 provenance trust (`CANONICAL_SIGNATURES`) is unchanged. Adding a CLI is
+  now a data edit, and the same validation chokepoint will later ingest a user catalog and an
+  (already-designed) signed-remote update — neither author-trusted without a matching
+  signature. `parseCatalog` never throws (one malformed entry is dropped, not fatal) and is
+  unit-tested, including a regression guard that the shipped JSON parses to exactly its two
+  entries.
+
 ### Fixed
 
 - PR reviews now diff the **whole PR** (three-dot `base...head`, with the base SHA

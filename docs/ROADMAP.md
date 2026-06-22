@@ -174,9 +174,22 @@ per-CLI enumerator roster is just a longer static list. Make it data-driven:
   M12). New async `runner:discoverAgents` channel + a **Discover models** button in the Tools tab
   caches results to `settings`; `listAgentInfos()` stays synchronous and overlays the cache over the
   seed, tagging `AgentInfo.modelsSource` `'static'|'discovered'`. Code + security review pending.
-- **Still TODO (M2):** the external data-driven catalog (bundled/user/remote JSON), generic
-  unknown-CLI candidate probes (`--version`/`--help`/config globs), the `configFile` discovery kind
-  (qwen/cn/codex — codex's `debug models` JSON is Experimental, deferred), and provenance layering.
+- **Shipped (M2 — data-driven catalog slice 1):** the bundled catalog is now DATA, not hardcoded
+  TS. `main/data/agentCatalog.json` (schema-versioned: `schemaVersion` + `agents[]`) holds the
+  existing `qwen`/`cn` entries; a new pure, electron-free `main/catalogSchema.ts` (`parseCatalog`
+  / `isCatalogEntry`, unit-tested) validates a catalog payload into `Agent[]` — rejecting a wrong
+  schema version, a non-array `agents`, a malformed entry, a duplicate id, or an entry without a
+  `detect` binary, collecting errors and **never throwing** (one bad entry can't sink agent
+  loading). `agentCatalog.ts` now loads + validates that JSON, so `AGENT_CATALOG` is the parsed
+  entries. **Behavior-preserving**: byte-identical exec signatures verified, so the bundled
+  entries stay author-trusted in `CANONICAL_SIGNATURES` (M12). The same parser is the chokepoint a
+  user catalog and a signed-remote update will reuse — neither auto-trusted (trust is
+  signature-keyed in the runner, not granted by `parseCatalog`).
+- **Still TODO (M2):** wire a **user catalog** (userData JSON) + the **signed-remote** update
+  through `parseCatalog` (untrusted → exec-consent, build entries from an explicit field allow-list
+  so no extra parsed keys ride along), generic unknown-CLI candidate probes
+  (`--version`/`--help`/config globs), the `configFile` discovery kind (qwen/cn/codex — codex's
+  `debug models` JSON is Experimental, deferred), and provenance layering.
 
 **Components:** `main/agentDiscovery.ts` (new), catalog files, `main/agentRunner.ts`,
 `shared/types.ts` (AgentInfo `version`/`modelsSource`), `shared/channels.ts` + `main/ipc.ts`

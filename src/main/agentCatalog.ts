@@ -1,14 +1,29 @@
-// Broad agent-CLI detection catalog (ROADMAP M1b). Each entry is a standard Agent
+// Broad agent-CLI detection catalog (ROADMAP M1b → M2). Each entry is a standard Agent
 // template; loadAgents() surfaces an entry ONLY when its `detect` binary is found
 // on PATH, and NEVER persists it to agents.json — so it appears when the tool is
 // installed and disappears when it isn't.
 //
+// As of M2 the catalog is DATA, not hardcoded TS: the entries live in the bundled,
+// schema-versioned `data/agentCatalog.json` and are parsed + validated through
+// `parseCatalog` (the same chokepoint a user/remote catalog will use). Adding a CLI is
+// a data edit. The bundled file is author-shipped, so its entries are author-trusted
+// (their signatures are in the runner's CANONICAL_SIGNATURES); a user/remote-catalog
+// entry is NOT auto-trusted and still needs exec-consent (M12) before it can run.
+//
 // These are popular agent CLIs BEYOND the on-machine-verified DEFAULT_AGENTS. Each
-// invocation here is DOCUMENTATION-researched (current official docs/sources) and
+// invocation is DOCUMENTATION-researched (current official docs/sources) and
 // adversarially flag-checked — not on-machine verified like DEFAULT_AGENTS. Edit
 // freely in agents.json if a flag drifts. Like the user's own agents, these run in
 // the disposable app-owned worktree with the user's env (the GitHub token is never
 // passed); a provider API key, if the CLI needs one, comes from the user's own env.
+//
+// Bundled entries + their flag rationale:
+//  - qwen (Qwen Code): gemini-cli fork. `--approval-mode plan` = analyze-only (no
+//    edits / no shell); `--output-format text` = clean final answer (no tool/reasoning
+//    transcript). `--model {{model}}` selects from the models list.
+//  - cn (Continue CLI): `-p` = headless (prints only the final response), `--readonly`
+//    = plan mode (read-only tools only), `--silent` = no extra chatter. No `--model`:
+//    cn uses the model configured in the user's Continue config.
 //
 // Deferred after research (not added yet, and why):
 //  - crush      : `crush run` blocks on interactive tool-approval headless — no working
@@ -22,54 +37,15 @@
 //  - plandex, openhands, forge : no practical one-shot headless review mode.
 
 import type { Agent } from './agentConfig'
+import bundledCatalog from './data/agentCatalog.json'
+import { parseCatalog } from './catalogSchema'
 
-const REVIEW_TIMEOUT = 900
+const parsed = parseCatalog(bundledCatalog)
+if (parsed.errors.length > 0) {
+  // The bundled catalog is author-shipped and guarded by a unit test, so this should never
+  // fire in a release build — but surface it loudly rather than silently shipping fewer CLIs.
+  console.warn('[agentCatalog] bundled catalog has invalid entries:', parsed.errors.join('; '))
+}
 
-export const AGENT_CATALOG: Agent[] = [
-  {
-    id: 'qwen',
-    label: 'Qwen Code',
-    command: 'qwen',
-    // gemini-cli fork: --approval-mode plan = analyze-only (no edits / no shell);
-    // --output-format text = clean final answer (no tool/reasoning transcript).
-    args: [
-      '--approval-mode',
-      'plan',
-      '--output-format',
-      'text',
-      '--model',
-      '{{model}}',
-      '--prompt',
-      '{{prompt}}'
-    ],
-    promptDelivery: 'arg',
-    promptPlaceholder: '{{prompt}}',
-    outputCapture: 'stdout',
-    outputFile: null,
-    timeoutSec: REVIEW_TIMEOUT,
-    env: {},
-    model: 'qwen3-coder-plus',
-    models: ['qwen3-coder-plus', 'qwen3-coder-next', 'qwen3-max-2026-01-23'],
-    reasoning: '',
-    reasoningLevels: [],
-    detect: 'qwen'
-  },
-  {
-    id: 'cn',
-    label: 'Continue CLI',
-    command: 'cn',
-    // -p = headless (prints only the final response), --readonly = plan mode
-    // (read-only tools only), --silent = no extra chatter. No --model: cn uses the
-    // model configured in the user's Continue config.
-    args: ['-p', '{{prompt}}', '--readonly', '--silent'],
-    promptDelivery: 'arg',
-    promptPlaceholder: '{{prompt}}',
-    outputCapture: 'stdout',
-    outputFile: null,
-    timeoutSec: REVIEW_TIMEOUT,
-    env: {},
-    reasoning: '',
-    reasoningLevels: [],
-    detect: 'cn'
-  }
-]
+/** The bundled agent-CLI catalog, materialized from `data/agentCatalog.json`. */
+export const AGENT_CATALOG: Agent[] = parsed.entries

@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "agents": [
+    {
+      "id": "qwen",
+      "label": "Qwen Code",
+      "command": "qwen",
+      "args": [
+        "--approval-mode",
+        "plan",
+        "--output-format",
+        "text",
+        "--model",
+        "{{model}}",
+        "--prompt",
+        "{{prompt}}"
+      ],
+      "promptDelivery": "arg",
+      "promptPlaceholder": "{{prompt}}",
+      "outputCapture": "stdout",
+      "outputFile": null,
+      "timeoutSec": 900,
+      "env": {},
+      "model": "qwen3-coder-plus",
+      "models": ["qwen3-coder-plus", "qwen3-coder-next", "qwen3-max-2026-01-23"],
+      "reasoning": "",
+      "reasoningLevels": [],
+      "detect": "qwen"
+    },
+    {
+      "id": "cn",
+      "label": "Continue CLI",
+      "command": "cn",
+      "args": ["-p", "{{prompt}}", "--readonly", "--silent"],
+      "promptDelivery": "arg",
+      "promptPlaceholder": "{{prompt}}",
+      "outputCapture": "stdout",
+      "outputFile": null,
+      "timeoutSec": 900,
+      "env": {},
+      "reasoning": "",
+      "reasoningLevels": [],
+      "detect": "cn"
+    }
+  ]
+}

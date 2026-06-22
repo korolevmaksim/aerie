@@ -145,6 +145,21 @@ with no real agent installed.
 
 Adding Agy / Kimi / Claude Code = editing `agents.json`. No code change. Ever.
 
+**Data-driven detection catalog (ROADMAP M2).** Beyond the on-machine-verified
+`DEFAULT_AGENTS`, the app ships a broader **catalog** of agent-CLI templates that
+`mergeAgents` surfaces only when their `detect` binary is on PATH (never persisted to
+`agents.json`, never shadowing a default/user id). That catalog is **data, not code**: a
+bundled, schema-versioned JSON (`main/data/agentCatalog.json` — `schemaVersion` + an
+`agents[]` array of contract entries, each carrying a `detect` binary) parsed and validated
+by a pure, electron-free loader (`main/catalogSchema.ts` — `parseCatalog` / `isCatalogEntry`).
+`parseCatalog` rejects a wrong schema version, a non-array `agents`, a malformed entry, a
+duplicate id, or an entry without `detect`, collecting errors and **never throwing** (one bad
+entry can't sink agent loading). The same validator is the single chokepoint a future **user
+catalog** and **signed-remote update** will reuse. **Trust is provenance-keyed, not granted by
+validation**: only entries whose exec signature is in `CANONICAL_SIGNATURES` (the
+author-shipped bundled catalog) run without exec-consent (§4, M12); a user/remote-catalog entry
+is subject to the same consent gate as a user-authored agent.
+
 ## 8. Data model (SQLite)
 
 ```
