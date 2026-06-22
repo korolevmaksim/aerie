@@ -170,6 +170,18 @@ read is wrapped so a missing/unreadable/corrupt file is a clean no-op, never cra
 loading. (A size cap on the read is deferred to the signed-remote-update slice, where the input
 is no longer a local user-owned file.)
 
+**Candidate detection (M2).** Beyond templated/catalog agents, `listCandidates()`
+(`main/candidateDiscovery.ts`, exposed read-only over `runner:listCandidates`) reports
+coding-agent CLIs that are on PATH but have **no configured agent** — an inert `AgentCandidate`
+(`{ command, label, path }`) the user could choose to wire. A candidate carries no command
+template and is **never spawnable**: it is not an `Agent`, has no id in the registry, and reaches
+no spawn path; the user must explicitly create an agent for it (then clear exec-consent, §4)
+before anything runs. Detection is a pure name-match of a **bounded, author-curated** registry
+of distinctive coding-CLI binary names against PATH file-existence — it executes nothing (no
+`--version`/`--help` probe; if that enrichment is added later it must be exec-consent + timeout +
+killTree gated). This is what stops autodiscovery from rotting: an installed CLI Aerie has no
+template for still surfaces.
+
 ## 8. Data model (SQLite)
 
 ```

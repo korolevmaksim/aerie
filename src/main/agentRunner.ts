@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { app } from 'electron'
 import type {
+  AgentCandidate,
   AgentInfo,
   ConsensusParams,
   ConsensusResult,
@@ -17,6 +18,7 @@ import type {
 import { assessReviewQuality } from '../shared/quality'
 import { AGENT_CATALOG } from './agentCatalog'
 import { mergeCatalogs, parseUserCatalog } from './catalogSchema'
+import { detectCandidates, KNOWN_CODING_CLIS } from './candidateDiscovery'
 import { discoverAllModels, overlayModels } from './agentDiscovery'
 import { aggregateFindings } from './aggregate'
 import { planBatch } from './batch'
@@ -244,6 +246,21 @@ export function listAgentInfos(): AgentInfo[] {
       needsConsent: agentBlocked(a),
       editable: userIds.has(a.id)
     }
+  })
+}
+
+/**
+ * Coding-agent CLIs detected on PATH that no configured agent covers (ROADMAP M2): inert
+ * "candidates" the user could wire. Name-matches a bounded curated registry against PATH and
+ * spawns NOTHING — a candidate carries no runnable command. Excludes any binary already used
+ * by a loaded agent (default/catalog/user) so it never double-reports a configured CLI.
+ */
+export function listCandidates(): AgentCandidate[] {
+  const configuredBins = new Set(loadAgents().map((a) => a.detect ?? a.command))
+  return detectCandidates({
+    known: KNOWN_CODING_CLIS,
+    configuredBins,
+    locate: (bin) => whichOnPath(bin)
   })
 }
 

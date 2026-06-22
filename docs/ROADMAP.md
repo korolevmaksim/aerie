@@ -195,11 +195,19 @@ per-CLI enumerator roster is just a longer static list. Make it data-driven:
   entries are NOT in `CANONICAL_SIGNATURES` → `needsConsent: true`, refused at the spawn boundary
   and excluded from discovery probes (`SHIPPED_IDS`) until consented. Pure logic unit-tested (incl.
   a no-prototype-pollution case + signature stability); the userData read is build-smoke verified.
-- **Still TODO (M2):** the **signed-remote** catalog update through `parseCatalog` (add a read
-  size cap + signature verification before trust), generic unknown-CLI candidate probes
-  (`--version`/`--help`/config globs → non-runnable "candidate" in the Tools UI), the `configFile`
-  discovery kind (qwen/cn/codex — codex's `debug models` JSON is Experimental, deferred; extend
-  `cloneModelDiscovery`'s allow-list when it lands), and provenance layering.
+- **Shipped (M2 — candidate detection slice 3a):** `candidateDiscovery.ts` (pure, unit-tested)
+  + `listCandidates()` + a read-only `runner:listCandidates` IPC surface installed coding CLIs
+  that have no configured agent as inert `AgentCandidate`s (`command`/`label`/`path` — no runnable
+  template, never spawned, excludes any binary an agent already uses). Detection is a pure
+  name-match of a bounded, author-curated `KNOWN_CODING_CLIS` registry (generic-collision names
+  `goose`/`forge`/`q`/`amp`/`llm` deliberately excluded) against PATH file-existence — it
+  **executes nothing**. Reviewed (code + security): APPROVED, inert by construction.
+- **Still TODO (M2):** the **Tools-UI surface (3b)** that lists candidates with an "add as agent"
+  affordance; **probe enrichment** for candidates (`--version`/`--help`/config globs — itself
+  local exec, so exec-consent + timeout + killTree gated); the **signed-remote** catalog update
+  through `parseCatalog` (add a read size cap + signature verification before trust); the
+  `configFile` discovery kind (qwen/cn/codex — codex's `debug models` JSON is Experimental,
+  deferred; extend `cloneModelDiscovery`'s allow-list when it lands); and provenance layering.
 
 **Components:** `main/agentDiscovery.ts` (new), catalog files, `main/agentRunner.ts`,
 `shared/types.ts` (AgentInfo `version`/`modelsSource`), `shared/channels.ts` + `main/ipc.ts`

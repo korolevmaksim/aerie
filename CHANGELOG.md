@@ -13,6 +13,18 @@ same change set.
 
 ### Added
 
+- **Unknown coding-CLI detection (backend)** (ROADMAP M2, slice 3a): Aerie now detects
+  coding-agent CLIs that are installed on your PATH but have no configured agent, and exposes
+  them as inert **candidates** over a new read-only `runner:listCandidates` IPC. A candidate is
+  display-only (`command` / `label` / `path`) — it carries no runnable command template, is never
+  spawned, and excludes any binary an existing agent already uses. Detection is a pure name-match
+  against a bounded, author-curated registry of distinctive coding-CLI binaries (generic-collision
+  names like `goose`/`forge`/`q` are deliberately excluded to avoid false positives) plus a PATH
+  file-existence check — it executes nothing. This is the autodiscovery property that keeps the
+  catalog from rotting: a newly-installed coding CLI surfaces even before Aerie ships a template
+  for it. The Tools-UI surface that lists candidates lands in the next slice (3b). Pure detection
+  is unit-tested; the IPC path is build-smoke verified.
+
 - **User agent-CLI catalog** (ROADMAP M2): drop an `agentCatalog.json`
   (`{ "schemaVersion": 1, "agents": [ … ] }`) into the app's user-data dir to add agent-CLI
   templates as DATA, without editing `agents.json`. Parsed through the same

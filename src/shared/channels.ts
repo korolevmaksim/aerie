@@ -23,6 +23,7 @@ export const CHANNELS = {
   mappingSetUseLocal: 'mapping:setUseLocal',
   gitPrepare: 'git:prepare',
   runnerListAgents: 'runner:listAgents',
+  runnerListCandidates: 'runner:listCandidates',
   runnerDiscoverAgents: 'runner:discoverAgents',
   runnerApproveAgent: 'runner:approveAgent',
   runnerGetAgent: 'runner:getAgent',

@@ -376,6 +376,23 @@ export interface AgentInfo {
   editable: boolean
 }
 
+/**
+ * A coding-agent CLI detected on PATH that Aerie has NO configured agent for (ROADMAP M2,
+ * comprehensive autodiscovery). It is an informational "you could wire this" hint, NOT a
+ * runnable agent: it carries no command template, is never spawned, and the user must
+ * explicitly create + consent an agent before anything runs. Surfacing it is what keeps
+ * autodiscovery from rotting — a newly-installed coding CLI shows up even before Aerie ships
+ * a template for it.
+ */
+export interface AgentCandidate {
+  /** The binary name found on PATH (e.g. 'aider'). */
+  command: string
+  /** Display name (e.g. 'Aider'). */
+  label: string
+  /** Absolute path where the binary was found on PATH. */
+  path: string
+}
+
 /** A saved review preset: a quick agent + model + reasoning bundle. */
 export interface Preset {
   id: number

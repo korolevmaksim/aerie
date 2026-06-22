@@ -4,6 +4,7 @@ import type {
   Agent,
   AccountSummary,
   AddAccountInput,
+  AgentCandidate,
   AgentInfo,
   ApiResult,
   BranchSummary,
@@ -124,6 +125,9 @@ const api = {
   runner: {
     listAgents: (): Promise<ApiResult<AgentInfo[]>> =>
       ipcRenderer.invoke(CHANNELS.runnerListAgents),
+    // Detected coding CLIs with no configured agent (M2) — inert, never runnable.
+    listCandidates: (): Promise<ApiResult<AgentCandidate[]>> =>
+      ipcRenderer.invoke(CHANNELS.runnerListCandidates),
     discoverAgents: (): Promise<ApiResult<AgentInfo[]>> =>
       ipcRenderer.invoke(CHANNELS.runnerDiscoverAgents),
     approveAgent: (id: string): Promise<ApiResult<AgentInfo[]>> =>

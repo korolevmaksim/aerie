@@ -6,6 +6,7 @@ import type {
   AccountSummary,
   AddAccountInput,
   Agent,
+  AgentCandidate,
   AgentInfo,
   ApiResult,
   BranchSummary,
@@ -46,6 +47,7 @@ import {
   getRunTranscript,
   killRun,
   listAgentInfos,
+  listCandidates,
   listAllRunHistory,
   listRunFindings,
   listRunRecords,
@@ -492,6 +494,13 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(CHANNELS.runnerListAgents, (event): ApiResult<AgentInfo[]> => {
     if (!isTrustedSender(event)) return fail('Untrusted sender.')
     return ok(listAgentInfos())
+  })
+
+  // Generic unknown-CLI candidates (M2): coding CLIs on PATH with no configured agent. Read-only
+  // + inert — a candidate carries no runnable command; spawns nothing.
+  ipcMain.handle(CHANNELS.runnerListCandidates, (event): ApiResult<AgentCandidate[]> => {
+    if (!isTrustedSender(event)) return fail('Untrusted sender.')
+    return ok(listCandidates())
   })
 
   // Live model discovery (M2): runs each installed, author-shipped model-list probe,
