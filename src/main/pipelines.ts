@@ -199,6 +199,8 @@ export async function runPipelineForDelta(
       dedupeKey: opts.dryRun ? `dryrun:${key}` : key,
       startedAt: ports.nowIso()
     })
+    // Mark running so the live status push shows a run in progress (not just pending→done).
+    ports.updatePipelineRunStatus(pipelineRunId, 'running')
 
     // Run each wave fully before the next — the wait-for-all-steps barrier. A failed step
     // doesn't abort the wave; it simply contributes no findings to the aggregate.

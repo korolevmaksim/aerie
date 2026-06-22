@@ -152,6 +152,12 @@ describe('runPipelineForDelta — the auto-post gate', () => {
     expect(rec.notifies).toHaveLength(1)
   })
 
+  it('transitions running → done (so the live status push shows progress)', async () => {
+    const { ports, rec } = fakePorts()
+    await runPipelineForDelta(pipeline(), delta(), ports)
+    expect(rec.statusUpdates.map((u) => u.status)).toEqual(['running', 'done'])
+  })
+
   it('defaults the post target from the delta when unset (commit→commit, pr→pr)', async () => {
     const { ports, rec } = fakePorts()
     await runPipelineForDelta(

@@ -500,6 +500,16 @@ non-dry manual run-now posts/keeps the canonical dedupe key, and 3 `planManualRu
 preload → build smoke. Code + security review APPROVED.
 **Run-now MAY post** for an enabled-post pipeline (documented, per the opt-in); **dry-run NEVER posts**.
 **Still next:** the `pipeline:status` push (live UI updates), then the M13 Automate UI.
+**Shipped (M9a pipeline:status push slice):** a `pipeline:status` main→renderer push so the Automate UI
+live-updates. Electron-free `main/pipelineEvents.ts` (mirrors `runEvents`): `emitPipelineRunChange` /
+`onPipelineRunChange` / `resetPipelineEvents`. The engine adapter's write ports (`insertPipelineRun`/
+`updatePipelineRunStatus`/`setPipelineRunPosted` in `pipelineEngine.ts`) emit a `PipelineRunChange`
+(pipelineId/runId/status/action/posted — token-free) after each store write; `main/index.ts` broadcasts
+it (mirroring `onStatus`/`onOutput`); the preload exposes `aerie.pipelines.onStatus(cb)→unsub`. No new
+renderer→main handler (outbound push only), so code-review only. Validation: vitest
+(`pipelineEvents.test.ts`, 4 — subscribe/multi/unsub/reset); the broadcast wiring → build smoke. Code
+review APPROVED. **The M9a IPC surface is COMPLETE.** **Still next:** the M13 Automate UI (the
+left-nav view + pipeline list/editor/run-history), which consumes this push.
 **Shipped (cross-agent consensus):** `aggregateFindings` gained `groupBy:'issue'|'location'` + a
 per-finding `agreement` count; `'location'` (file+line) is the robust cross-agent mode (agents
 phrase differently). `runner:consensus({runIds, consensusMin, minSeverity, groupBy})` aggregates a

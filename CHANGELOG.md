@@ -20,6 +20,13 @@ same change set.
 
 ### Added
 
+- **Automation pipelines — live status push** (ROADMAP M9a): a `pipeline:status` main→renderer
+  push so the Automate UI updates without polling. A small electron-free `pipelineEvents` hub
+  (mirrors `runEvents`) fires on every `pipeline_run` insert / status change / posted; the engine
+  adapter's write ports emit it and `main` broadcasts it to the renderer (`aerie.pipelines.onStatus`).
+  The payload is run metadata only (pipelineId / runId / status / action / posted) — token-free, and
+  it adds no renderer→main surface. Hub logic is unit-tested; the broadcast wiring is build-smoke
+  verified.
 - **Automation pipelines — run-now / dry-run** (ROADMAP M9a): `isTrustedSender`-guarded
   `pipelines:runNow` and `pipelines:dryRun` so the renderer can trigger one pass on demand. Both
   resolve the repo's current default-branch head in the main process (the renderer supplies only the

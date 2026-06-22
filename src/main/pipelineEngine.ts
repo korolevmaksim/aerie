@@ -18,9 +18,11 @@ import {
 } from './pipelineEngineLogic'
 import type { DeltaContext, EnginePorts } from './pipelines'
 import { createRunWaiter } from './runWaiter'
+import { emitPipelineRunChange } from './pipelineEvents'
 import {
   countActivePipelineRuns,
   findCompletedPipelineRunByDedupe,
+  getPipelineRun,
   getRepoById,
   insertPipelineRun,
   lastRepoPipelineRunStart,
@@ -80,10 +82,45 @@ export function buildEnginePorts(): { ports: EnginePorts; dispose: () => void } 
     nowIso: () => new Date().toISOString(),
     nowMs: () => Date.now(),
     findCompletedDedupe: (key) => findCompletedPipelineRunByDedupe(key) !== undefined,
-    insertPipelineRun: (input) => insertPipelineRun(input).id,
-    updatePipelineRunStatus: (id, status, finishedAt) =>
-      updatePipelineRunStatus(id, status, finishedAt),
-    setPipelineRunPosted: (id) => setPipelineRunPosted(id),
+    // The three write ports also emit a live `pipeline:status` change so the Automate UI
+    // updates without polling. The payload is run metadata only (token-free).
+    insertPipelineRun: (input) => {
+      const id = insertPipelineRun(input).id
+      emitPipelineRunChange({
+        pipelineId: input.pipelineId,
+        pipelineRunId: id,
+        status: 'pending',
+        action: input.action,
+        posted: false
+      })
+      return id
+    },
+    updatePipelineRunStatus: (id, status, finishedAt) => {
+      updatePipelineRunStatus(id, status, finishedAt)
+      const row = getPipelineRun(id)
+      if (row) {
+        emitPipelineRunChange({
+          pipelineId: row.pipeline_id,
+          pipelineRunId: id,
+          status,
+          action: row.action,
+          posted: row.posted === 1
+        })
+      }
+    },
+    setPipelineRunPosted: (id) => {
+      setPipelineRunPosted(id)
+      const row = getPipelineRun(id)
+      if (row) {
+        emitPipelineRunChange({
+          pipelineId: row.pipeline_id,
+          pipelineRunId: id,
+          status: row.status,
+          action: row.action,
+          posted: true
+        })
+      }
+    },
     guardrailState: (pipeline) => {
       const now = Date.now()
       const sinceIso = new Date(now - HOUR_MS).toISOString()

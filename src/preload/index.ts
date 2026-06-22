@@ -14,6 +14,7 @@ import type {
   PostResult,
   PostRunParams,
   PrepareResult,
+  PipelineRunChange,
   PipelineRunOutcome,
   PipelineWithRuns,
   Preset,
@@ -212,7 +213,13 @@ const api = {
       ipcRenderer.invoke(CHANNELS.pipelinesRunNow, id),
     /** Like runNow but NEVER writes to GitHub, regardless of the auto-post opt-in. */
     dryRun: (id: number): Promise<ApiResult<PipelineRunOutcome>> =>
-      ipcRenderer.invoke(CHANNELS.pipelinesDryRun, id)
+      ipcRenderer.invoke(CHANNELS.pipelinesDryRun, id),
+    /** Live pipeline-run status changes (insert / status / posted). Returns an unsubscribe fn. */
+    onStatus: (cb: (change: PipelineRunChange) => void): (() => void) => {
+      const listener = (_e: IpcRendererEvent, change: PipelineRunChange): void => cb(change)
+      ipcRenderer.on(CHANNELS.pipelineStatus, listener)
+      return () => ipcRenderer.removeListener(CHANNELS.pipelineStatus, listener)
+    }
   },
 
   /** App info + opening data locations (Stage 7 settings). */

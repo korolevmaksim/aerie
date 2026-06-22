@@ -238,6 +238,17 @@ export interface PipelineWithRuns {
   runs: PipelineRunSummary[]
 }
 
+/** A live pipeline-run status change pushed to the renderer (`pipeline:status`). Token-free. */
+export interface PipelineRunChange {
+  pipelineId: number
+  pipelineRunId: number
+  status: PipelineRunStatus
+  /** The action this run takes (notify/stage/post). */
+  action: PipelineActionKind
+  /** True once the run actually wrote to GitHub. */
+  posted: boolean
+}
+
 /** The outcome of running one pipeline once (engine result; also the run-now/dry-run reply). */
 export type PipelineRunOutcome =
   | {

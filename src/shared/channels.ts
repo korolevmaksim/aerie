@@ -60,5 +60,6 @@ export const CHANNELS = {
   // main → renderer push channels
   runnerOutput: 'runner:output',
   runnerStatus: 'runner:status',
+  pipelineStatus: 'pipeline:status',
   trayOpenRun: 'tray:openRun'
 } as const

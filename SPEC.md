@@ -249,7 +249,11 @@ settings(key, value)
 > support these — `manual` bypasses the auto-only gates (trigger/scope/guardrail/dedupe), and `dryRun`
 > forces `action.autoPost` off so the write branch is unreachable (a dry run NEVER posts, regardless of
 > the opt-in, and its run row is salted so it can't suppress a real auto run). Run-now goes through the
-> normal gate, so an enabled-post pipeline run manually may post per its opt-in.
+> normal gate, so an enabled-post pipeline run manually may post per its opt-in. A `pipeline:status`
+> main→renderer push (the electron-free `pipelineEvents` hub, mirroring `runEvents`) lets the Automate
+> UI live-update: the engine adapter's write ports emit a token-free `PipelineRunChange`
+> (pipelineId/runId/status/action/posted) after each `pipeline_run` write, `main` broadcasts it, and
+> `aerie.pipelines.onStatus` delivers it. It is an outbound push — no new renderer→main surface.
 
 > **ETag-cached polling foundation (ROADMAP M8).** The automation engine needs to detect a
 > new commit/PR head cheaply. `listCommits`/`listPullRequests` now mirror `listRepos`' ETag

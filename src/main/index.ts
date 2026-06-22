@@ -13,6 +13,7 @@ import { pruneAllWorktreesAndDiffs } from './gitEngine'
 import { startPoller, stopPoller } from './poller'
 import { augmentedPath } from './osPath'
 import { onChange, onFinished, onOutput, onStatus } from './runEvents'
+import { onPipelineRunChange } from './pipelineEvents'
 import { initTray, destroyTray } from './tray'
 import { notifyRunFinished, showCloseToTrayHint } from './notifications'
 
@@ -191,6 +192,7 @@ if (!app.requestSingleInstanceLock()) {
       //  - the tray reflects live state and drives show/open/quit.
       onStatus((update) => broadcast(CHANNELS.runnerStatus, update))
       onOutput((chunk) => broadcast(CHANNELS.runnerOutput, chunk))
+      onPipelineRunChange((change) => broadcast(CHANNELS.pipelineStatus, change))
       onFinished((run) => notifyRunFinished(run, openRun, notifyOnFinishSetting()))
       initTray(icon, {
         showMainWindow,
