@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { PullRequestDetail } from '@shared/types'
+import { clickableRow } from '../lib/a11y'
 import { formatRelativeTime } from '../lib/format'
 import RunPanel from './RunPanel'
 
@@ -84,7 +85,12 @@ function PrDetailView({
           <h3 className="subhead">Commits ({pr.commits.length})</h3>
           <ul className="commits">
             {pr.commits.map((c) => (
-              <li key={c.sha} className="commit-row" onClick={() => onOpenCommit(c.sha)}>
+              <li
+                key={c.sha}
+                className="commit-row"
+                aria-label={`Open commit ${c.sha.slice(0, 8)}`}
+                {...clickableRow(() => onOpenCommit(c.sha))}
+              >
                 <code className="sha">{c.sha.slice(0, 8)}</code>
                 <span className="commit-row__msg">{c.message.split('\n')[0]}</span>
                 <span className="muted">{c.authorLogin ?? c.authorName ?? ''}</span>

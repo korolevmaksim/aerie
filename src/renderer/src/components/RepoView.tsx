@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { BranchSummary, CommitSummary, PullRequestSummary, RepoSummary } from '@shared/types'
 import { formatRelativeTime } from '../lib/format'
+import { clickableRow } from '../lib/a11y'
 import CommitDetailView from './CommitDetailView'
 import PrDetailView from './PrDetailView'
 import RepoMappingPanel from './RepoMappingPanel'
@@ -86,6 +87,7 @@ function CommitsTab({
       {branches.length > 0 && (
         <select
           className="field branch-select"
+          aria-label="Branch"
           value={branch}
           onChange={(e) => setBranch(e.target.value)}
         >
@@ -105,7 +107,12 @@ function CommitsTab({
         <>
           <ul className="commits">
             {commits.map((c) => (
-              <li key={c.sha} className="commit-row" onClick={() => onOpenCommit(c.sha)}>
+              <li
+                key={c.sha}
+                className="commit-row"
+                aria-label={`Open commit ${c.sha.slice(0, 8)}`}
+                {...clickableRow(() => onOpenCommit(c.sha))}
+              >
                 <code className="sha">{c.sha.slice(0, 8)}</code>
                 <span className="commit-row__msg">{c.message.split('\n')[0]}</span>
                 <span className="muted">
@@ -190,7 +197,12 @@ function PullsTab({
     <>
       <ul className="commits">
         {pulls.map((p) => (
-          <li key={p.number} className="commit-row" onClick={() => onOpenPull(p.number)}>
+          <li
+            key={p.number}
+            className="commit-row"
+            aria-label={`Open pull request #${p.number}`}
+            {...clickableRow(() => onOpenPull(p.number))}
+          >
             <span className="muted">#{p.number}</span>
             <span className="commit-row__msg">{p.title}</span>
             <span className="muted">

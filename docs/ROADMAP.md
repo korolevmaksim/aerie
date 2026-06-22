@@ -449,9 +449,15 @@ console autoscroll-only-near-bottom + "Jump to latest". **Effort:** M. **Depends
   `FOCUSABLE_SELECTOR`, unit-tested) + a `useFocusTrap` hook (traps Tab within a dialog, restores
   focus to the opener on close); applied to the GitHub-write `PostConfirmModal` (which already had
   Esc + `role="dialog"`/`aria-modal`). Global keyboard-only `:focus-visible` ring (no outline on
-  mouse click). Run status is an `aria-live="polite"` `role="status"` region. **Still TODO:**
-  keyboard-operable list rows, aria-labels on all selects, the shared `ConfirmDialog` replacing
-  `window.confirm`, empty-states/onboarding, non-color status glyphs.
+  mouse click). Run status is an `aria-live="polite"` `role="status"` region.
+- **Shipped (M11 — keyboard rows + labels):** `lib/a11y.ts` (`isActivationKey` + `clickableRow`,
+  unit-tested) makes the commit/PR list rows (RepoView + PrDetailView) real keyboard buttons
+  (focusable, role=button, Enter/Space); `aria-label`s added to the unlabelled Agent + branch
+  selects. **Still TODO:** History/repo-favorite rows (nested links — need a structural fix to a
+  button + sibling); the converted rows use `role="button"` on the `<li>` which overrides the
+  `listitem` role (loses "item N of M" — fold into the same structural pass by moving the button to
+  an inner wrapper); the shared `ConfirmDialog` replacing `window.confirm` (`AccountsPanel`),
+  empty-states/onboarding, ARIA nav/main landmarks, non-color status glyphs.
 
 #### M12 — In-app registry editor + **main-enforced** exec-consent
 - In-app Agents editor: `runner:saveAgent/deleteAgent/cloneAgent/setAgentEnabled` (each

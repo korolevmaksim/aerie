@@ -87,6 +87,7 @@ function PresetsSettings(): React.JSX.Element {
         />
         <select
           className="field"
+          aria-label="Agent"
           value={agentId}
           onChange={(e) => onSelectAgent(e.target.value)}
           disabled={busy}

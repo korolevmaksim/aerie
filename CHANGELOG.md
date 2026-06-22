@@ -66,6 +66,13 @@ same change set.
   how much noise was removed. Pure + unit-tested; built so multi-agent consensus (future parallel
   runs) reuses the same aggregator.
 
+- **Accessibility — keyboard-operable lists & labelled controls** — the commit and pull-request
+  rows (repo view + a PR's commits) are now real keyboard controls: focusable, `role="button"`,
+  and activated with Enter/Space (not just mouse). Bare `<select>`s that lacked an accessible name
+  (the Agent pickers, the branch filter) gained `aria-label`s, so a screen reader announces what
+  each one controls. Shared `clickableRow`/`isActivationKey` helpers (pure + unit-tested). (Rows
+  with nested links — History, repo favorites — are deferred for a structural pass.)
+
 - **Accessibility — keyboard focus** — the GitHub-write confirm dialog now **traps Tab focus**
   (you can't tab out into the background) and **restores focus** to the button you opened it from
   on close, alongside its existing Esc-to-cancel and `role="dialog"`/`aria-modal`. A global

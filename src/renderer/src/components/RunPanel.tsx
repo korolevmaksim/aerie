@@ -283,6 +283,7 @@ function RunPanel({
             )}
             <select
               className="field"
+              aria-label="Agent"
               value={agentId}
               onChange={(e) => onChangeAgent(e.target.value)}
               disabled={active || starting}
