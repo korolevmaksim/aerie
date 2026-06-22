@@ -148,6 +148,15 @@ settings(key, value)
 > the consent), narrower than the `use_local_worktree` checkout mode. Grounding still
 > honours the `ui.groundReviews` opt-out. Findings noise-filtering (M6) applies identically.
 
+> **Cross-agent consensus (ROADMAP M8/M9).** `aggregateFindings` (M6) gained a `groupBy:
+> 'issue' | 'location'` option and a per-kept-finding `agreement` count. `'location'` groups by
+> file+line ONLY — the robust cross-AGENT mode, since agents phrase the same issue differently and
+> message-matching under-counts agreement. `runner:consensus({runIds, consensusMin, minSeverity,
+> groupBy})` reads each run's persisted (already-redacted) findings, aggregates them, and returns
+> `ConsensusFinding[]` (the kept findings + their agreement). A panel review of ≥2 agents shows a
+> **Consensus** section keeping issues ≥`consensusMin` agents flagged at the same location. Pure
+> aggregation over local data — no token/network/spawn.
+
 > **Structured agent findings (ROADMAP M8/M9).** `buildPrompt` asks the LLM agent to append a
 > fenced ```aerie-findings JSON array (`file/line/severity/ruleId/message`) after its prose.
 > `parseAgentFindings(agentId, output)` (pure) extracts it best-effort — findings carry

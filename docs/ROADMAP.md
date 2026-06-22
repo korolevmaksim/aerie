@@ -379,8 +379,13 @@ table (a batch = runs sharing repo+sha+ref). Code + security review APPROVED.
 (findings carry `tool = agentId`) and strips it from the prose, so the runner writes clean prose
 to `.out`/the posted comment and persists the agent's findings (the M-Q gate runs on the prose).
 New `runner:findings` IPC + a compact severity-tagged findings list under each review. This is the
-**structured-output dependency** the fan-out flagged — cross-agent consensus (aggregating panel
-findings via the M6 aggregator with `consensusMin`) is the next slice.
+**structured-output dependency** the fan-out flagged.
+**Shipped (cross-agent consensus):** `aggregateFindings` gained `groupBy:'issue'|'location'` + a
+per-finding `agreement` count; `'location'` (file+line) is the robust cross-agent mode (agents
+phrase differently). `runner:consensus({runIds, consensusMin, minSeverity, groupBy})` aggregates a
+panel's persisted findings; a **Consensus** section in RunPanel keeps issues ≥K agents flag at one
+location, with a min-agreement selector. Pure aggregation over already-redacted local data. The
+panel-review arc (fan-out → structured output → consensus) is complete.
 **Still TODO (M9a):**
 the wait-for-all-steps barrier + the M6 aggregator for cross-agent consensus (now unblocked by
 structured agent output), the actioner (`notify|stage|post`, `auto_post` default

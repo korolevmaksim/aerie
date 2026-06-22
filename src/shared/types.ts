@@ -232,6 +232,28 @@ export interface RunFinding {
   message: string
 }
 
+/** A finding aggregated across a panel of runs, tagged with how many sources agreed. */
+export interface ConsensusFinding extends RunFinding {
+  /** Distinct agents/tools that flagged this (by location or issue, per `groupBy`). */
+  agreement: number
+}
+
+/** Request to aggregate findings across several runs (cross-agent consensus). */
+export interface ConsensusParams {
+  runIds: number[]
+  /** Keep only issues ≥ this many distinct sources agree on. Default 1. */
+  consensusMin?: number
+  minSeverity?: RunFinding['severity']
+  /** 'location' (file+line) is the robust cross-agent mode; 'issue' also matches message. */
+  groupBy?: 'issue' | 'location'
+}
+
+export interface ConsensusResult {
+  findings: ConsensusFinding[]
+  /** Total raw findings across the runs, before aggregation. */
+  total: number
+}
+
 export interface RunRecord {
   id: number
   repoId: number

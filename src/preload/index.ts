@@ -19,6 +19,8 @@ import type {
   PullRequestSummary,
   RepoMapping,
   ReposResult,
+  ConsensusParams,
+  ConsensusResult,
   RunFinding,
   RunHistoryItem,
   RunOutputChunk,
@@ -137,6 +139,8 @@ const api = {
       ipcRenderer.invoke(CHANNELS.runnerReadOutput, runId),
     findings: (runId: number): Promise<ApiResult<RunFinding[]>> =>
       ipcRenderer.invoke(CHANNELS.runnerFindings, runId),
+    consensus: (params: ConsensusParams): Promise<ApiResult<ConsensusResult>> =>
+      ipcRenderer.invoke(CHANNELS.runnerConsensus, params),
     transcript: (runId: number): Promise<ApiResult<string>> =>
       ipcRenderer.invoke(CHANNELS.runnerTranscript, runId),
     /** Post a finished run's output to GitHub. Gated by the in-app confirm UI. */

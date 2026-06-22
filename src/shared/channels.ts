@@ -38,6 +38,7 @@ export const CHANNELS = {
   runnerListRuns: 'runner:listRuns',
   runnerReadOutput: 'runner:readOutput',
   runnerFindings: 'runner:findings',
+  runnerConsensus: 'runner:consensus',
   runnerTranscript: 'runner:transcript',
   runsListAll: 'runs:listAll',
   githubPost: 'github:post',

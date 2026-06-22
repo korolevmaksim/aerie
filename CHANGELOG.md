@@ -66,6 +66,13 @@ same change set.
   how much noise was removed. Pure + unit-tested; built so multi-agent consensus (future parallel
   runs) reuses the same aggregator.
 
+- **Cross-agent consensus** — in a panel review of 2+ agents, a **Consensus** section aggregates
+  every agent's structured findings and shows the issues that **≥K of the agents agree on**.
+  Because different agents word the same problem differently, consensus is computed by **code
+  location** (file + line), not message text — the noise-filter aggregator (M6) gained a `groupBy`
+  mode and now reports a per-issue agreement count. New `runner:consensus` IPC. Pick the minimum
+  agreement (≥2…N) and compute after the reviews finish.
+
 - **Structured agent findings** — review prompts now ask the agent to append a fenced
   `aerie-findings` JSON block (file/line/severity/ruleId/message). Aerie parses it best-effort,
   persists the findings per run (alongside the existing tool findings), and shows a compact,

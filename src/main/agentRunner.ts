@@ -4,6 +4,8 @@ import { join } from 'path'
 import { app } from 'electron'
 import type {
   AgentInfo,
+  ConsensusParams,
+  ConsensusResult,
   RunFinding,
   RunHistoryItem,
   RunRecord,
@@ -15,6 +17,7 @@ import type {
 import { assessReviewQuality } from '../shared/quality'
 import { AGENT_CATALOG } from './agentCatalog'
 import { discoverAllModels, overlayModels } from './agentDiscovery'
+import { aggregateFindings } from './aggregate'
 import { planBatch } from './batch'
 import {
   buildPrompt,
@@ -790,6 +793,18 @@ export function listRunRecords(repoId: number): RunRecord[] {
 
 const SEVERITIES = new Set(['critical', 'high', 'medium', 'low', 'info'])
 
+function rowToFinding(f: ReturnType<typeof listFindingsForRun>[number]): Finding {
+  return {
+    tool: f.tool,
+    ruleId: f.rule_id,
+    severity: (SEVERITIES.has(f.severity) ? f.severity : 'medium') as Finding['severity'],
+    file: f.file,
+    line: f.line,
+    message: f.message,
+    fingerprint: f.fingerprint
+  }
+}
+
 /** A run's persisted structured findings (tool output or an agent's findings block). */
 export function listRunFindings(runId: number): RunFinding[] {
   return listFindingsForRun(runId).map((f) => ({
@@ -800,6 +815,36 @@ export function listRunFindings(runId: number): RunFinding[] {
     line: f.line,
     message: f.message
   }))
+}
+
+/**
+ * Cross-agent consensus (M8/M9): aggregate the persisted findings ACROSS several runs
+ * (a panel) into one list, tagged with how many distinct agents/tools flagged each.
+ * `groupBy:'location'` (file+line) is the robust default for agents that phrase the same
+ * problem differently; `consensusMin` keeps only issues enough sources agree on.
+ */
+export function aggregateRunFindings(params: ConsensusParams): ConsensusResult {
+  const all: Finding[] = []
+  for (const id of params.runIds) {
+    for (const row of listFindingsForRun(id)) all.push(rowToFinding(row))
+  }
+  const agg = aggregateFindings(all, {
+    consensusMin: params.consensusMin,
+    minSeverity: params.minSeverity,
+    groupBy: params.groupBy
+  })
+  return {
+    total: all.length,
+    findings: agg.kept.map((k, i) => ({
+      tool: k.tool,
+      ruleId: k.ruleId,
+      severity: k.severity,
+      file: k.file,
+      line: k.line,
+      message: k.message,
+      agreement: agg.agreement[i]
+    }))
+  }
 }
 
 export function listAllRunHistory(): RunHistoryItem[] {

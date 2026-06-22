@@ -17,6 +17,8 @@ import type {
   PostRunParams,
   Preset,
   Prompt,
+  ConsensusParams,
+  ConsensusResult,
   PullRequestDetail,
   PullRequestSummary,
   RefType,
@@ -32,6 +34,7 @@ import type {
   SystemInfo
 } from '../shared/types'
 import {
+  aggregateRunFindings,
   discoverAgentModels,
   getRunTranscript,
   killRun,
@@ -114,6 +117,8 @@ function ok<T>(value: T): ApiResult<T> {
 function fail(error: string): ApiResult<never> {
   return { ok: false, error }
 }
+
+const SEVERITY_VALUES = new Set<string>(['critical', 'high', 'medium', 'low', 'info'])
 
 interface RunTarget {
   accountId: number
@@ -650,6 +655,28 @@ export function registerIpcHandlers(): void {
       return ok(listRunFindings(runId))
     } catch {
       return ok([])
+    }
+  })
+
+  // Cross-agent consensus: aggregate findings across a panel's runs (M8/M9).
+  ipcMain.handle(CHANNELS.runnerConsensus, (event, params: unknown): ApiResult<ConsensusResult> => {
+    if (!isTrustedSender(event)) return fail('Untrusted sender.')
+    const p = params as Partial<ConsensusParams>
+    if (!Array.isArray(p?.runIds) || p.runIds.length === 0 || !p.runIds.every(isValidId)) {
+      return fail('Invalid run ids.')
+    }
+    const consensusMin =
+      typeof p.consensusMin === 'number' && Number.isInteger(p.consensusMin) && p.consensusMin >= 1
+        ? p.consensusMin
+        : 1
+    // Consensus defaults to 'location' (the robust cross-agent mode); the aggregator's own
+    // default is 'issue' (for the M6 grounding caller). The renderer always sends 'location'.
+    const groupBy = p.groupBy === 'issue' ? 'issue' : 'location'
+    const minSeverity = SEVERITY_VALUES.has(p.minSeverity as string) ? p.minSeverity : undefined
+    try {
+      return ok(aggregateRunFindings({ runIds: p.runIds, consensusMin, minSeverity, groupBy }))
+    } catch {
+      return ok({ findings: [], total: 0 })
     }
   })
 

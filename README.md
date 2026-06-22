@@ -55,9 +55,10 @@ third-party service.
 - **Structured findings** — each review also extracts the agent's concrete findings (file, line,
   severity, message) into a compact list under the review; the raw block is kept out of the posted
   comment. Sets up cross-agent consensus across a panel.
-- **Panel review (multi-agent)** — flip on "Panel review" to run one change through several
-  agents at once; each streams its own review side by side (up to 3 run concurrently, the rest
-  queue). A second opinion in one click.
+- **Panel review (multi-agent) + consensus** — flip on "Panel review" to run one change through
+  several agents at once; each streams its own review side by side (up to 3 run concurrently, the
+  rest queue). A **Consensus** view then shows the issues that ≥K of the agents agree on (by code
+  location) — a second opinion, and a way to see what's worth trusting, in one click.
 - **Presets** — save an agent + model + reasoning bundle and apply it in one click.
 - **Live output, kill, and history** — watch the agent's transcript stream, stop a run,
   and reopen any past run's logs and result.

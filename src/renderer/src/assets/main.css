@@ -420,6 +420,28 @@ select.field {
   padding-top: 0.6rem;
 }
 
+.run__consensus {
+  margin-top: 0.8rem;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--border, #2a2f37);
+  border-radius: 8px;
+}
+
+.run__consensus-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.run__consensus-min {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
 .run__batch-agent {
   margin: 0 0 0.4rem;
   font-size: 0.9rem;
