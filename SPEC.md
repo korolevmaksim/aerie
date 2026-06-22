@@ -197,9 +197,16 @@ settings(key, value)
 > its `dedupe_key` (indexed), the action
 > actually taken, and a `posted` flag; `reconcileInterruptedPipelineRuns` flips any
 > pending/running row to `error` on startup WITHOUT advancing watch state, so an interrupted
-> delta is re-detected and never skipped. This slice lays the model + persistence only — the
-> live poller, `onFinished` step-chaining/barrier, the M6 aggregator wiring, the actioner, and
-> the IPC surface are the next M9a slices.
+> delta is re-detected and never skipped. The pure orchestration logic also lands here, in
+> `pipelinePlan.ts`: `planWaves` (resolve step `dependsOn` into ordered parallel waves — the
+> wait-for-all barrier ordering — rejecting duplicate/unknown-dep/self-dep/cycle; this is the
+> sole dependency-graph validator, so the engine MUST check `planWaves(steps).ok` before
+> starting a run), `checkGuardrails`
+> (concurrency → cooldown → runs-per-hour eligibility), and poll pacing (`planNextPollAt` =
+> rate backoff + jitter relative to now so a sleep-wake can't catch-up-burst; `selectDuePolls`
+> for a global poll budget). The electron-bound wiring — the live poller, `onFinished`
+> step-chaining/barrier, the M6 aggregator, the `assertMayPost`-gated actioner, and the IPC
+> surface — is the next M9a slice.
 
 > **ETag-cached polling foundation (ROADMAP M8).** The automation engine needs to detect a
 > new commit/PR head cheaply. `listCommits`/`listPullRequests` now mirror `listRepos`' ETag

@@ -20,6 +20,14 @@ same change set.
 
 ### Added
 
+- **Automation pipelines — orchestration logic** (ROADMAP M9a): the pure, unit-tested "brain"
+  the live engine/poller will run — `planWaves` (resolve step `dependsOn` into ordered
+  parallel waves, the wait-for-all barrier ordering, with duplicate/unknown-dep/self-dep/cycle
+  detection so an unsatisfiable plan never starts), `checkGuardrails` (concurrency cap →
+  per-repo cooldown → runs-per-hour eligibility, with retry timing), and poll scheduling
+  (`planNextPollAt` = rate-aware backoff + jitter, always relative to now so a wake from sleep
+  can't burst; `selectDuePolls` for the global poll budget across many watches). No timers/IPC
+  yet — the electron-bound poller + actioner wiring is the next slice.
 - **Automation pipelines — foundation** (ROADMAP M9a): the data model + persistence for
   configurable `trigger → scope → steps → aggregate → action` pipelines (per repo), plus the
   pure, unit-tested core logic. The security crux ships here: the **auto-post gate** — the

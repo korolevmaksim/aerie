@@ -409,6 +409,17 @@ CRUD/dedupe helpers + `reconcileInterruptedPipelineRuns` (crash recovery that ne
 state past an unprocessed delta). Validation: vitest (`pipelineModel.test.ts`, 15) + `smoke:pipelines`
 (real better-sqlite3 v14 migration, CRUD, dedupe, crash recovery, CASCADE) + build smoke. Code +
 security review APPROVED. **No engine/poller/IPC yet** — next slices.
+**Shipped (M9a orchestration-logic slice):** pure, unit-tested `main/pipelinePlan.ts` — the engine's
+brain, electron-free so it's provable before any timer/write wires it. `planWaves` resolves step
+`dependsOn` into ordered parallel waves (the wait-for-all barrier ordering) with
+duplicate/unknown-dep/self-dep/cycle detection. `checkGuardrails` decides eligibility in order
+concurrency → per-repo cooldown → runs-per-hour (with retry-after timing). `applyJitter`/
+`planNextPollAt` pace polling (reuse `nextPollDelayMs`'s rate backoff, add injected-`rand` jitter,
+schedule relative to now so a wake from sleep can't catch-up-burst). `selectDuePolls` enforces the
+global poll budget across many watches. Validation: vitest (`pipelinePlan.test.ts`, 17). Code review
+APPROVED. **Still next:** the electron-bound `poller.ts` + `pipelines.ts` engine wiring (timers,
+`startRun` per step, `runEvents.onFinished` barrier, the `assertMayPost`-gated actioner) +
+teardown-on-quit + IPC — security-reviewed.
 **Shipped (cross-agent consensus):** `aggregateFindings` gained `groupBy:'issue'|'location'` + a
 per-finding `agreement` count; `'location'` (file+line) is the robust cross-agent mode (agents
 phrase differently). `runner:consensus({runIds, consensusMin, minSeverity, groupBy})` aggregates a
