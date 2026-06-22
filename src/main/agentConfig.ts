@@ -387,6 +387,16 @@ export function isAgent(value: unknown): value is Agent {
     (a.promptDelivery === 'arg' || a.promptDelivery === 'stdin' || a.promptDelivery === 'file') &&
     (a.outputCapture === 'stdout' || a.outputCapture === 'file') &&
     typeof a.timeoutSec === 'number' &&
+    // env is spread into the spawn environment, so it must be a string→string map (a
+    // missing/array/non-string env would throw at spawn — reject it as invalid here).
+    typeof a.env === 'object' &&
+    a.env !== null &&
+    !Array.isArray(a.env) &&
+    Object.values(a.env).every((v) => typeof v === 'string') &&
+    // successExitCodes (optional) feeds runStatusForExit — reject a malformed value.
+    (a.successExitCodes === undefined ||
+      (Array.isArray(a.successExitCodes) &&
+        a.successExitCodes.every((n) => typeof n === 'number'))) &&
     // kind drives spawn routing (run vs grounding tool), so reject a malformed value.
     (a.kind === undefined || a.kind === 'agent' || a.kind === 'tool')
   )

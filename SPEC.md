@@ -68,6 +68,13 @@ If any fixed choice blocks you, STOP and flag it. Do not swap it on your own.
   Model-discovery probes are already gated to shipped ids (M2). `AgentInfo.needsConsent`
   surfaces the state; an unapproved agent can't be launched from the UI and is refused
   if reached anyway.
+- **In-app agent editor (ROADMAP M12).** `runner:saveAgent`/`deleteAgent`/`cloneAgent`
+  edit only the **user slice** of `agents.json` — the file is always rewritten as
+  `[...DEFAULT_AGENTS, ...userSlice]`, so a save can never shadow or clobber a default,
+  and a user id may not collide with any shipped (default/catalog/tool) id. Main
+  validates every payload (`isAgent` + id rules); the renderer can't write the file
+  directly. A saved agent is still subject to exec-consent above, so the editor is not an
+  exec-bypass.
 
 ## 5. Architecture
 

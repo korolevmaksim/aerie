@@ -123,6 +123,13 @@ const api = {
       ipcRenderer.invoke(CHANNELS.runnerDiscoverAgents),
     approveAgent: (id: string): Promise<ApiResult<AgentInfo[]>> =>
       ipcRenderer.invoke(CHANNELS.runnerApproveAgent, id),
+    // Agent editor (M12). `agent` is an Agent-shaped object; main validates it.
+    saveAgent: (agent: unknown, editingId?: string): Promise<ApiResult<AgentInfo[]>> =>
+      ipcRenderer.invoke(CHANNELS.runnerSaveAgent, agent, editingId),
+    deleteAgent: (id: string): Promise<ApiResult<AgentInfo[]>> =>
+      ipcRenderer.invoke(CHANNELS.runnerDeleteAgent, id),
+    cloneAgent: (sourceId: string, newId: string): Promise<ApiResult<AgentInfo[]>> =>
+      ipcRenderer.invoke(CHANNELS.runnerCloneAgent, sourceId, newId),
     setAgentModel: (agentId: string, model: string): Promise<ApiResult<AgentInfo[]>> =>
       ipcRenderer.invoke(CHANNELS.runnerSetAgentModel, agentId, model),
     setAgentReasoning: (agentId: string, reasoning: string): Promise<ApiResult<AgentInfo[]>> =>

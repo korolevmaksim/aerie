@@ -20,6 +20,7 @@ import { discoverAllModels, overlayModels } from './agentDiscovery'
 import { aggregateFindings } from './aggregate'
 import { planBatch } from './batch'
 import { agentNeedsConsent, agentSignature } from './execConsent'
+import { cloneToUserAgent, deleteUserAgent, upsertUserAgent } from './userAgents'
 import {
   buildPrompt,
   DEFAULT_AGENTS,
@@ -216,6 +217,80 @@ export function approveAgentExec(id: string): AgentInfo[] {
     setSetting(`agent.execConsent:${id}`, agentSignature(agent))
   }
   return listAgentInfos()
+}
+
+// ----- In-app agent registry editor (M12) -------------------------------------------
+// Saves operate ONLY on the user slice of agents.json (ids that aren't shipped defaults);
+// the whole file is rewritten as [...DEFAULT_AGENTS, ...userSlice], so a default can never
+// be shadowed or clobbered. The exec-consent gate still applies to anything saved here.
+
+const SHIPPED_IDS: ReadonlySet<string> = new Set(CANONICAL_SIGNATURES.keys())
+
+export type EditorResult = { ok: true; agents: AgentInfo[] } | { ok: false; error: string }
+
+/** The persisted user-authored agents (file entries whose id isn't a shipped default). */
+function readPersistedUserAgents(): Agent[] {
+  const path = agentsPath()
+  if (!existsSync(path)) return []
+  try {
+    const parsed = JSON.parse(readFileSync(path, 'utf8'))
+    const defaultIds = new Set(DEFAULT_AGENTS.map((a) => a.id))
+    // The user slice = valid agents that aren't a shipped default and aren't retired —
+    // the SAME notion mergeAgents uses, so the two readers never diverge.
+    return (Array.isArray(parsed) ? parsed : [])
+      .filter(isAgent)
+      .filter((a: Agent) => !defaultIds.has(a.id) && !RETIRED_AGENT_IDS.has(a.id))
+  } catch {
+    return []
+  }
+}
+
+function writeUserAgents(userAgents: Agent[]): void {
+  writeFileSync(agentsPath(), JSON.stringify([...DEFAULT_AGENTS, ...userAgents], null, 2), 'utf8')
+}
+
+function clearAgentSettings(id: string): void {
+  deleteSetting(`agent.execConsent:${id}`)
+  deleteSetting(`agent.discoveredModels:${id}`)
+  deleteSetting(`agent.model:${id}`)
+  deleteSetting(`agent.reasoning:${id}`)
+}
+
+/**
+ * Add or edit a user agent. Validates the payload + id (pure `upsertUserAgent`), then
+ * rewrites the user slice. A renamed id's orphaned per-id settings are cleared. Editing a
+ * command re-keys its exec signature, so prior consent self-invalidates (no manual clear).
+ */
+export function saveUserAgent(agent: unknown, editingId?: string): EditorResult {
+  const res = upsertUserAgent({
+    userAgents: readPersistedUserAgents(),
+    agent,
+    shippedIds: SHIPPED_IDS,
+    editingId
+  })
+  if (!res.ok) return res
+  const newId = (agent as Agent).id
+  if (editingId && editingId !== newId) clearAgentSettings(editingId)
+  writeUserAgents(res.agents)
+  return { ok: true, agents: listAgentInfos() }
+}
+
+/** Remove a user agent (no-op for a shipped/absent id) and clean up its per-id settings. */
+export function deleteUserAgentById(id: string): AgentInfo[] {
+  const userAgents = readPersistedUserAgents()
+  // Only touch settings if the id is ACTUALLY a user agent — never clear a default's
+  // model/reasoning preference if a (compromised) renderer passes a shipped id.
+  const wasUserAgent = userAgents.some((a) => a.id === id)
+  writeUserAgents(deleteUserAgent(userAgents, id))
+  if (wasUserAgent) clearAgentSettings(id)
+  return listAgentInfos()
+}
+
+/** Clone any agent (shipped or user) into a fresh USER agent under a new id. */
+export function cloneAgentToUser(sourceId: string, newId: string): EditorResult {
+  const source = loadAgents().find((a) => a.id === sourceId)
+  if (!source) return { ok: false, error: 'Source agent not found.' }
+  return saveUserAgent(cloneToUserAgent(source, newId))
 }
 
 /**

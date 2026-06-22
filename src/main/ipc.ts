@@ -36,6 +36,8 @@ import type {
 import {
   aggregateRunFindings,
   approveAgentExec,
+  cloneAgentToUser,
+  deleteUserAgentById,
   discoverAgentModels,
   getRunTranscript,
   killRun,
@@ -44,6 +46,7 @@ import {
   listRunFindings,
   listRunRecords,
   readRunOutput,
+  saveUserAgent,
   setAgentModel,
   setAgentReasoning,
   startBatch,
@@ -497,6 +500,48 @@ export function registerIpcHandlers(): void {
       return fail(error instanceof Error ? error.message : 'Could not approve the agent.')
     }
   })
+
+  // In-app agent editor (M12). Saves write ONLY the user slice; main validates the payload
+  // (isAgent + id rules) and never lets a user shadow a shipped id. Anything saved still
+  // needs exec-consent before it can run, so these are not an exec-bypass.
+  ipcMain.handle(
+    CHANNELS.runnerSaveAgent,
+    (event, agent: unknown, editingId: unknown): ApiResult<AgentInfo[]> => {
+      if (!isTrustedSender(event)) return fail('Untrusted sender.')
+      const edit = typeof editingId === 'string' && editingId.length > 0 ? editingId : undefined
+      try {
+        const res = saveUserAgent(agent, edit)
+        return res.ok ? ok(res.agents) : fail(res.error)
+      } catch (error) {
+        return fail(error instanceof Error ? error.message : 'Could not save the agent.')
+      }
+    }
+  )
+
+  ipcMain.handle(CHANNELS.runnerDeleteAgent, (event, id: unknown): ApiResult<AgentInfo[]> => {
+    if (!isTrustedSender(event)) return fail('Untrusted sender.')
+    if (typeof id !== 'string' || id.length === 0) return fail('Invalid agent id.')
+    try {
+      return ok(deleteUserAgentById(id))
+    } catch (error) {
+      return fail(error instanceof Error ? error.message : 'Could not delete the agent.')
+    }
+  })
+
+  ipcMain.handle(
+    CHANNELS.runnerCloneAgent,
+    (event, sourceId: unknown, newId: unknown): ApiResult<AgentInfo[]> => {
+      if (!isTrustedSender(event)) return fail('Untrusted sender.')
+      if (typeof sourceId !== 'string' || sourceId.length === 0) return fail('Invalid source id.')
+      if (typeof newId !== 'string' || newId.length === 0) return fail('Invalid new id.')
+      try {
+        const res = cloneAgentToUser(sourceId, newId)
+        return res.ok ? ok(res.agents) : fail(res.error)
+      } catch (error) {
+        return fail(error instanceof Error ? error.message : 'Could not clone the agent.')
+      }
+    }
+  )
 
   ipcMain.handle(
     CHANNELS.runnerSetAgentModel,

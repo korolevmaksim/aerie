@@ -66,6 +66,13 @@ same change set.
   how much noise was removed. Pure + unit-tested; built so multi-agent consensus (future parallel
   runs) reuses the same aggregator.
 
+- **In-app agent editing (backend)** — new `runner:saveAgent` / `runner:deleteAgent` /
+  `runner:cloneAgent` IPC let the app add, edit, clone, and remove **user** agents (the editor UI
+  lands next). Saves operate ONLY on the user slice of `agents.json` — the file is always rewritten
+  as `[defaults, …user agents]`, a user id can never collide with or shadow a built-in (default,
+  catalog, or tool) id, ids are validated, and the payload must be a valid agent. Anything saved is
+  still subject to exec-consent before it can run, so the editor can't bypass the trust boundary.
+
 - **Exec-consent for user-added agents (security)** — Aerie now refuses to spawn a user-authored
   or user-edited agent (one whose id isn't a shipped template/catalog entry) until you explicitly
   **approve its command**. Approval records a signature over the agent's `command + args + env +

@@ -143,6 +143,17 @@ describe('isAgent', () => {
     expect(isAgent({ ...valid, outputCapture: 'pipe' })).toBe(false)
     expect(isAgent({ ...valid, timeoutSec: '600' })).toBe(false)
   })
+  it('rejects a malformed env / kind / successExitCodes (spawn-affecting fields)', () => {
+    expect(isAgent({ ...valid, env: undefined })).toBe(false)
+    expect(isAgent({ ...valid, env: ['x'] })).toBe(false)
+    expect(isAgent({ ...valid, env: { K: 1 } })).toBe(false) // non-string value
+    expect(isAgent({ ...valid, kind: 'weapon' })).toBe(false)
+    expect(isAgent({ ...valid, successExitCodes: ['0'] })).toBe(false)
+    // valid optionals stay valid
+    expect(isAgent({ ...valid, env: { K: 'v' }, kind: 'tool', successExitCodes: [0, 1] })).toBe(
+      true
+    )
+  })
 })
 
 describe('DEFAULT_AGENTS', () => {

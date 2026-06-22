@@ -483,9 +483,15 @@ console autoscroll-only-near-bottom + "Jump to latest". **Effort:** M. **Depends
   gate. `runner:approveAgent` (main re-derives + persists the signature; renderer only names the
   id), `AgentInfo.needsConsent`, a Tools "⚠ needs approval / Approve to run" affordance, and the
   run launcher disables an unapproved agent. Slot accounting hardened so the early refusal can't
-  over-release the semaphore. Code + **security review** done. **Still TODO (M12):** the in-app
-  Agents EDITOR (`runner:saveAgent/deleteAgent/cloneAgent/setEnabled` writing only the user slice)
-  — the consent core now safely backstops it.
+  over-release the semaphore. Code + **security review** done.
+- **Shipped (M12 — editor backend):** pure `userAgents.ts` (`upsertUserAgent`/`deleteUserAgent`/
+  `cloneToUserAgent`, unit-tested — rejects shipped-id collisions, malformed/duplicate ids, invalid
+  payloads; supports rename) + runner `saveUserAgent`/`deleteUserAgentById`/`cloneAgentToUser` that
+  read/write ONLY the user slice (`[...DEFAULT_AGENTS, ...userSlice]`, so a default is never
+  shadowed/clobbered) and clean up orphaned per-id settings on rename/delete + `runner:saveAgent`/
+  `deleteAgent`/`cloneAgent` IPC (each `isTrustedSender` + validated). Code + security review done.
+  **Still TODO (M12):** the editor FORM UI (full Agent-contract fields), and `setEnabled` (a
+  disabled flag). The consent core gates anything the editor creates.
 
 #### M13 — Automate section + pipeline editor UI
 No-code linear `Watch → Run → Ground → Filter → Act` stepper reusing presets/prompts/agent picklists;
