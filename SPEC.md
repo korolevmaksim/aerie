@@ -239,7 +239,11 @@ settings(key, value)
 > via `planNextPollAt` (rate backoff + jitter) under a global poll budget. It's started after the store
 > is ready and stopped on `before-quit` (clears the timer + disposes the engine ports, never starting a
 > run during shutdown), and idles cheaply with no enabled pipelines. This is a LOCAL poll loop, not a
-> webhook (SPEC §10); auto-post stays a hard per-pipeline opt-in.
+> webhook (SPEC §10); auto-post stays a hard per-pipeline opt-in. The renderer manages pipeline CONFIG
+> through an `isTrustedSender`-guarded IPC surface — `pipelines:list`/`save`/`delete`/`setEnabled`
+> (`aerie.pipelines.*`); `save` re-validates the draft with `isPipelineDraft` and requires a known
+> repo. These handlers persist config only and NEVER write to GitHub — a proposed `autoPost:true` just
+> stores the flag; the engine's gate still decides whether anything is posted.
 
 > **ETag-cached polling foundation (ROADMAP M8).** The automation engine needs to detect a
 > new commit/PR head cheaply. `listCommits`/`listPullRequests` now mirror `listRepos`' ETag

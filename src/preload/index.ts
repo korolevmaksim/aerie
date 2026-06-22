@@ -14,11 +14,13 @@ import type {
   PostResult,
   PostRunParams,
   PrepareResult,
+  PipelineWithRuns,
   Preset,
   Prompt,
   PullRequestDetail,
   PullRequestSummary,
   RepoMapping,
+  SavePipelineRequest,
   ReposResult,
   ConsensusParams,
   ConsensusResult,
@@ -191,6 +193,19 @@ const api = {
       ipcRenderer.invoke(CHANNELS.promptsSave, input),
     delete: (id: number): Promise<ApiResult<Prompt[]>> =>
       ipcRenderer.invoke(CHANNELS.promptsDelete, id)
+  },
+
+  /** Automation pipelines (ROADMAP M9a). Config CRUD; the poller runs them. Never writes
+   *  to GitHub directly — every write goes through the engine's per-pipeline auto-post gate. */
+  pipelines: {
+    list: (): Promise<ApiResult<PipelineWithRuns[]>> => ipcRenderer.invoke(CHANNELS.pipelinesList),
+    /** Create (id omitted/null) or update (with id) a pipeline; returns the saved item. */
+    save: (req: SavePipelineRequest): Promise<ApiResult<PipelineWithRuns>> =>
+      ipcRenderer.invoke(CHANNELS.pipelinesSave, req),
+    delete: (id: number): Promise<ApiResult<true>> =>
+      ipcRenderer.invoke(CHANNELS.pipelinesDelete, id),
+    setEnabled: (id: number, enabled: boolean): Promise<ApiResult<true>> =>
+      ipcRenderer.invoke(CHANNELS.pipelinesSetEnabled, id, enabled)
   },
 
   /** App info + opening data locations (Stage 7 settings). */

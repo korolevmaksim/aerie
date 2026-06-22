@@ -20,6 +20,15 @@ same change set.
 
 ### Added
 
+- **Automation pipelines — config IPC (CRUD)** (ROADMAP M9a): an `isTrustedSender`-guarded IPC
+  surface so the renderer can manage pipelines — `pipelines:list` (each pipeline + its recent runs),
+  `pipelines:save` (create/update; the incoming draft is `isPipelineDraft`-validated and rejected if
+  malformed, and the target repo must be one the user has added), `pipelines:delete`,
+  `pipelines:setEnabled`. After a save/delete/enable the poller picks the change up on its next tick.
+  These handlers persist config ONLY — they never write to GitHub; a proposed `autoPost:true` is just
+  stored, and the engine's `assertMayPost` still gates any actual write. Pure request validation +
+  row→DTO shaping (`pipelineIpc.ts`) is unit-tested; the handlers/preload are build-smoke verified.
+  (The Automate UI to drive this, plus run-now/dry-run + a live status push, are next.)
 - **Automation pipelines — poller (engine runs end-to-end)** (ROADMAP M9a): `poller.ts` is a single
   self-rescheduling timer that, each tick, derives the watches for the enabled pipelines, polls the
   due ones for a new head (`pollCommitHead`, ETag-cheap), and on a change drives `processDelta`

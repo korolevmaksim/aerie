@@ -20,6 +20,7 @@ import type {
   Prompt,
   ConsensusParams,
   ConsensusResult,
+  PipelineWithRuns,
   PullRequestDetail,
   PullRequestSummary,
   RefType,
@@ -74,6 +75,7 @@ import {
   reposFromCache
 } from './github'
 import { clonePathFor, headShaOf, prepareCheckout } from './gitEngine'
+import { toPipelineWithRuns, validateSaveRequest } from './pipelineIpc'
 import { isTrustedSender } from './security'
 import { isValidId, isValidSha } from '../shared/validators'
 import {
@@ -82,17 +84,24 @@ import {
   getAccount,
   getSetting,
   setSetting,
+  deletePipeline,
   deletePreset,
   deletePrompt,
+  getPipelineRow,
   getRepoById,
   getRun,
   hasActiveRun,
   insertAccount,
+  insertPipeline,
   insertPreset,
   insertPrompt,
   listAccounts,
+  listPipelineRows,
+  listPipelineRunsForPipeline,
   listPresets,
   listPrompts,
+  setPipelineEnabled,
+  updatePipeline,
   type PresetRow,
   type PromptRow,
   setRepoClonePath,
@@ -826,6 +835,70 @@ export function registerIpcHandlers(): void {
       return ok([])
     }
   })
+
+  // --- automation pipelines (M9a). Config CRUD only; the poller picks up changes on its
+  //     next tick (it reloads the enabled set each cycle). Every GitHub write still goes
+  //     through the engine's auto-post gate — these handlers never write to GitHub.
+  ipcMain.handle(CHANNELS.pipelinesList, (event): ApiResult<PipelineWithRuns[]> => {
+    if (!isTrustedSender(event)) return fail('Untrusted sender.')
+    try {
+      const items = listPipelineRows()
+        .map((row) => toPipelineWithRuns(row, listPipelineRunsForPipeline(row.id, 20)))
+        .filter((x): x is PipelineWithRuns => x !== null)
+      return ok(items)
+    } catch (error) {
+      return fail(error instanceof Error ? error.message : 'Could not list pipelines.')
+    }
+  })
+
+  ipcMain.handle(CHANNELS.pipelinesSave, (event, input: unknown): ApiResult<PipelineWithRuns> => {
+    if (!isTrustedSender(event)) return fail('Untrusted sender.')
+    const parsed = validateSaveRequest(input)
+    if (!parsed.ok) return fail(parsed.error)
+    // The repo must be one the user has added (its account is the only one authorized to act
+    // on it); this also prevents pointing a pipeline at an unknown/foreign repo id.
+    if (!getRepoById(parsed.value.draft.repoId)) return fail('Unknown repository.')
+    try {
+      const now = new Date().toISOString()
+      let row
+      if (parsed.value.id === null) {
+        row = insertPipeline(parsed.value.draft, now)
+      } else {
+        if (!updatePipeline(parsed.value.id, parsed.value.draft, now)) {
+          return fail('Pipeline not found.')
+        }
+        row = getPipelineRow(parsed.value.id)!
+      }
+      const item = toPipelineWithRuns(row, listPipelineRunsForPipeline(row.id, 20))
+      return item ? ok(item) : fail('Saved pipeline could not be loaded.')
+    } catch (error) {
+      return fail(error instanceof Error ? error.message : 'Could not save the pipeline.')
+    }
+  })
+
+  ipcMain.handle(CHANNELS.pipelinesDelete, (event, id: unknown): ApiResult<true> => {
+    if (!isTrustedSender(event)) return fail('Untrusted sender.')
+    if (!isValidId(id)) return fail('Invalid pipeline id.')
+    try {
+      return deletePipeline(id) ? ok(true) : fail('Pipeline not found.')
+    } catch (error) {
+      return fail(error instanceof Error ? error.message : 'Could not delete the pipeline.')
+    }
+  })
+
+  ipcMain.handle(
+    CHANNELS.pipelinesSetEnabled,
+    (event, id: unknown, enabled: unknown): ApiResult<true> => {
+      if (!isTrustedSender(event)) return fail('Untrusted sender.')
+      if (!isValidId(id)) return fail('Invalid pipeline id.')
+      if (typeof enabled !== 'boolean') return fail('Invalid enabled flag.')
+      try {
+        return setPipelineEnabled(id, enabled) ? ok(true) : fail('Pipeline not found.')
+      } catch (error) {
+        return fail(error instanceof Error ? error.message : 'Could not update the pipeline.')
+      }
+    }
+  )
 
   ipcMain.handle(CHANNELS.systemInfo, (event): ApiResult<SystemInfo> => {
     if (!isTrustedSender(event)) return fail('Untrusted sender.')

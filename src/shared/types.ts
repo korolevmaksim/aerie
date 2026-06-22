@@ -232,6 +232,18 @@ export interface PipelineRunSummary {
   finishedAt: string | null
 }
 
+/** A pipeline plus its recent run history (the `pipelines:list` item). */
+export interface PipelineWithRuns {
+  pipeline: Pipeline
+  runs: PipelineRunSummary[]
+}
+
+/** The `pipelines:save` request: a validated draft, with an `id` to update or null to insert. */
+export interface SavePipelineRequest {
+  id?: number | null
+  draft: PipelineDraft
+}
+
 // --- repo mapping & git engine (Stage 4) -------------------------------------
 
 export interface RepoMapping {

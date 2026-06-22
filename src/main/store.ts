@@ -965,10 +965,13 @@ export function updatePipeline(id: number, draft: PipelineDraft, now: string): b
   )
 }
 
-export function setPipelineEnabled(id: number, enabled: boolean): void {
-  requireDb()
-    .prepare(`UPDATE pipelines SET enabled = ?, updated_at = ? WHERE id = ?`)
-    .run(enabled ? 1 : 0, new Date().toISOString(), id)
+/** Toggles a pipeline's enabled flag; returns false if no such pipeline exists. */
+export function setPipelineEnabled(id: number, enabled: boolean): boolean {
+  return (
+    requireDb()
+      .prepare(`UPDATE pipelines SET enabled = ?, updated_at = ? WHERE id = ?`)
+      .run(enabled ? 1 : 0, new Date().toISOString(), id).changes > 0
+  )
 }
 
 export function deletePipeline(id: number): boolean {

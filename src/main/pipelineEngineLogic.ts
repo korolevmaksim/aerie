@@ -19,6 +19,15 @@ function safeJsonParse(text: string): unknown {
 }
 
 /**
+ * Deep-strips dangerous prototype keys (`__proto__`/`constructor`/`prototype`) from a plain
+ * data value by round-tripping it through `safeJsonParse`. Used on the SAVE path so a forged
+ * key never even reaches the DB — defense-in-depth so the strip isn't only on read.
+ */
+export function stripDangerousKeys<T>(value: T): T {
+  return safeJsonParse(JSON.stringify(value)) as T
+}
+
+/**
  * Parses a persisted pipeline row into a validated `Pipeline`, or null if the JSON is
  * malformed or fails `isPipelineDraft`. The engine MUST run every loaded config through
  * this before acting on it — a corrupt/forged `config` blob can never reach the engine.

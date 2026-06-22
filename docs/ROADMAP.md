@@ -475,6 +475,17 @@ smoke. Code + security review APPROVED. **M9a engine is functionally COMPLETE** 
 run → ground → aggregate → gated action). **Still next:** the pipelines IPC surface + the M13
 Automate UI so users can create pipelines (today none exist, so the loop idles); a PR trigger,
 per-pipeline branch scoping, and real catalog/prompt-version dedupe are follow-ups.
+**Shipped (M9a pipelines CRUD IPC slice):** an `isTrustedSender`-guarded surface — `pipelines:list`
+(`listPipelineRows` → `toPipelineWithRuns`, each with `listPipelineRunsForPipeline`), `pipelines:save`
+(`validateSaveRequest` → `isPipelineDraft`; rejects a malformed draft, a bad id, or an unknown repo;
+`insertPipeline`/`updatePipeline`), `pipelines:delete`, `pipelines:setEnabled`. Channel names in
+`shared/channels.ts`, the typed `aerie.pipelines.*` preload API, and `PipelineWithRuns`/
+`SavePipelineRequest` types. The handlers persist config ONLY (never a GitHub write); a proposed
+`autoPost:true` only persists — the engine's `assertMayPost` still gates the write — and the poller
+picks up changes each tick. Pure `pipelineIpc.ts` (`validateSaveRequest`/`rowToRunSummary`/
+`toPipelineWithRuns`) → vitest (10); the handlers/preload → build smoke. Code + security review
+APPROVED. **Still next:** `runNow`/`dryRun` (dry-run forces stage/notify — no auto-post on a manual
+run) + a `pipeline:status` push, then the M13 Automate UI.
 **Shipped (cross-agent consensus):** `aggregateFindings` gained `groupBy:'issue'|'location'` + a
 per-finding `agreement` count; `'location'` (file+line) is the robust cross-agent mode (agents
 phrase differently). `runner:consensus({runIds, consensusMin, minSeverity, groupBy})` aggregates a
