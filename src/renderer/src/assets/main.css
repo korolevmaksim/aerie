@@ -15,6 +15,18 @@
   box-sizing: border-box;
 }
 
+/* Keyboard-only focus ring (a11y, M11): visible for Tab users, not on mouse click.
+   Applies to every interactive element so keyboard nav is always traceable. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+/* The default (mouse) focus outline stays suppressed; :focus-visible drives it. */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
 html,
 body {
   margin: 0;
@@ -94,9 +106,17 @@ body {
   font-size: 0.9rem;
 }
 
+/* Mouse focus on a field: accent the border, no outline. Keyboard focus keeps the ring
+   (the :focus-visible rule below has to out-specify this .field:focus, so it's scoped). */
 .field:focus {
-  outline: none;
   border-color: var(--accent);
+}
+.field:focus:not(:focus-visible) {
+  outline: none;
+}
+.field:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .field--grow {

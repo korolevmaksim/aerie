@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { PostKind } from '@shared/types'
+import { useFocusTrap } from '../lib/useFocusTrap'
 
 /**
  * The mandatory in-app confirmation before any GitHub write (SPEC §4). Shows the
@@ -31,6 +32,9 @@ function PostConfirmModal({
   const [body, setBody] = useState(initialBody)
   const [title, setTitle] = useState(initialTitle ?? '')
   const [tagged, setTagged] = useState(false)
+  const modalRef = useRef<HTMLDivElement>(null)
+  // Trap Tab focus within the dialog and restore focus to the opener on close.
+  useFocusTrap(modalRef)
   const canPost = body.trim().length > 0 && (kind !== 'issue' || title.trim().length > 0)
 
   // Toggling the tag inserts/removes a leading "@login " so the user always sees
@@ -60,6 +64,7 @@ function PostConfirmModal({
         role="dialog"
         aria-modal="true"
         aria-label="Confirm post to GitHub"
+        ref={modalRef}
         onClick={(e) => e.stopPropagation()}
       >
         <h3 className="modal__title">Confirm post to GitHub</h3>

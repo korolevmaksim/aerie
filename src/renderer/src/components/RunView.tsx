@@ -151,7 +151,14 @@ function RunView({
   return (
     <div className="runview">
       <div className="runview__bar">
-        <span className={`chip run__status run__status--${status}`}>{status}</span>
+        {/* role="status" already implies aria-live="polite"; the label gives context. */}
+        <span
+          className={`chip run__status run__status--${status}`}
+          role="status"
+          aria-label={`Run status: ${status}`}
+        >
+          {status}
+        </span>
         {active && (
           <button className="btn btn--danger" onClick={onKill}>
             Kill
