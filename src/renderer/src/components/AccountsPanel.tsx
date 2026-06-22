@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { AccountSummary, RateLimitInfo } from '@shared/types'
+import { useConfirm } from '../lib/useConfirm'
 
 function RateLimit({
   rate,
@@ -38,6 +39,7 @@ function AccountsPanel({
   const [reauthId, setReauthId] = useState<number | null>(null)
   const [reauthToken, setReauthToken] = useState('')
   const [ratesLoading, setRatesLoading] = useState(true)
+  const confirm = useConfirm()
 
   // Load accounts on mount, then auto-load each account's live rate limit. State
   // is set only after the async call resolves (never synchronously in the effect
@@ -119,9 +121,13 @@ function AccountsPanel({
 
   const onRemove = useCallback(
     async (account: AccountSummary): Promise<void> => {
-      if (!window.confirm(`Remove account "${account.login}"? Its stored token will be deleted.`)) {
-        return
-      }
+      const ok = await confirm({
+        title: 'Remove account',
+        message: `Remove account "${account.login}"? Its stored token will be deleted.`,
+        confirmLabel: 'Remove',
+        danger: true
+      })
+      if (!ok) return
       setPendingId(account.id)
       setError(null)
       try {
@@ -136,7 +142,7 @@ function AccountsPanel({
         setPendingId(null)
       }
     },
-    [onAccountsChanged]
+    [onAccountsChanged, confirm]
   )
 
   const onSaveReauth = useCallback(

@@ -624,8 +624,16 @@ console autoscroll-only-near-bottom + "Jump to latest". **Effort:** M. **Depends
   labelled landmark with `aria-current="page"` on the active tab; the account/branch/token inputs
   have accessible names; the brand wordmark is keyboard-operable. (`<main>`/`<nav>` landmarks were
   already semantic.) **Still TODO:** History/repo-favorite rows + the `role="button"` `<li>`
-  list-semantics fix (one structural pass); the shared `ConfirmDialog` replacing `window.confirm`
-  (`AccountsPanel`); non-color status glyphs; reduced-motion skeletons.
+  list-semantics fix (one structural pass); non-color status glyphs; reduced-motion skeletons.
+- **Shipped (M11 — shared ConfirmDialog):** an accessible, focus-trapped `role="alertdialog"`
+  (`components/ConfirmDialog.tsx`) behind a promise-based `useConfirm()` hook
+  (`lib/useConfirm.ts`), mounted once at the app root, replaces blocking/unthemed `window.confirm`
+  at three async sites — `AccountsPanel` (remove account), `AgentEditor` (delete + the
+  candidate "Add as agent" discard-confirm). Cancel is the autofocused default (a bare Enter
+  never fires a destructive action); Escape/overlay-click cancel; danger styling on destructive
+  confirms. Frontend-review APPROVED. **Still TODO:** `PipelineEditor`'s auto-post gate
+  (`window.confirm` at `:82`) — synchronous `onChange` + a security-relevant GitHub-write opt-in,
+  so it gets its own careful slice (optimistic toggle + revert-on-decline).
 
 #### M12 — In-app registry editor + **main-enforced** exec-consent
 - In-app Agents editor: `runner:saveAgent/deleteAgent/cloneAgent/setAgentEnabled` (each

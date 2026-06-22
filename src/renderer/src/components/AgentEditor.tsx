@@ -7,6 +7,7 @@ import {
   type AgentFormState,
   type EnvRow
 } from '../lib/agentForm'
+import { useConfirm } from '../lib/useConfirm'
 
 /** Imperative handle so the Tools view can open the editor prefilled from a detected candidate. */
 export interface AgentEditorHandle {
@@ -29,6 +30,7 @@ const AgentEditor = forwardRef<
   const [busy, setBusy] = useState(false)
   const [cloneFrom, setCloneFrom] = useState('')
   const idInputRef = useRef<HTMLInputElement>(null)
+  const confirm = useConfirm()
 
   const userAgents = agents.filter((a) => a.editable)
 
@@ -39,10 +41,15 @@ const AgentEditor = forwardRef<
   useImperativeHandle(
     ref,
     () => ({
-      openFromCandidate: (candidate): void => {
+      openFromCandidate: async (candidate): Promise<void> => {
         if (
           form !== null &&
-          !window.confirm('Discard the agent form you have open and start from this CLI instead?')
+          !(await confirm({
+            title: 'Discard changes?',
+            message: 'Discard the agent form you have open and start from this CLI instead?',
+            confirmLabel: 'Discard',
+            danger: true
+          }))
         ) {
           return
         }
@@ -59,7 +66,7 @@ const AgentEditor = forwardRef<
         requestAnimationFrame(() => idInputRef.current?.focus())
       }
     }),
-    [form]
+    [form, confirm]
   )
 
   const openNew = (): void => {
@@ -111,7 +118,13 @@ const AgentEditor = forwardRef<
   }
 
   const onDelete = async (id: string): Promise<void> => {
-    if (!window.confirm(`Delete the agent "${id}"? This removes it from agents.json.`)) return
+    const ok = await confirm({
+      title: 'Delete agent',
+      message: `Delete the agent "${id}"? This removes it from agents.json.`,
+      confirmLabel: 'Delete',
+      danger: true
+    })
+    if (!ok) return
     const res = await window.aerie.runner.deleteAgent(id)
     if (res.ok) onChange(res.value)
     else setError(res.error)

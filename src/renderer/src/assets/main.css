@@ -1179,6 +1179,11 @@ select.field {
   overflow: auto;
 }
 
+/* A confirm dialog needs only a title + a line of text + two buttons — keep it compact. */
+.modal--confirm {
+  max-width: 440px;
+}
+
 .modal__title {
   margin: 0;
   font-size: 1.05rem;
