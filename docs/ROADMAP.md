@@ -453,11 +453,14 @@ console autoscroll-only-near-bottom + "Jump to latest". **Effort:** M. **Depends
 - **Shipped (M11 — keyboard rows + labels):** `lib/a11y.ts` (`isActivationKey` + `clickableRow`,
   unit-tested) makes the commit/PR list rows (RepoView + PrDetailView) real keyboard buttons
   (focusable, role=button, Enter/Space); `aria-label`s added to the unlabelled Agent + branch
-  selects. **Still TODO:** History/repo-favorite rows (nested links — need a structural fix to a
-  button + sibling); the converted rows use `role="button"` on the `<li>` which overrides the
-  `listitem` role (loses "item N of M" — fold into the same structural pass by moving the button to
-  an inner wrapper); the shared `ConfirmDialog` replacing `window.confirm` (`AccountsPanel`),
-  empty-states/onboarding, ARIA nav/main landmarks, non-color status glyphs.
+  selects.
+- **Shipped (M11 — onboarding + landmarks):** a real first-run onboarding empty-state in
+  `AccountsPanel` (token scopes + create link + local-encryption reassurance); the top `<nav>` is a
+  labelled landmark with `aria-current="page"` on the active tab; the account/branch/token inputs
+  have accessible names; the brand wordmark is keyboard-operable. (`<main>`/`<nav>` landmarks were
+  already semantic.) **Still TODO:** History/repo-favorite rows + the `role="button"` `<li>`
+  list-semantics fix (one structural pass); the shared `ConfirmDialog` replacing `window.confirm`
+  (`AccountsPanel`); non-color status glyphs; reduced-motion skeletons.
 
 #### M12 — In-app registry editor + **main-enforced** exec-consent
 - In-app Agents editor: `runner:saveAgent/deleteAgent/cloneAgent/setAgentEnabled` (each

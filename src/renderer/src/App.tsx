@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { AccountSummary, RepoSummary } from '@shared/types'
+import { clickableRow } from './lib/a11y'
 import AccountsPanel from './components/AccountsPanel'
 import ReposPanel from './components/ReposPanel'
 import RepoView from './components/RepoView'
@@ -60,7 +61,11 @@ function App(): React.JSX.Element {
     <div className="app">
       <header className="topbar">
         <div className="brand">
-          <span className="wordmark" onClick={goRepos}>
+          <span
+            className="wordmark"
+            aria-label="Aerie — go to repositories"
+            {...clickableRow(goRepos)}
+          >
             Aerie
           </span>
           <span className="tagline">GitHub mission control</span>
@@ -69,6 +74,7 @@ function App(): React.JSX.Element {
           {accounts.length > 0 && (
             <select
               className="field account-select"
+              aria-label="Account"
               value={selectedId ?? ''}
               onChange={(e) => {
                 setSelectedId(Number(e.target.value))
@@ -85,35 +91,40 @@ function App(): React.JSX.Element {
               ))}
             </select>
           )}
-          <nav className="tabs">
+          <nav className="tabs" aria-label="Views">
             <button
               className={`tab ${view === 'repos' ? 'tab--active' : ''}`}
               onClick={goRepos}
               disabled={!reposReady}
+              aria-current={view === 'repos' ? 'page' : undefined}
             >
               Repos
             </button>
             <button
               className={`tab ${view === 'history' ? 'tab--active' : ''}`}
               onClick={() => setView('history')}
+              aria-current={view === 'history' ? 'page' : undefined}
             >
               History
             </button>
             <button
               className={`tab ${view === 'tools' ? 'tab--active' : ''}`}
               onClick={() => setView('tools')}
+              aria-current={view === 'tools' ? 'page' : undefined}
             >
               Tools
             </button>
             <button
               className={`tab ${view === 'accounts' ? 'tab--active' : ''}`}
               onClick={() => setView('accounts')}
+              aria-current={view === 'accounts' ? 'page' : undefined}
             >
               Accounts
             </button>
             <button
               className={`tab ${view === 'settings' ? 'tab--active' : ''}`}
               onClick={() => setView('settings')}
+              aria-current={view === 'settings' ? 'page' : undefined}
             >
               Settings
             </button>

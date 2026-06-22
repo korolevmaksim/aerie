@@ -168,6 +168,7 @@ function AccountsPanel({
           className="field"
           type="text"
           placeholder="Label (e.g. work)"
+          aria-label="Account label"
           value={label}
           onChange={(e) => setLabel(e.target.value)}
           disabled={busy}
@@ -177,6 +178,7 @@ function AccountsPanel({
           className="field field--grow"
           type="password"
           placeholder="GitHub Personal Access Token"
+          aria-label="GitHub Personal Access Token"
           value={token}
           onChange={(e) => setToken(e.target.value)}
           disabled={busy}
@@ -190,7 +192,25 @@ function AccountsPanel({
       {error && <p className="alert">{error}</p>}
 
       {accounts.length === 0 ? (
-        <p className="empty">No accounts yet. Add a Personal Access Token to get started.</p>
+        <div className="empty onboarding">
+          <p>
+            Welcome to Aerie. Add a GitHub <strong>Personal Access Token</strong> above to get
+            started — a classic token with the <code>repo</code> scope (and <code>read:org</code>{' '}
+            for org repos) lets Aerie browse your repos, commits, and PRs.
+          </p>
+          <p className="hint">
+            Create one at{' '}
+            <a
+              className="link"
+              href="https://github.com/settings/tokens"
+              target="_blank"
+              rel="noreferrer"
+            >
+              github.com/settings/tokens
+            </a>
+            . Tokens are encrypted at rest and never leave this machine except to call GitHub.
+          </p>
+        </div>
       ) : (
         <ul className="accounts">
           {accounts.map((account) => (
@@ -239,6 +259,7 @@ function AccountsPanel({
                     className="field field--grow"
                     type="password"
                     placeholder={`New token for ${account.login}`}
+                    aria-label={`New token for ${account.login}`}
                     value={reauthToken}
                     onChange={(e) => setReauthToken(e.target.value)}
                     autoComplete="off"

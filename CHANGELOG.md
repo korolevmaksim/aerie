@@ -66,6 +66,12 @@ same change set.
   how much noise was removed. Pure + unit-tested; built so multi-agent consensus (future parallel
   runs) reuses the same aggregator.
 
+- **First-run onboarding + nav landmarks** — with no accounts, the Accounts panel now shows a
+  proper welcome explaining the token to add (classic PAT, `repo` scope, `read:org` for orgs), a
+  link to create one, and a reassurance that tokens are encrypted and stay local. The top nav is a
+  labelled landmark, the active tab carries `aria-current="page"`, the account/branch/token controls
+  all have accessible names, and the brand wordmark is now keyboard-operable.
+
 - **Accessibility — keyboard-operable lists & labelled controls** — the commit and pull-request
   rows (repo view + a PR's commits) are now real keyboard controls: focusable, `role="button"`,
   and activated with Enter/Space (not just mouse). Bare `<select>`s that lacked an accessible name
