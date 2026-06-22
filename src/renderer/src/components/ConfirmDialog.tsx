@@ -52,7 +52,10 @@ function ConfirmDialog({
   useFocusTrap(ref)
 
   // Escape cancels; the overlay click cancels too. (Cancel is the autofocused default, so a
-  // bare Enter never fires a destructive confirm.)
+  // bare Enter never fires a destructive confirm.) NOTE: a modal that opens a confirm OVER
+  // itself and also has its own window Escape-to-close must guard that handler while the confirm
+  // is pending — `stopPropagation` can't help here because both listeners sit on `window` (the
+  // same node), where it doesn't stop sibling listeners. See PipelineEditor's `confirming` guard.
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') onResolve(false)

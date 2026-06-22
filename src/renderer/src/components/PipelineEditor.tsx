@@ -7,6 +7,7 @@ import type {
   PostTarget
 } from '@shared/types'
 import { useFocusTrap } from '../lib/useFocusTrap'
+import { useConfirm } from '../lib/useConfirm'
 import {
   blankForm,
   blankStep,
@@ -58,16 +59,21 @@ function PipelineEditor({
   )
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  // True while the auto-post confirm (which renders OVER this modal) is open. Both dialogs have
+  // a window Escape listener; without this guard, an Escape meant to dismiss the confirm would
+  // also close the whole editor (same-node listeners — `stopPropagation` can't separate them).
+  const [confirming, setConfirming] = useState(false)
   const modalRef = useRef<HTMLDivElement>(null)
   useFocusTrap(modalRef)
+  const confirm = useConfirm()
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape' && !busy) onClose()
+      if (e.key === 'Escape' && !busy && !confirming) onClose()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [busy, onClose])
+  }, [busy, confirming, onClose])
 
   const set = (patch: Partial<PipelineFormState>): void => setForm((f) => ({ ...f, ...patch }))
   const setStep = (i: number, patch: Partial<PipelineStepForm>): void =>
@@ -77,15 +83,30 @@ function PipelineEditor({
   const removeStep = (i: number): void =>
     setForm((f) => ({ ...f, steps: f.steps.filter((_, j) => j !== i) }))
 
-  const onToggleAutoPost = (checked: boolean): void => {
-    if (checked) {
-      const ok = window.confirm(
-        'Auto-post will publish AI reviews to GitHub automatically, without asking each time. ' +
-          'Only enable this for a pipeline you trust. Continue?'
-      )
-      if (!ok) return
+  // Auto-post is the only place a user opts a pipeline into unattended GitHub writes (default
+  // off). Enabling it requires an explicit danger confirm; `autoPost` can become true ONLY after
+  // that confirm resolves true. Unchecking never prompts. The checkbox is controlled by
+  // `form.autoPost`, so it simply stays unchecked while the async confirm is open (no optimistic
+  // flip to revert). The main-process `assertMayPost` remains the real guard — this is friction UX.
+  const onToggleAutoPost = async (checked: boolean): Promise<void> => {
+    if (!checked) {
+      set({ autoPost: false })
+      return
     }
-    set({ autoPost: checked })
+    setConfirming(true)
+    try {
+      const ok = await confirm({
+        title: 'Enable auto-post?',
+        message:
+          'Auto-post will publish AI reviews to GitHub automatically, without asking each time. ' +
+          'Only enable this for a pipeline you trust.',
+        confirmLabel: 'Enable auto-post',
+        danger: true
+      })
+      if (ok) set({ autoPost: true })
+    } finally {
+      setConfirming(false)
+    }
   }
 
   const onSave = async (): Promise<void> => {
@@ -319,7 +340,7 @@ function PipelineEditor({
                   <input
                     type="checkbox"
                     checked={form.autoPost}
-                    onChange={(e) => onToggleAutoPost(e.target.checked)}
+                    onChange={(e) => void onToggleAutoPost(e.target.checked)}
                   />
                   <strong>Auto-post without asking</strong> — publish the review to GitHub
                   automatically on every run. Off by default.

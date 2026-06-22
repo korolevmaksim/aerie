@@ -631,9 +631,16 @@ console autoscroll-only-near-bottom + "Jump to latest". **Effort:** M. **Depends
   at three async sites — `AccountsPanel` (remove account), `AgentEditor` (delete + the
   candidate "Add as agent" discard-confirm). Cancel is the autofocused default (a bare Enter
   never fires a destructive action); Escape/overlay-click cancel; danger styling on destructive
-  confirms. Frontend-review APPROVED. **Still TODO:** `PipelineEditor`'s auto-post gate
-  (`window.confirm` at `:82`) — synchronous `onChange` + a security-relevant GitHub-write opt-in,
-  so it gets its own careful slice (optimistic toggle + revert-on-decline).
+  confirms. Frontend-review APPROVED.
+- **Shipped (M11 — auto-post confirm, last `window.confirm`):** `PipelineEditor`'s auto-post
+  opt-in now uses the shared `useConfirm()` dialog too — **no `window.confirm` calls remain**. The
+  async handler keeps the controlled checkbox unchecked until the danger confirm resolves true (no
+  optimistic flip), preserving the exact gating semantics (`autoPost` can only turn on via the
+  confirm; the main-process `assertMayPost` + SQL `CHECK` stay authoritative). Because the confirm
+  renders over the focus-trapped editor and both have a window Escape listener, the editor guards
+  its own Escape-to-close with a `confirming` flag (same-node window listeners can't be separated
+  by `stopPropagation`). Security-review + frontend-review APPROVED (a first frontend pass caught a
+  broken capture-phase Escape fix; reworked to the flag guard and re-approved).
 
 #### M12 — In-app registry editor + **main-enforced** exec-consent
 - In-app Agents editor: `runner:saveAgent/deleteAgent/cloneAgent/setAgentEnabled` (each

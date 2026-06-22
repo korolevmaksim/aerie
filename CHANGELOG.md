@@ -41,12 +41,15 @@ same change set.
 
 ### Changed
 
-- **Accessible confirm dialogs** (ROADMAP M11): destructive confirmations (remove account,
-  delete agent, discard an in-progress agent form) now use a shared, themed, focus-trapped
-  `role="alertdialog"` behind a promise-based `useConfirm()` hook instead of the browser's
-  blocking `window.confirm`. Cancel is the default focus (a bare Enter never fires a destructive
-  action), Escape/overlay-click cancel, and destructive actions are styled in red. (The
-  pipeline auto-post opt-in keeps its existing confirm for now — it's converted in a follow-up.)
+- **Accessible confirm dialogs** (ROADMAP M11): every confirmation (remove account, delete
+  agent, discard an in-progress agent form, and the pipeline auto-post opt-in) now uses a shared,
+  themed, focus-trapped `role="alertdialog"` behind a promise-based `useConfirm()` hook instead
+  of the browser's blocking `window.confirm` — no `window.confirm` calls remain. Cancel is the
+  default focus (a bare Enter never fires a destructive action), Escape/overlay-click cancel, and
+  destructive actions are styled in red. The auto-post opt-in keeps its exact gating semantics
+  (the flag can only turn on via the explicit danger confirm; the main-process `assertMayPost`
+  remains the authoritative guard), and a confirm opened over the pipeline editor dismisses with
+  Escape without also closing the editor underneath.
 
 - **Agent-CLI catalog is now data-driven** (ROADMAP M2): the broad autodiscovery catalog
   (the agents surfaced only when their CLI is on PATH) moved from hardcoded TypeScript to a
