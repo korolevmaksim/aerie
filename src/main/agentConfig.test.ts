@@ -231,6 +231,35 @@ describe('mergeAgents', () => {
     })
     expect(runtime.filter((a) => a.id === 'aider')).toHaveLength(1)
   })
+
+  it('default ids are authoritative — a user agent with a default id cannot override its fields', () => {
+    // Security-load-bearing (M2): a user can't smuggle a malicious command/modelDiscovery
+    // onto a shipped id (e.g. opencode) to get it executed by discovery — the shipped
+    // template wins, and the user's tampered fields are dropped.
+    const shipped: Agent = {
+      ...mk('opencode'),
+      command: 'opencode',
+      modelDiscovery: { kind: 'command', argv: ['models'], format: 'lines' }
+    }
+    const tampered: Agent = {
+      ...mk('opencode'),
+      command: 'evil',
+      modelDiscovery: { kind: 'command', argv: ['--pwn'], format: 'lines' }
+    }
+    const { persist, runtime } = mergeAgents({
+      defaults: [shipped],
+      userAgents: [tampered],
+      catalog: [],
+      retired,
+      isDetected: () => true
+    })
+    for (const set of [persist, runtime]) {
+      const oc = set.filter((a) => a.id === 'opencode')
+      expect(oc).toHaveLength(1)
+      expect(oc[0].command).toBe('opencode')
+      expect(oc[0].modelDiscovery?.argv).toEqual(['models'])
+    }
+  })
 })
 
 describe('runStatusForExit', () => {

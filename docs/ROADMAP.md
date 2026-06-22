@@ -165,6 +165,18 @@ per-CLI enumerator roster is just a longer static list. Make it data-driven:
 - **[correction]:** a `modelDiscovery.argv` enumerator is itself arbitrary local exec — gate
   newly-authored discovery commands behind the same exec-consent as the command (M12), with a
   hard timeout + `killTree`, and assert no token in the probe env.
+- **Shipped (M2 — dynamic model discovery slice):** `agentDiscovery.ts` (electron-free, unit-tested)
+  — `modelDiscovery: {kind:'command', argv, format:'lines'}` on the Agent contract (opencode wired:
+  `opencode models`, offline/no-auth, `provider/model` per line); `parseModelList` (trim/dedup/drop
+  banners, capped) + `discoverModels`/`discoverAllModels` reuse the hardened token-stripped
+  `runToolCapture` (timeout→killTree, never-reject). **Only AUTHOR-SHIPPED descriptors run** — a
+  user-added agent's probe is skipped via a `trustedIds` allowlist (exec-consent for user probes is
+  M12). New async `runner:discoverAgents` channel + a **Discover models** button in the Tools tab
+  caches results to `settings`; `listAgentInfos()` stays synchronous and overlays the cache over the
+  seed, tagging `AgentInfo.modelsSource` `'static'|'discovered'`. Code + security review pending.
+- **Still TODO (M2):** the external data-driven catalog (bundled/user/remote JSON), generic
+  unknown-CLI candidate probes (`--version`/`--help`/config globs), the `configFile` discovery kind
+  (qwen/cn/codex — codex's `debug models` JSON is Experimental, deferred), and provenance layering.
 
 **Components:** `main/agentDiscovery.ts` (new), catalog files, `main/agentRunner.ts`,
 `shared/types.ts` (AgentInfo `version`/`modelsSource`), `shared/channels.ts` + `main/ipc.ts`

@@ -28,6 +28,7 @@ import type {
   SystemInfo
 } from '../shared/types'
 import {
+  discoverAgentModels,
   getRunTranscript,
   killRun,
   listAgentInfos,
@@ -403,6 +404,17 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(CHANNELS.runnerListAgents, (event): ApiResult<AgentInfo[]> => {
     if (!isTrustedSender(event)) return fail('Untrusted sender.')
     return ok(listAgentInfos())
+  })
+
+  // Live model discovery (M2): runs each installed, author-shipped model-list probe,
+  // caches the result, and returns the refreshed list. Spawns CLIs, so it's async.
+  ipcMain.handle(CHANNELS.runnerDiscoverAgents, async (event): Promise<ApiResult<AgentInfo[]>> => {
+    if (!isTrustedSender(event)) return fail('Untrusted sender.')
+    try {
+      return ok(await discoverAgentModels())
+    } catch (error) {
+      return fail(error instanceof Error ? error.message : 'Model discovery failed.')
+    }
   })
 
   ipcMain.handle(

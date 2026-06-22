@@ -7,6 +7,15 @@
 
 import type { RefType } from '../shared/types'
 
+/**
+ * How to discover an agent's live model list at runtime (ROADMAP M2), overlaying the
+ * static `models` seed. `command` runs a NON-INTERACTIVE subcommand and parses stdout
+ * (`lines` = one model id per line, e.g. `opencode models`). The probe runs with a
+ * token-stripped env + timeout; only AUTHOR-SHIPPED descriptors are ever executed —
+ * a user-authored descriptor needs explicit exec-consent (M12) before it runs.
+ */
+export type ModelDiscovery = { kind: 'command'; argv: string[]; format: 'lines' }
+
 export interface Agent {
   id: string
   label: string
@@ -36,6 +45,8 @@ export interface Agent {
    * Defaults to [0] when absent or empty.
    */
   successExitCodes?: number[]
+  /** Optional live model-list discovery (M2); overlays the static `models` seed. */
+  modelDiscovery?: ModelDiscovery
 }
 
 const REVIEW_TIMEOUT = 900
@@ -186,6 +197,9 @@ export const DEFAULT_AGENTS: Agent[] = [
       'anthropic/claude-sonnet-4-6',
       'openai/gpt-5.5'
     ],
+    // `opencode models` prints one `provider/model` id per line from the local
+    // models.dev cache — offline, no auth. (Never pass --refresh: that hits network.)
+    modelDiscovery: { kind: 'command', argv: ['models'], format: 'lines' },
     detect: 'opencode'
   },
   {

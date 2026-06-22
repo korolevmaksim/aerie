@@ -639,6 +639,11 @@ export function setSetting(key: string, value: string): void {
     .run(key, value)
 }
 
+/** Removes a setting key (e.g. clearing a stale discovered-models cache). */
+export function deleteSetting(key: string): void {
+  requireDb().prepare(`DELETE FROM settings WHERE key = ?`).run(key)
+}
+
 // --- review presets ----------------------------------------------------------
 
 export interface PresetRow {

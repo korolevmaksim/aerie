@@ -11,6 +11,7 @@ import type {
 } from '../shared/types'
 import { assessReviewQuality } from '../shared/quality'
 import { AGENT_CATALOG } from './agentCatalog'
+import { discoverAllModels, overlayModels } from './agentDiscovery'
 import {
   buildPrompt,
   DEFAULT_AGENTS,
@@ -41,6 +42,7 @@ import {
   getAccount,
   getPrompt,
   getRepoById,
+  deleteSetting,
   getSetting,
   insertFindings,
   insertRun,
@@ -115,6 +117,20 @@ function resolveReasoning(agent: Agent): string {
   return getSetting(`agent.reasoning:${agent.id}`) ?? agent.reasoning ?? ''
 }
 
+/**
+ * The model list to show for an agent: the live-discovered list (M2) if one was
+ * cached by a prior `discoverAgentModels()`, else the static seed — keeping the
+ * selected model present either way. A SYNCHRONOUS settings read; the pure overlay
+ * logic lives in `overlayModels` (discovery's spawn never runs here).
+ */
+function resolveModels(agent: Agent): { models: string[]; source: 'static' | 'discovered' } {
+  return overlayModels(
+    agent.models ?? [],
+    getSetting(`agent.discoveredModels:${agent.id}`),
+    resolveModel(agent)
+  )
+}
+
 /** Persists a per-agent model choice. */
 export function setAgentModel(id: string, model: string): void {
   setSetting(`agent.model:${id}`, model)
@@ -129,17 +145,48 @@ export function setAgentReasoning(id: string, reasoning: string): void {
 export function listAgentInfos(): AgentInfo[] {
   return loadAgents().map((a) => {
     const path = whichOnPath(a.detect ?? a.command)
+    const { models, source } = resolveModels(a)
     return {
       id: a.id,
       label: a.label,
       model: resolveModel(a),
-      models: a.models ?? [],
+      models,
+      modelsSource: source,
       reasoning: resolveReasoning(a),
       reasoningLevels: a.reasoningLevels ?? [],
       available: path !== null,
       path
     }
   })
+}
+
+/**
+ * Live model discovery (M2): runs each AUTHOR-SHIPPED model-list probe (e.g.
+ * `opencode models`) for installed agents, caches the result to settings, and returns
+ * the refreshed agent list. Async + spawn-based (never on the sync `listAgentInfos`
+ * path). Only shipped template/catalog ids are probed — a user-added agent's descriptor
+ * is not executed (exec-consent is M12).
+ */
+export async function discoverAgentModels(): Promise<AgentInfo[]> {
+  const agents = loadAgents()
+  const trustedIds = new Set<string>(
+    [...DEFAULT_AGENTS, ...AGENT_CATALOG, ...TOOL_CATALOG].map((a) => a.id)
+  )
+  const cwd = app.getPath('userData')
+  const discovered = await discoverAllModels(agents, trustedIds, cwd)
+  const found = new Set(discovered.map((d) => d.agentId))
+  for (const d of discovered) {
+    setSetting(`agent.discoveredModels:${d.agentId}`, JSON.stringify(d.models))
+  }
+  // Clear a stale cache for any trusted agent we PROBED but that returned nothing now
+  // (e.g. the CLI was uninstalled since the last discovery), so the picker falls back to
+  // the seed instead of showing an outdated "live" list.
+  for (const a of agents) {
+    if (a.modelDiscovery?.kind === 'command' && trustedIds.has(a.id) && !found.has(a.id)) {
+      deleteSetting(`agent.discoveredModels:${a.id}`)
+    }
+  }
+  return listAgentInfos()
 }
 
 const running = new Map<number, ChildProcess>()

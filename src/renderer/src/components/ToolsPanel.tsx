@@ -9,7 +9,8 @@ import type { AgentInfo } from '@shared/types'
 function describeCapabilities(agent: AgentInfo): string {
   const parts: string[] = []
   if (agent.models.length > 0) {
-    parts.push(`${agent.models.length} model${agent.models.length > 1 ? 's' : ''}`)
+    const src = agent.modelsSource === 'discovered' ? ' (live)' : ''
+    parts.push(`${agent.models.length} model${agent.models.length > 1 ? 's' : ''}${src}`)
   }
   if (agent.reasoningLevels.length > 0) parts.push('reasoning levels')
   return parts.join(' · ')
@@ -28,6 +29,7 @@ function ToolRow({ agent }: { agent: AgentInfo }): React.JSX.Element {
 function ToolsPanel(): React.JSX.Element {
   const [agents, setAgents] = useState<AgentInfo[] | null>(null)
   const [scanning, setScanning] = useState(false)
+  const [discovering, setDiscovering] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const scan = useCallback(async (): Promise<void> => {
@@ -37,6 +39,17 @@ function ToolsPanel(): React.JSX.Element {
     if (res.ok) setAgents(res.value)
     else setError(res.error)
     setScanning(false)
+  }, [])
+
+  // Live model discovery (M2): runs each installed agent's model-list probe (e.g.
+  // `opencode models`) and overlays the discovered models on the static seeds.
+  const discover = useCallback(async (): Promise<void> => {
+    setDiscovering(true)
+    setError(null)
+    const res = await window.aerie.runner.discoverAgents()
+    if (res.ok) setAgents(res.value)
+    else setError(res.error)
+    setDiscovering(false)
   }, [])
 
   // Initial load: await first (no synchronous setState in the effect); the Re-scan
@@ -58,11 +71,23 @@ function ToolsPanel(): React.JSX.Element {
   const missing = (agents ?? []).filter((a) => !a.available)
 
   return (
-    <section className="panel" aria-busy={scanning}>
+    <section className="panel" aria-busy={scanning || discovering}>
       <div className="panel__head">
         <h2 className="panel__title">Tools</h2>
         <div className="panel__head-actions">
-          <button className="btn btn--ghost" onClick={() => void scan()} disabled={scanning}>
+          <button
+            className="btn btn--ghost"
+            onClick={() => void discover()}
+            disabled={scanning || discovering}
+            title="Run each installed agent's model-list probe (e.g. `opencode models`)"
+          >
+            {discovering ? 'Discovering…' : 'Discover models'}
+          </button>
+          <button
+            className="btn btn--ghost"
+            onClick={() => void scan()}
+            disabled={scanning || discovering}
+          >
             {scanning ? 'Scanning…' : 'Re-scan'}
           </button>
         </div>

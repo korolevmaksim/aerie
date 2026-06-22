@@ -148,6 +148,16 @@ settings(key, value)
 > the consent), narrower than the `use_local_worktree` checkout mode. Grounding still
 > honours the `ui.groundReviews` opt-out. Findings noise-filtering (M6) applies identically.
 
+> **Live model discovery (ROADMAP M2).** An agent template may carry an optional
+> `modelDiscovery` descriptor (`{kind:'command', argv, format:'lines'}`) describing a
+> non-interactive probe (e.g. `opencode models`) that lists the models the user can pick.
+> The `runner:discoverAgents` IPC channel runs each installed, AUTHOR-SHIPPED probe with a
+> token-stripped env + timeout/killTree, caches the result to `settings`, and returns the
+> refreshed agent list; `listAgentInfos()` stays synchronous and overlays the cached list
+> over the static seed (tagging `AgentInfo.modelsSource` `'static'|'discovered'`). A
+> `modelDiscovery` on a USER-added agent is arbitrary local exec and is never run without
+> exec-consent (M12); only shipped template/catalog ids are probed.
+
 > **Agent-output reliability gate (ROADMAP M-Q).** Run status comes from the agent's exit
 > code, but exit 0 ≠ a usable review. A pure, shared `assessReviewQuality(output)` classifies
 > a spawned LLM run's captured output as `ok` or `low` (empty / truncated mid-stream / leaked

@@ -66,6 +66,14 @@ same change set.
   how much noise was removed. Pure + unit-tested; built so multi-agent consensus (future parallel
   runs) reuses the same aggregator.
 
+- **Live model discovery** — the Tools tab gained a **Discover models** button that runs each
+  installed agent's model-list probe (currently `opencode models`, offline + no-auth) and overlays
+  the discovered model ids on the static seed, so the picker shows what you can *actually* select
+  (tagged "live"). Discovery is async and spawn-based; the synchronous agent list never spawns.
+  Only **author-shipped** probes run — a model-discovery command on a user-added agent is never
+  executed (that needs explicit exec-consent, a later milestone). A failed/empty probe keeps the
+  seed list. Pluggable per-CLI descriptors make adding another CLI's discovery a data change.
+
 - **Broader quality-tool autodiscovery** — four more local, network-free, read-only tools are
   auto-detected on PATH and run as grounding when relevant: **Bandit** (Python SAST), **oxlint**
   (fast JS/TS lint), **yamllint** (YAML), and **actionlint** (GitHub Actions workflows). Each was

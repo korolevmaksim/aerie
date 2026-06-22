@@ -157,6 +157,8 @@ export interface AgentInfo {
   model: string
   /** Selectable models for this agent. */
   models: string[]
+  /** Where `models` came from: the static seed, or live discovery (M2). */
+  modelsSource: 'static' | 'discovered'
   /** Currently selected reasoning/thinking level (empty if the CLI has none). */
   reasoning: string
   /** Selectable reasoning levels (empty if the CLI exposes no reasoning control). */
