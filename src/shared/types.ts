@@ -230,7 +230,11 @@ export interface TrayOpenRun {
  * Backed by the key/value `settings` table in the main-process store; main owns
  * the privileged behavior these gate (close-to-tray, finish notifications).
  */
-export type SettingKey = 'ui.closeToTray' | 'ui.notifyOnFinish' | 'ui.closeToTrayHintShown'
+export type SettingKey =
+  | 'ui.closeToTray'
+  | 'ui.notifyOnFinish'
+  | 'ui.closeToTrayHintShown'
+  | 'ui.groundReviews'
 
 // --- posting results to GitHub (Stage 6) -------------------------------------
 

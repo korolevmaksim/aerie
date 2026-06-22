@@ -677,7 +677,8 @@ export function registerIpcHandlers(): void {
 const UI_SETTING_DEFAULTS: Record<SettingKey, boolean> = {
   'ui.closeToTray': true,
   'ui.notifyOnFinish': true,
-  'ui.closeToTrayHintShown': false
+  'ui.closeToTrayHintShown': false,
+  'ui.groundReviews': true
 }
 
 /** Prototype-safe membership test for the settings allowlist (guards 'constructor' etc.). */

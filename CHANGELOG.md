@@ -53,6 +53,12 @@ same change set.
 - New `{{changedFiles}}` review-prompt variable (the files the change touches), and a "Changed
   files" line in the machine context Aerie prepends to every prompt.
 
+- AI reviews are now **grounded in local-tool findings**: before an agent reviews a change,
+  Aerie runs your installed, change-relevant linters/scanners (eslint/ruff/biome/tsc/gitleaks),
+  scopes their findings to the diff, and gives them to the agent as ground truth to confirm,
+  refute, or merge — so it triages real findings instead of inventing noise. Best-effort (never
+  blocks a review) and 100% local. Toggle off in Settings → "Ground reviews with local tools".
+
 ### Changed
 
 - Removed the retired `dummy` agent from the documentation (`SPEC.md`, `PROMPT.md`,

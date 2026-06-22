@@ -117,6 +117,15 @@ function SettingsPanel(): React.JSX.Element {
         />
       </div>
 
+      <h3 className="subhead">Reviews</h3>
+      <div className="mapping">
+        <SettingToggle
+          settingKey="ui.groundReviews"
+          label="Ground reviews with local tools"
+          hint="Before an AI review, run your installed linters/scanners on the change and give the agent their findings to verify. Turn off when reviewing untrusted repos — it executes the repo's own tool configs."
+        />
+      </div>
+
       <PromptsSettings />
       <PresetsSettings />
     </section>

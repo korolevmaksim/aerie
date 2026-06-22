@@ -22,7 +22,10 @@
 // code inside the worktree. This is a strictly SMALLER capability than the LLM agents
 // Aerie already runs there (auto-approved tools with shell access), is confined to the
 // disposable app-owned worktree with no token, and true process sandboxing is a later
-// stage. Review only repos you trust.
+// stage. Review only repos you trust. As of M5b these tools also run AUTOMATICALLY as
+// pre-review grounding on every LLM review (incl. an untrusted PR head); disable via
+// Settings → "Ground reviews with local tools" (ui.groundReviews) when reviewing
+// untrusted code.
 
 import type { Agent } from './agentConfig'
 

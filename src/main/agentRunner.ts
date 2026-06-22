@@ -24,6 +24,7 @@ import { decryptToken } from './auth'
 import { extractSecrets, parseChangedLineRanges, parseToolOutput, scopeToChanges } from './findings'
 import { getPullRequestBaseSha } from './github'
 import { cleanupCheckout, prepareCheckout, type PreparedCheckout } from './gitEngine'
+import { gatherGroundTruth } from './grounding'
 import { log } from './logger'
 import { whichOnPath } from './pathLookup'
 import { redactText } from './redact'
@@ -173,7 +174,8 @@ function rowToRecord(row: RunRow): RunRecord {
  * fan-out subscribe to.
  */
 export function startRun(params: StartRunParams): RunRecord {
-  const agent = loadAgents().find((a) => a.id === params.agentId)
+  const agents = loadAgents()
+  const agent = agents.find((a) => a.id === params.agentId)
   if (!agent) throw new Error(`Unknown agent "${params.agentId}".`)
   const repo = getRepoById(params.repoId)
   if (!repo) throw new Error('Repository not found.')
@@ -206,7 +208,7 @@ export function startRun(params: StartRunParams): RunRecord {
 
   // Defer one tick so the caller receives the runId (and the renderer wires its
   // output listener) before the first status/output events are emitted.
-  setImmediate(() => void execute(run.id, params, agent, repo, account.token_blob))
+  setImmediate(() => void execute(run.id, params, agent, repo, account.token_blob, agents))
   return rowToRecord(run)
 }
 
@@ -247,7 +249,8 @@ async function execute(
   params: StartRunParams,
   agent: Agent,
   repo: RepoRow,
-  tokenBlob: Buffer
+  tokenBlob: Buffer,
+  agents: Agent[]
 ): Promise<void> {
   // The concurrency slot acquired below (before any heavy work) is released exactly
   // once on every terminal path via this guard.
@@ -389,14 +392,40 @@ async function execute(
       baseSha: prBaseSha
     })
 
-    // Files the change touches (from the diff) — exposed to prompts as {{changedFiles}}.
-    let changedFiles: string[] = []
+    // The diff content (read once) drives both {{changedFiles}} and pre-run grounding.
+    let diffContent = ''
     try {
-      if (existsSync(prepared.diffPath)) {
-        changedFiles = [...parseChangedLineRanges(readFileSync(prepared.diffPath, 'utf8')).keys()]
-      }
+      if (existsSync(prepared.diffPath)) diffContent = readFileSync(prepared.diffPath, 'utf8')
     } catch {
       /* best-effort */
+    }
+    const changedFiles = [...parseChangedLineRanges(diffContent).keys()]
+
+    // Ground an LLM review on deterministic local-tool findings (best-effort): run the
+    // installed, repo-relevant quality tools on the change and give the agent their
+    // findings to confirm/refute/merge instead of hallucinating. Never blocks the run;
+    // tools never get the GitHub token; gitleaks findings carry no secret value.
+    // Opt-out (default ON): a user reviewing untrusted PRs can disable pre-run tool
+    // execution without disabling the LLM review (Settings → "Ground reviews…").
+    let groundTruth = ''
+    if (agent.kind !== 'tool' && getSetting('ui.groundReviews') !== '0') {
+      try {
+        emit('system', '[aerie] grounding: running local quality tools…\n')
+        const g = await gatherGroundTruth({
+          agents,
+          cwd: prepared.worktreePath,
+          diff: diffContent,
+          diffFile: prepared.diffPath,
+          changedFiles
+        })
+        groundTruth = g.groundTruth
+        emit(
+          'system',
+          `[aerie] grounding: ${g.findingsCount} finding(s) from ${g.toolsRun} tool(s).\n`
+        )
+      } catch (e) {
+        emit('system', `[aerie] grounding skipped: ${e instanceof Error ? e.message : String(e)}\n`)
+      }
     }
 
     // A selected prompt supplies the review INSTRUCTIONS; the machine context
@@ -411,14 +440,18 @@ async function execute(
         sha: params.sha,
         repoPath: prepared.worktreePath,
         diffFile: prepared.diffPath,
-        changedFiles
+        changedFiles,
+        groundTruth
       },
       instructions
     )
 
     mkdirSync(runsDir, { recursive: true })
     promptFile = join(runsDir, `${runId}.prompt.txt`)
-    writeFileSync(promptFile, promptText, 'utf8')
+    // Scrub the prompt file like the other on-disk artifacts (the grounding block is
+    // already secret-free since parsers drop secret values; this also catches any
+    // token in the instructions and keeps the invariant consistent).
+    writeFileSync(promptFile, redactText(promptText), 'utf8')
 
     const vars: Record<string, string> = {
       repoPath: prepared.worktreePath,

@@ -220,12 +220,16 @@ persisted and retrievable, raw stdout still available; findings outside the diff
 are dropped; finding count capped at N; a secret echoed into output is redacted before storage; a
 run with no parseable findings completes with zero findings, no error.
 
-#### M5 — SAST/linter grounding of the LLM review  *(in progress)*
-- **Shipped (M5a):** the prompt plumbing — `renderFindingsForPrompt` (severity-ordered compact
-  block) + a `{{groundTruth}}` `buildPrompt` var that auto-appends a verifier-framed section
-  ("confirm/refute/merge; add only substantiated NEW issues; do not pad") unless the prompt places
-  it. Pure + unit-tested. **Next (M5b):** the pre-run tool phase in `execute()` (run relevant
-  installed tools → scope → `renderFindingsForPrompt` → pass as `groundTruth`) + smoke + review.
+#### M5 — SAST/linter grounding of the LLM review  *(shipped)*
+- **Shipped (M5a):** the prompt plumbing — `renderFindingsForPrompt` + a `{{groundTruth}}`
+  `buildPrompt` var that auto-appends a verifier-framed section ("confirm/refute/merge; add only
+  substantiated NEW issues; do not pad") unless the prompt places it. Pure + unit-tested.
+- **Shipped (M5b):** `grounding.ts` (electron-free) — `selectGroundingTools` (installed + relevant
+  by changed-file extension), `runToolCapture` (spawn+capture, never-rejects, timeout→killTree,
+  stderr drained), `gatherGroundTruth` (parallel, capped, parse→scope→render). `execute()` runs it
+  before an LLM agent (best-effort, never blocks) and injects the result. **Opt-out** setting
+  `ui.groundReviews` (Settings toggle) for untrusted repos; prompt file redacted. Code +
+  **security review APPROVED** (2 rounds). Real `node`-spawn unit tests. **M5 COMPLETE.**
 - Pre-tools phase in `execute()` before `buildPrompt`: run enabled+installed+repo-relevant
   grounding tools, capture JSON, inject a fenced **`{{groundTruth}}`** block with verifier framing
   (confirm/refute/merge/rank; add only substantiated new issues) so the LLM triages rather than
