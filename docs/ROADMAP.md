@@ -202,9 +202,13 @@ per-CLI enumerator roster is just a longer static list. Make it data-driven:
   name-match of a bounded, author-curated `KNOWN_CODING_CLIS` registry (generic-collision names
   `goose`/`forge`/`q`/`amp`/`llm` deliberately excluded) against PATH file-existence — it
   **executes nothing**. Reviewed (code + security): APPROVED, inert by construction.
-- **Still TODO (M2):** the **Tools-UI surface (3b)** that lists candidates with an "add as agent"
-  affordance; **probe enrichment** for candidates (`--version`/`--help`/config globs — itself
-  local exec, so exec-consent + timeout + killTree gated); the **signed-remote** catalog update
+- **Shipped (M2 — candidates Tools-UI slice 3b):** the Tools view renders candidates in a
+  read-only "Detected, not configured" section with an "Add as agent" shortcut that opens the
+  agent editor prefilled with the candidate's command (via an imperative `AgentEditorHandle` —
+  confirms before discarding an in-progress edit, moves focus into the form). No new privileged
+  surface; nothing runs until the user saves + approves the agent. Frontend-review: APPROVED.
+- **Still TODO (M2):** **probe enrichment** for candidates (`--version`/`--help`/config globs —
+  itself local exec, so exec-consent + timeout + killTree gated); the **signed-remote** catalog update
   through `parseCatalog` (add a read size cap + signature verification before trust); the
   `configFile` discovery kind (qwen/cn/codex — codex's `debug models` JSON is Experimental,
   deferred; extend `cloneModelDiscovery`'s allow-list when it lands); and provenance layering.

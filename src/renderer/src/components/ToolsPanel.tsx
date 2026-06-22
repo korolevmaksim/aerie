@@ -1,11 +1,14 @@
-import { useCallback, useEffect, useState } from 'react'
-import type { AgentInfo } from '@shared/types'
-import AgentEditor from './AgentEditor'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import type { AgentCandidate, AgentInfo } from '@shared/types'
+import AgentEditor, { type AgentEditorHandle } from './AgentEditor'
 
 /**
- * Read-only inventory of the agent CLIs Aerie auto-detects on this machine — the
- * visible home for tool autodiscovery. Uses the existing `runner.listAgents`
- * surface (no new IPC); "Re-scan" re-runs PATH detection.
+ * Read-only inventory of the agent CLIs Aerie auto-detects on this machine — the visible home
+ * for tool autodiscovery. Lists configured agents (`runner.listAgents`) plus, in a separate
+ * "Detected, not configured" section, coding CLIs found on PATH that have no agent yet
+ * (`runner.listCandidates`, M2) with an "Add as agent" shortcut into the editor. "Re-scan"
+ * re-runs PATH detection for both. No privileged logic here — a candidate is never runnable
+ * until the user templates + approves it.
  */
 function describeCapabilities(agent: AgentInfo): string {
   const parts: string[] = []
@@ -43,6 +46,8 @@ function ToolRow({
 
 function ToolsPanel(): React.JSX.Element {
   const [agents, setAgents] = useState<AgentInfo[] | null>(null)
+  const [candidates, setCandidates] = useState<AgentCandidate[]>([])
+  const editorRef = useRef<AgentEditorHandle>(null)
   const [scanning, setScanning] = useState(false)
   const [discovering, setDiscovering] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -50,9 +55,13 @@ function ToolsPanel(): React.JSX.Element {
   const scan = useCallback(async (): Promise<void> => {
     setScanning(true)
     setError(null)
-    const res = await window.aerie.runner.listAgents()
-    if (res.ok) setAgents(res.value)
-    else setError(res.error)
+    const [agentsRes, candRes] = await Promise.all([
+      window.aerie.runner.listAgents(),
+      window.aerie.runner.listCandidates()
+    ])
+    if (agentsRes.ok) setAgents(agentsRes.value)
+    else setError(agentsRes.error)
+    if (candRes.ok) setCandidates(candRes.value)
     setScanning(false)
   }, [])
 
@@ -80,10 +89,14 @@ function ToolsPanel(): React.JSX.Element {
   useEffect(() => {
     let cancelled = false
     void (async () => {
-      const res = await window.aerie.runner.listAgents()
+      const [agentsRes, candRes] = await Promise.all([
+        window.aerie.runner.listAgents(),
+        window.aerie.runner.listCandidates()
+      ])
       if (cancelled) return
-      if (res.ok) setAgents(res.value)
-      else setError(res.error)
+      if (agentsRes.ok) setAgents(agentsRes.value)
+      else setError(agentsRes.error)
+      if (candRes.ok) setCandidates(candRes.value)
     })()
     return () => {
       cancelled = true
@@ -153,7 +166,33 @@ function ToolsPanel(): React.JSX.Element {
             </>
           )}
 
-          <AgentEditor agents={agents} onChange={setAgents} />
+          {candidates.length > 0 && (
+            <>
+              <h3 className="subhead">Detected, not configured ({candidates.length})</h3>
+              <p className="hint">
+                Coding CLIs found on your PATH that Aerie has no agent for. Add one to use it — a
+                new agent is approved before it can run.
+              </p>
+              <div className="mapping">
+                {candidates.map((c) => (
+                  <div key={c.command} className="mapping__row">
+                    <span className="mapping__key">{c.label}</span>
+                    <code className="mapping__val">{c.path}</code>
+                    <button
+                      className="btn btn--ghost"
+                      onClick={() =>
+                        editorRef.current?.openFromCandidate({ command: c.command, label: c.label })
+                      }
+                    >
+                      Add as agent
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          <AgentEditor ref={editorRef} agents={agents} onChange={setAgents} />
         </>
       )}
     </section>

@@ -180,7 +180,9 @@ before anything runs. Detection is a pure name-match of a **bounded, author-cura
 of distinctive coding-CLI binary names against PATH file-existence — it executes nothing (no
 `--version`/`--help` probe; if that enrichment is added later it must be exec-consent + timeout +
 killTree gated). This is what stops autodiscovery from rotting: an installed CLI Aerie has no
-template for still surfaces.
+template for still surfaces. The Tools view renders candidates in a read-only "Detected, not
+configured" section with an "Add as agent" shortcut that opens the editor prefilled with the
+candidate's command — the user then saves + approves (§4) it like any other user agent.
 
 ## 8. Data model (SQLite)
 

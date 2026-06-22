@@ -42,6 +42,10 @@ third-party service.
   custom agent CLIs (the full contract: command, args, env, output capture, …). A user-added agent
   must be **explicitly approved** before Aerie will run its command — editing the command re-requires
   approval — and a custom agent can never shadow a built-in.
+- **Spots coding CLIs you haven't wired** — the Tools tab also flags coding-agent CLIs found on your
+  PATH that Aerie has no agent for yet (a **"Detected, not configured"** list) with an **Add as
+  agent** shortcut that opens the editor prefilled — so a newly-installed CLI surfaces even before a
+  template ships. These hints are inert: nothing runs until you create and approve an agent.
 - **Run any local agent** — a small, editable registry ships templates for Codex,
   Claude Code, Cursor Agent, opencode, Kimi, Gemini, Mistral Vibe, Grok, Antigravity, and
   MiMo. Installed agents are auto-detected; pick a model and (where supported) a

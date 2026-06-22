@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { forwardRef, useImperativeHandle, useRef, useState } from 'react'
 import type { Agent, AgentInfo } from '@shared/types'
 import {
   agentToForm,
@@ -8,26 +8,59 @@ import {
   type EnvRow
 } from '../lib/agentForm'
 
+/** Imperative handle so the Tools view can open the editor prefilled from a detected candidate. */
+export interface AgentEditorHandle {
+  openFromCandidate: (candidate: { command: string; label: string }) => void
+}
+
 /**
  * In-app agent registry editor (ROADMAP M12). Add / edit / clone / delete USER agents.
  * Security is enforced in main: a save can't shadow a built-in and anything saved still
  * needs exec-consent before it can run (surfaced here as "needs approval").
  */
-function AgentEditor({
-  agents,
-  onChange
-}: {
-  agents: AgentInfo[]
-  onChange: (agents: AgentInfo[]) => void
-}): React.JSX.Element {
+const AgentEditor = forwardRef<
+  AgentEditorHandle,
+  { agents: AgentInfo[]; onChange: (agents: AgentInfo[]) => void }
+>(function AgentEditor({ agents, onChange }, ref): React.JSX.Element {
   const [form, setForm] = useState<AgentFormState | null>(null)
   const [base, setBase] = useState<Agent | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [cloneFrom, setCloneFrom] = useState('')
+  const idInputRef = useRef<HTMLInputElement>(null)
 
   const userAgents = agents.filter((a) => a.editable)
+
+  // Open a NEW-agent form prefilled from a candidate's "Add as agent" (M2). Imperative (not a
+  // prop/effect) so it can confirm before discarding an in-progress edit and move focus into the
+  // form. The saved agent still needs exec-consent before it can run — prefilling is pure
+  // convenience, not a trust grant.
+  useImperativeHandle(
+    ref,
+    () => ({
+      openFromCandidate: (candidate): void => {
+        if (
+          form !== null &&
+          !window.confirm('Discard the agent form you have open and start from this CLI instead?')
+        ) {
+          return
+        }
+        setForm({
+          ...blankForm(),
+          id: candidate.command,
+          label: candidate.label,
+          command: candidate.command
+        })
+        setBase(null)
+        setEditingId(null)
+        setError(null)
+        // Focus the first field once the form has mounted (focus also scrolls it into view).
+        requestAnimationFrame(() => idInputRef.current?.focus())
+      }
+    }),
+    [form]
+  )
 
   const openNew = (): void => {
     setForm(blankForm())
@@ -167,6 +200,7 @@ function AgentEditor({
           <label className="agent-editor__field">
             Id
             <input
+              ref={idInputRef}
               className="field"
               value={form.id}
               onChange={(e) => set({ id: e.target.value })}
@@ -306,6 +340,6 @@ function AgentEditor({
       )}
     </section>
   )
-}
+})
 
 export default AgentEditor
