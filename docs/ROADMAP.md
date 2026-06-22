@@ -640,6 +640,19 @@ honest poll-cadence labels (no webhook pretense).
   may join the allowlist. The UI Post toggle maps to the row's `auto_post`; the **M9a engine assertion is
   the real guard**. **Effort:** L. **Depends on:** M9a, M11.
 
+**Shipped (M13 slice 1 — pure form↔draft logic):** `renderer/src/lib/pipelineForm.ts` (pure, unit-tested,
+mirrors `agentForm.ts`): `PipelineFormState` + `blankForm`/`draftToForm`/`formToDraft(form, base?)` mapping
+the editor fields (name, repo, trigger, agent steps with model + comma-split `dependsOn`, scope
+[branches/paths/labels/authors CSV + includeDrafts + maxCommits], action [kind + autoPost + target], and
+the three guardrails) ↔ `PipelineDraft`. Client-side validation (required name/repo/≥1 step, unique step
+ids, self-/unknown-dep rejection, non-negative numeric fields); `autoPost` is dropped for any non-`post`
+action so the form can never persist a stray true flag; `enabled`/`schedule` are preserved from `base` on
+edit and a new pipeline defaults **disabled** (review-then-enable). Main still re-validates with
+`isPipelineDraft` + the engine checks the step graph at run. Validation: vitest (`pipelineForm.test.ts`,
+12 — happy path, scope/action/guardrail mapping, round-trip, and every validation branch). Code review
+APPROVED. **Still next:** the Automate view + pipeline list (slice 2), the editor modal (slice 3), and the
+run-history/dry-run panel (slice 4).
+
 #### M14 — Command palette, structured launcher, console, IA polish & onboarding
 Command palette (Cmd+K) + keyboard model; structured 2-column run launcher (labeled fields replacing the
 unlabeled select row; installed agents grouped first; a configure affordance instead of a dead disabled

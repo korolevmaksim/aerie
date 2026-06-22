@@ -20,6 +20,11 @@ same change set.
 
 ### Added
 
+- **Automate UI — form logic** (ROADMAP M13, scaffolding): a pure, unit-tested
+  `renderer/src/lib/pipelineForm.ts` mapping the pipeline-editor fields ↔ a `PipelineDraft`
+  (`formToDraft`/`draftToForm`) with client-side validation, ahead of the Automate view itself.
+  It drops `autoPost` for any non-`post` action and defaults a new pipeline to disabled
+  (review-then-enable). Not user-visible yet — the Automate view + editor land in the next slices.
 - **Automation pipelines — live status push** (ROADMAP M9a): a `pipeline:status` main→renderer
   push so the Automate UI updates without polling. A small electron-free `pipelineEvents` hub
   (mirrors `runEvents`) fires on every `pipeline_run` insert / status change / posted; the engine
