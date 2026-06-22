@@ -220,7 +220,12 @@ persisted and retrievable, raw stdout still available; findings outside the diff
 are dropped; finding count capped at N; a secret echoed into output is redacted before storage; a
 run with no parseable findings completes with zero findings, no error.
 
-#### M5 — SAST/linter grounding of the LLM review
+#### M5 — SAST/linter grounding of the LLM review  *(in progress)*
+- **Shipped (M5a):** the prompt plumbing — `renderFindingsForPrompt` (severity-ordered compact
+  block) + a `{{groundTruth}}` `buildPrompt` var that auto-appends a verifier-framed section
+  ("confirm/refute/merge; add only substantiated NEW issues; do not pad") unless the prompt places
+  it. Pure + unit-tested. **Next (M5b):** the pre-run tool phase in `execute()` (run relevant
+  installed tools → scope → `renderFindingsForPrompt` → pass as `groundTruth`) + smoke + review.
 - Pre-tools phase in `execute()` before `buildPrompt`: run enabled+installed+repo-relevant
   grounding tools, capture JSON, inject a fenced **`{{groundTruth}}`** block with verifier framing
   (confirm/refute/merge/rank; add only substantiated new issues) so the LLM triages rather than

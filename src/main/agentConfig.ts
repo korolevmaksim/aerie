@@ -523,6 +523,8 @@ export function buildPrompt(
     diffFile: string
     /** Files the change touches (from the diff); surfaced as {{changedFiles}}. */
     changedFiles?: string[]
+    /** Deterministic local-tool findings injected as ground truth (M5); {{groundTruth}}. */
+    groundTruth?: string
   },
   instructions: string = DEFAULT_REVIEW_INSTRUCTIONS
 ): string {
@@ -539,13 +541,21 @@ export function buildPrompt(
   // Power users may reference these placeholders in a custom prompt; unknown ones
   // are left intact by substitute(). An empty/blank prompt falls back to default.
   const effective = (instructions ?? '').trim() || DEFAULT_REVIEW_INSTRUCTIONS
+  const gt = (ctx.groundTruth ?? '').trim()
   const body = substitute(effective, {
     repo: ctx.fullName,
     subject,
     sha: ctx.sha,
     repoPath: ctx.repoPath,
     diffFile: ctx.diffFile,
-    changedFiles: changed.join('\n')
+    changedFiles: changed.join('\n'),
+    groundTruth: gt
   })
-  return `${context}\n\n${body}\n`
+  // Ground the review in deterministic local-tool findings: confirm/refute/merge, no
+  // padding. Auto-appended unless the prompt already places {{groundTruth}} itself.
+  const grounding =
+    gt && !effective.includes('{{groundTruth}}')
+      ? `\n\n## Deterministic findings from local tools — treat as ground truth\nConfirm, refute, or merge each below; add only substantiated NEW issues; do not pad.\n\n${gt}`
+      : ''
+  return `${context}\n\n${body}${grounding}\n`
 }

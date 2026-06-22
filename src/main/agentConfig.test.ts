@@ -80,6 +80,32 @@ describe('buildPrompt', () => {
     const p = buildPrompt({ ...base, refType: 'commit', refId: 'deadbeef' })
     expect(p).not.toContain('Changed files')
   })
+
+  it('auto-appends a verifier-framed ground-truth section when groundTruth is given', () => {
+    const p = buildPrompt({
+      ...base,
+      refType: 'commit',
+      refId: 'deadbeef',
+      groundTruth: '- [high] gitleaks (d.json:2): secret'
+    })
+    expect(p).toContain('treat as ground truth')
+    expect(p).toContain('Confirm, refute, or merge')
+    expect(p).toContain('- [high] gitleaks (d.json:2): secret')
+  })
+
+  it('lets a prompt place {{groundTruth}} itself (no duplicate auto-append)', () => {
+    const p = buildPrompt(
+      { ...base, refType: 'commit', refId: 'deadbeef', groundTruth: 'GT_LINE' },
+      'Findings: {{groundTruth}}'
+    )
+    expect(p).toContain('Findings: GT_LINE')
+    expect(p).not.toContain('treat as ground truth') // not auto-appended when placed
+  })
+
+  it('adds no grounding section when groundTruth is absent', () => {
+    const p = buildPrompt({ ...base, refType: 'commit', refId: 'deadbeef' })
+    expect(p).not.toContain('ground truth')
+  })
 })
 
 describe('SEED_PROMPTS', () => {

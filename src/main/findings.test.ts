@@ -11,7 +11,9 @@ import {
   parseRuff,
   parseToolOutput,
   parseTsc,
+  renderFindingsForPrompt,
   scopeToChanges,
+  type Finding,
   type Severity
 } from './findings'
 
@@ -202,6 +204,38 @@ describe('fingerprintOf', () => {
     expect(fingerprintOf(base)).not.toBe(fingerprintOf({ ...base, line: 11 }))
     expect(fingerprintOf(base)).not.toBe(fingerprintOf({ ...base, file: 'b.ts' }))
     expect(fingerprintOf(base)).not.toBe(fingerprintOf({ ...base, ruleId: 'r2' }))
+  })
+})
+
+describe('renderFindingsForPrompt', () => {
+  const findings: Finding[] = [
+    {
+      tool: 'eslint',
+      ruleId: 'no-debugger',
+      severity: 'low',
+      file: 'x.ts',
+      line: 3,
+      message: 'debugger',
+      fingerprint: 'a'
+    },
+    {
+      tool: 'gitleaks',
+      ruleId: 'key',
+      severity: 'high',
+      file: 'd.json',
+      line: 2,
+      message: 'API Key',
+      fingerprint: 'b'
+    }
+  ]
+  it('renders a severity-ordered, compact block', () => {
+    const out = renderFindingsForPrompt(findings)
+    expect(out.indexOf('[high]')).toBeLessThan(out.indexOf('[low]')) // most severe first
+    expect(out).toContain('- [high] gitleaks (d.json:2) key: API Key')
+    expect(out).toContain('- [low] eslint (x.ts:3) no-debugger: debugger')
+  })
+  it('returns an empty string for no findings', () => {
+    expect(renderFindingsForPrompt([])).toBe('')
   })
 })
 
