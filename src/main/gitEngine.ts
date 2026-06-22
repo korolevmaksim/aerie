@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from 'fs'
 import { app } from 'electron'
 import simpleGit, { type SimpleGit } from 'simple-git'
 import type { PrepareMode, PrepareResult } from '../shared/types'
+import { reviewDiffArgs } from './gitDiff'
 
 /**
  * Git engine (SPEC §5/§6). Drives the system `git` through simple-git. App-owned
@@ -149,24 +150,35 @@ export async function checkoutWorktree(args: {
   return { mode: 'app-clone', baseDir: clonePath, worktreePath }
 }
 
-/** Generates a unified diff for a commit and writes it to a file. Returns the path. */
-export async function writeCommitDiff(
-  baseDir: string,
-  fullName: string,
-  sha: string,
-  runTag: string
-): Promise<string> {
-  const git = simpleGit(baseDir)
-  let diff: string
-  // Diff against the first parent; fall back to the full patch for a root commit.
+/** Diffs a commit against its first parent; full patch for a root commit. */
+async function diffAgainstFirstParent(git: SimpleGit, sha: string): Promise<string> {
   const hasParent = await git
     .raw(['rev-parse', '--verify', '--quiet', `${sha}^`])
     .then(() => true)
     .catch(() => false)
-  if (hasParent) {
-    diff = await git.raw(['diff', `${sha}^`, sha])
+  return hasParent ? git.raw(reviewDiffArgs(sha)) : git.raw(['show', '--format=', sha])
+}
+
+/**
+ * Generates the review unified diff and writes it to a file. Returns the path.
+ * - PR runs (`baseSha` set): the WHOLE PR via a three-dot `base...head` diff
+ *   (changes since the merge-base), not just the head commit.
+ * - Commit runs: the commit vs its first parent.
+ * Falls back to the first-parent diff if the base is unreachable in the clone.
+ */
+export async function writeCommitDiff(
+  baseDir: string,
+  fullName: string,
+  sha: string,
+  runTag: string,
+  baseSha?: string | null
+): Promise<string> {
+  const git = simpleGit(baseDir)
+  let diff: string
+  if (baseSha) {
+    diff = await git.raw(reviewDiffArgs(sha, baseSha)).catch(() => diffAgainstFirstParent(git, sha))
   } else {
-    diff = await git.raw(['show', '--format=', sha])
+    diff = await diffAgainstFirstParent(git, sha)
   }
   const { owner, name } = splitFullName(fullName)
   const diffDir = dataDir('diffs')
@@ -190,9 +202,17 @@ export async function prepareCheckout(args: {
   token?: string
   userLocalPath?: string | null
   useLocalWorktree?: boolean
+  /** PR base SHA — when set, the diff covers the whole PR (merge-base..head). */
+  baseSha?: string | null
 }): Promise<PreparedCheckout> {
   const { mode, baseDir, worktreePath } = await checkoutWorktree(args)
-  const diffPath = await writeCommitDiff(baseDir, args.fullName, args.sha, args.runTag)
+  const diffPath = await writeCommitDiff(
+    baseDir,
+    args.fullName,
+    args.sha,
+    args.runTag,
+    args.baseSha
+  )
   return { mode, worktreePath, diffPath, baseDir }
 }
 

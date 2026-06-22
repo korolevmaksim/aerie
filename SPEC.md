@@ -119,10 +119,9 @@ Contract:
 Placeholders the runner substitutes: `{{repoPath}}`, `{{promptFile}}`,
 `{{diffFile}}`, `{{baseSha}}`, `{{headSha}}`, `{{prompt}}`.
 
-Ship two reference entries:
-- a **`dummy`** agent (a shell command that echoes the prompt back) so the full
-  pipeline is testable with zero real agents installed;
-- one real **`codex`** template, commented.
+Ship real reference entries (e.g. **`codex`**, **`claude-code`**), auto-detected on
+PATH; the runner pipeline is exercised by the stage smoke test, so it is testable
+with no real agent installed.
 
 Adding Agy / Kimi / Claude Code = editing `agents.json`. No code change. Ever.
 
@@ -184,8 +183,8 @@ modified; diff file is produced.
 Build: load `agents.json`; "Review with agent" button on the commit and PR
 views; runner = prepare context (checkout SHA + prompt file + diff file) →
 spawn agent in `cwd` → stream stdout/stderr live to the UI → capture result →
-persist a `runs` row. Ship the `dummy` + `codex` config entries.
-**Accept:** configure the `dummy` agent and run it on a commit → live output
+persist a `runs` row. Ship the real agent config entries (`codex`, `claude-code`, …).
+**Accept:** configure an installed agent and run it on a commit → live output
 appears, run is recorded with exit code and output path; swapping to a second
 agent is config-only with no code change; a hanging agent is killed at timeout.
 

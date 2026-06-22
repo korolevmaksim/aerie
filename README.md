@@ -87,8 +87,7 @@ only see and can run the agents whose CLI is actually installed on your PATH.
   - Windows: Visual Studio Build Tools (Desktop C++) + Python 3
   - Linux: `build-essential` + `python3`
 - At least one supported agent CLI installed and authenticated, if you want to run real
-  reviews. (The registry includes a `dummy`-free, real-agent-only set; install whichever
-  you use.)
+  reviews. (The registry ships a real-agent-only set; install whichever you use.)
 
 ## Build from source
 

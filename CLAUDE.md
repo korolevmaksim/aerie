@@ -53,13 +53,28 @@ Stage 0–6 loop proves it saves real time.
 ## Conventions
 
 - TypeScript strict mode on. All code, comments, and commit messages in English.
-- Each stage ships a smoke test proving its `Accept:` criteria. Use the `dummy`
-  agent (SPEC §7) to test the runner with zero real agents installed.
+- Each stage ships a smoke test proving its `Accept:` criteria; exercise the runner
+  through that smoke test, with no real agent installed.
 - Target macOS first; keep code cross-platform (no mac-only path assumptions).
 - Verify current tool/lib versions before pinning; if the spec's pin is stale,
   propose the current equivalent and wait for confirmation.
 
+## Documentation discipline (standing rule)
+
+Every new feature or behavioral / architecture change is reflected in the repo's
+local documentation **in the same change set** — never code-only. At minimum:
+
+- user-facing capability → update `README.md` (Features / Using-it);
+- architecture, the IPC surface, the agent contract, the data model, or a security
+  boundary → update `SPEC.md` (and keep `AGENTS.md` / `CLAUDE.md` in sync when a
+  standing rule changes);
+- record it in `CHANGELOG.md` under `Unreleased` (Keep a Changelog style; create
+  the file if missing). Deeper design notes go under `docs/`.
+
+If a change makes any existing doc statement false (a retired feature, a renamed
+flag), fix that doc in the same commit. Docs are part of "done" below.
+
 ## Definition of done (per stage)
 
-The stage's `Accept:` block passes, typecheck and lint are green, and the repo is
-in a committed, runnable state.
+The stage's `Accept:` block passes, typecheck and lint are green, the repo is in a
+committed, runnable state, and the change's documentation is updated.

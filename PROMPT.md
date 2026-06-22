@@ -52,8 +52,8 @@ and the repo is in a committed, runnable state.
 
 - Each stage ships a smoke test (a script or a minimal automated check) that
   proves its acceptance criteria.
-- For the agent runner (Stage 5), use the `dummy` agent from SPEC §7 so the full
-  pipeline is testable with zero real agents installed.
+- For the agent runner (Stage 5), exercise the full pipeline with the stage smoke
+  test, so it is testable with no real agent installed.
 - Prefer a thin real integration path over heavy mocking. I will provide a test
   GitHub account/token and a throwaway repo when a stage needs one — ask.
 

@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from 'child_process'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
-import { delimiter, join } from 'path'
+import { join } from 'path'
 import { app } from 'electron'
 import type {
   AgentInfo,
@@ -18,9 +18,12 @@ import {
   type Agent
 } from './agentConfig'
 import { decryptToken } from './auth'
+import { getPullRequestBaseSha } from './github'
 import { cleanupCheckout, prepareCheckout, type PreparedCheckout } from './gitEngine'
 import { log } from './logger'
+import { isOnPath } from './pathLookup'
 import { activeCount, noteOutput, noteStatus, registerRun } from './runEvents'
+import { createSemaphore } from './semaphore'
 import {
   getAccount,
   getPrompt,
@@ -104,10 +107,7 @@ export function setAgentReasoning(id: string, reasoning: string): void {
 
 /** True if the agent's CLI is installed (its `detect` binary is on PATH). */
 function isInstalled(agent: Agent): boolean {
-  const bin = agent.detect ?? agent.command
-  if (bin.includes('/')) return existsSync(bin)
-  const dirs = (process.env.PATH ?? '').split(delimiter)
-  return dirs.some((d) => d && existsSync(join(d, bin)))
+  return isOnPath(agent.detect ?? agent.command)
 }
 
 /** Renderer-facing agent list with resolved model/reasoning + availability. */
@@ -124,6 +124,13 @@ export function listAgentInfos(): AgentInfo[] {
 }
 
 const running = new Map<number, ChildProcess>()
+
+// Cap concurrent agent processes so a burst — or, later, an automation pipeline
+// (ROADMAP M9) — can't exhaust memory/disk by cloning + spawning unbounded runs.
+// A run waits here (staying 'queued') until a slot frees. A small constant is the
+// safe default; a per-pipeline override comes with the automation engine.
+const MAX_CONCURRENT_RUNS = 3
+const runSlots = createSemaphore(MAX_CONCURRENT_RUNS)
 
 // Live full-console transcript per in-flight run (dropped once persisted to .log).
 const MAX_TRANSCRIPT = 256 * 1024
@@ -230,6 +237,15 @@ async function execute(
   repo: RepoRow,
   tokenBlob: Buffer
 ): Promise<void> {
+  // The concurrency slot acquired below (before any heavy work) is released exactly
+  // once on every terminal path via this guard.
+  let slotReleased = false
+  const releaseSlot = (): void => {
+    if (slotReleased) return
+    slotReleased = true
+    runSlots.release()
+  }
+
   // The full console transcript (stdout+stderr+system) is buffered live so a
   // re-opened panel (or the History view) can show progress for a RUNNING run;
   // on finish it is persisted to <id>.log. The clean review goes to <id>.out.
@@ -290,12 +306,39 @@ async function execute(
     liveTranscripts.delete(runId)
     finish(status, exitCode, outputPath)
     cleanup()
+    releaseSlot()
   }
+
+  // Wait for a concurrency slot before any heavy work (clone/fetch/spawn). The run
+  // stays 'queued' until one frees; announce a real wait so it isn't read as a stall.
+  if (runSlots.active() >= MAX_CONCURRENT_RUNS) {
+    emit('system', '[aerie] waiting for a free run slot…\n')
+  }
+  await runSlots.acquire()
 
   try {
     updateRunStatus(runId, { status: 'running' })
     noteStatus(runId, 'running')
     emit('system', '[aerie] preparing local checkout…\n')
+
+    // For a PR, diff the WHOLE PR (merge-base..head), not just its head commit.
+    // The base SHA is resolved authoritatively from GitHub, never renderer-supplied.
+    let prBaseSha: string | undefined
+    if (params.refType === 'pr') {
+      const prNumber = Number(params.refId)
+      if (Number.isInteger(prNumber) && prNumber > 0) {
+        try {
+          prBaseSha = await getPullRequestBaseSha(params.accountId, repo.full_name, prNumber)
+        } catch (e) {
+          emit(
+            'system',
+            `[aerie] could not resolve PR base — diffing the head commit only: ${
+              e instanceof Error ? e.message : String(e)
+            }\n`
+          )
+        }
+      }
+    }
 
     prepared = await prepareCheckout({
       fullName: repo.full_name,
@@ -304,7 +347,8 @@ async function execute(
       runTag: String(runId),
       token: decryptToken(tokenBlob),
       userLocalPath: repo.user_local_path,
-      useLocalWorktree: repo.use_local_worktree === 1
+      useLocalWorktree: repo.use_local_worktree === 1,
+      baseSha: prBaseSha
     })
 
     // A selected prompt supplies the review INSTRUCTIONS; the machine context
@@ -334,7 +378,7 @@ async function execute(
       outFile: join(runsDir, `${runId}.agentout`),
       model: resolveModel(agent),
       reasoning: resolveReasoning(agent),
-      baseSha: `${params.sha}^`,
+      baseSha: prBaseSha ?? `${params.sha}^`,
       headSha: params.sha,
       prompt: promptText
     }
@@ -426,6 +470,7 @@ async function execute(
     emit('system', `\n[aerie] error: ${message}\n`)
     finish('error', null, null)
     cleanup()
+    releaseSlot()
   }
 }
 

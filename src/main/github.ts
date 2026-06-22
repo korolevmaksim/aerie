@@ -314,6 +314,25 @@ export async function getPullRequest(
   }
 }
 
+/**
+ * The base-branch SHA of a PR, used to diff the WHOLE PR (merge-base..head)
+ * rather than only its head commit. Resolved authoritatively from GitHub in the
+ * main process — the renderer never supplies the diff range (integrity).
+ */
+export async function getPullRequestBaseSha(
+  accountId: number,
+  repoFullName: string,
+  pullNumber: number
+): Promise<string> {
+  const { octokit, owner, repo } = await octokitAndRepo(accountId, repoFullName)
+  const { data: pr } = await octokit.request('GET /repos/{owner}/{repo}/pulls/{pull_number}', {
+    owner,
+    repo,
+    pull_number: pullNumber
+  })
+  return pr.base.sha
+}
+
 // --- writes (Stage 6) — every caller is behind an in-app confirm -------------
 
 export async function createCommitComment(
