@@ -164,23 +164,22 @@ seed; discovery spawns inherit the token-stripped env (asserted); `listAgentInfo
 synchronous; an unknown installed coding CLI surfaces as a candidate; non-enumerable CLIs show
 honest free-text entry.
 
-#### M3 — Quality tools as deterministic agents *(paired with M4 — [correction])*
-- Detect linters/SAST/type-checkers/test-runners (semgrep, gitleaks, ruff, eslint, biome,
-  golangci-lint, clippy, shellcheck, hadolint, trivy, osv-scanner, bandit, tsc, mypy, pyright,
-  vitest/jest/pytest/`go test`/`cargo test`) and model them as the **same Agent contract**
-  (`kind:'tool'`) so they flow through the unchanged runner.
-- Contract extensions: `successExitCodes?` / `nonZeroExitIsFindings?` so findings ≠ error
-  status (today exit≠0 → `'error'`, `agentRunner.ts:419`; must not widen the killed/timeout path).
-- **Repo-signal gating**: language manifests + config files + changed-file extensions select
-  the relevant toolset (no semgrep on a docs-only diff).
-- **Enforce 100%-local**: `trufflehog --no-verification`, `trivy --skip-db-update --offline-scan`.
-- **[correction]:** pair/fuse with M4 so tool output is **structured from first capture** (raw
-  logs alone are not usable). **Effort:** M. **Depends on:** M1.
+#### M3 — Quality tools as deterministic agents  *(shipped)*
+- **Contract** (`agentConfig.ts`): `Agent` gains optional `kind:'agent'|'tool'` and
+  `successExitCodes`. The pure, tested `runStatusForExit` records a tool that exits non-zero ON
+  FINDINGS as `'done'`, not `'error'` (timeout still wins; default `[0]` is behavior-preserving).
+- **`toolCatalog.ts`** (`TOOL_CATALOG`, `kind:'tool'`): 5 verified, **100%-local, network-free,
+  fixed-tree-scan** tools — `gitleaks`, `ruff`, `eslint`, `biome`, `tsc` — surfaced via the same
+  `loadAgents` → `mergeAgents` detection (on PATH only, never persisted). Documentation-researched
+  + adversarially flag-checked; emit machine-readable findings to stdout.
+- **Deferred (researched):** `semgrep`/`osv-scanner` (network by default), `golangci-lint`/`mypy`/
+  `pyright` (flags/exit-codes failed verification), `shellcheck`/`hadolint` (need per-file targets
+  — lands with M4's changed-files). Repo-signal gating (auto-select per repo) + per-repo
+  `node_modules/.bin` detection are **M5/follow-up**; for now a tool is a pickable agent when on PATH.
 
-**Accept:** in a JS repo eslint/biome are offered and ruff/golangci-lint are not; a linter
-exiting non-zero on findings is `'done'` (findings present), not `'error'`; no quality tool makes
-a network call by default; a detected tool runs end-to-end through the existing runner with zero
-runner-path divergence.
+**Accept (met):** a linter exiting non-zero on findings is `'done'` not `'error'`
+(`runStatusForExit` unit tests); all 5 shipped tools are network-free; a detected tool flows
+through the unchanged runner (`kind:'tool'`, no runner-path divergence); catalog guard tests pass.
 
 ---
 

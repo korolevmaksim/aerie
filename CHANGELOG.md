@@ -36,6 +36,12 @@ same change set.
   now matches only regular files (not a same-named directory) and resolves Windows `.exe`/`.cmd`
   suffixes.
 
+- Local **code-quality tools as deterministic agents** (`toolCatalog.ts`, `kind:'tool'`):
+  `gitleaks`, `ruff`, `eslint`, `biome`, and `tsc` are auto-detected on PATH and run 100%
+  locally (no network), emitting machine-readable findings. The agent contract gains
+  `successExitCodes` so a linter that exits non-zero *with findings* is recorded `done`, not
+  `error`. (Foundation for grounding the LLM review on deterministic findings.)
+
 ### Changed
 
 - Removed the retired `dummy` agent from the documentation (`SPEC.md`, `PROMPT.md`,

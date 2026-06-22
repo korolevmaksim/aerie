@@ -27,6 +27,7 @@ import { log } from './logger'
 import { whichOnPath } from './pathLookup'
 import { activeCount, noteOutput, noteStatus, registerRun } from './runEvents'
 import { createSemaphore } from './semaphore'
+import { TOOL_CATALOG } from './toolCatalog'
 import {
   getAccount,
   getPrompt,
@@ -82,7 +83,7 @@ export function loadAgents(): Agent[] {
   const { persist, runtime } = mergeAgents({
     defaults: DEFAULT_AGENTS,
     userAgents,
-    catalog: AGENT_CATALOG,
+    catalog: [...AGENT_CATALOG, ...TOOL_CATALOG],
     retired: RETIRED_AGENT_IDS,
     isDetected: (a) => whichOnPath(a.detect ?? a.command) !== null
   })
