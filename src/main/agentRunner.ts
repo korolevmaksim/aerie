@@ -16,6 +16,7 @@ import {
   isAgent,
   mergeAgents,
   RETIRED_AGENT_IDS,
+  runStatusForExit,
   substitute,
   type Agent
 } from './agentConfig'
@@ -467,7 +468,11 @@ async function execute(
           return
         }
       }
-      const status: RunStatus = killedByTimeout ? 'killed' : code === 0 ? 'done' : 'error'
+      const status: RunStatus = runStatusForExit(
+        code ?? null,
+        killedByTimeout,
+        agent.successExitCodes
+      )
       emit('system', `\n[aerie] agent exited with code ${code ?? 'null'} → ${status}\n`)
       finalize(status, code ?? null, output)
     })

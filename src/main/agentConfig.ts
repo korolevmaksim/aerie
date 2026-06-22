@@ -26,6 +26,14 @@ export interface Agent {
   reasoningLevels?: string[]
   /** Binary to check for availability (defaults to `command`). */
   detect?: string
+  /** 'agent' (LLM CLI, default) or 'tool' (deterministic linter/SAST/type-checker). */
+  kind?: 'agent' | 'tool'
+  /**
+   * Exit codes that mean the run SUCCEEDED (findings may or may not be present), so a
+   * linter that exits non-zero when it finds issues is recorded 'done', not 'error'.
+   * Defaults to [0] when absent or empty.
+   */
+  successExitCodes?: number[]
 }
 
 const REVIEW_TIMEOUT = 900
@@ -388,6 +396,21 @@ export function mergeAgents(opts: {
   const persistIds = new Set(persist.map((a) => a.id))
   const detectedCatalog = opts.catalog.filter((a) => !persistIds.has(a.id) && opts.isDetected(a))
   return { persist, runtime: [...persist, ...detectedCatalog] }
+}
+
+/**
+ * Terminal status for an agent/tool process exit. `successExitCodes` (default [0])
+ * lets a deterministic tool that exits non-zero when it finds issues be recorded
+ * 'done' rather than 'error'. A timeout always wins. Pure so it is unit-testable.
+ */
+export function runStatusForExit(
+  code: number | null,
+  killedByTimeout: boolean,
+  successExitCodes?: number[]
+): 'done' | 'error' | 'killed' {
+  if (killedByTimeout) return 'killed'
+  const ok = successExitCodes && successExitCodes.length > 0 ? successExitCodes : [0]
+  return code !== null && ok.includes(code) ? 'done' : 'error'
 }
 
 /** Replaces {{placeholder}} tokens; unknown placeholders are left intact. */

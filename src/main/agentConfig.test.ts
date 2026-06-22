@@ -7,6 +7,7 @@ import {
   buildPrompt,
   isAgent,
   mergeAgents,
+  runStatusForExit,
   substitute,
   type Agent
 } from './agentConfig'
@@ -189,6 +190,33 @@ describe('mergeAgents', () => {
       isDetected: () => true
     })
     expect(runtime.filter((a) => a.id === 'aider')).toHaveLength(1)
+  })
+})
+
+describe('runStatusForExit', () => {
+  it('maps exit 0 to done and any other non-success code to error (agent default)', () => {
+    expect(runStatusForExit(0, false)).toBe('done')
+    expect(runStatusForExit(1, false)).toBe('error')
+    expect(runStatusForExit(2, false)).toBe('error')
+    expect(runStatusForExit(null, false)).toBe('error')
+  })
+
+  it('treats a tool that exits non-zero ON FINDINGS as done via successExitCodes', () => {
+    // e.g. a linter exits 1 when it finds issues — that is success-with-findings.
+    expect(runStatusForExit(1, false, [0, 1])).toBe('done')
+    expect(runStatusForExit(0, false, [0, 1])).toBe('done')
+    // a genuine tool error code is still an error.
+    expect(runStatusForExit(2, false, [0, 1])).toBe('error')
+  })
+
+  it('lets a timeout kill win over any exit code', () => {
+    expect(runStatusForExit(0, true)).toBe('killed')
+    expect(runStatusForExit(1, true, [0, 1])).toBe('killed')
+  })
+
+  it('falls back to [0] when successExitCodes is empty', () => {
+    expect(runStatusForExit(1, false, [])).toBe('error')
+    expect(runStatusForExit(0, false, [])).toBe('done')
   })
 })
 
