@@ -96,24 +96,34 @@ an update is delivered through the configured channel end-to-end (or a documente
 
 ### Phase 1 — Comprehensive tool autodiscovery *(the owner's #1, previously under-delivered — front-loaded and made visible immediately)*
 
-#### M1 — PATH-hardened broad agent-CLI detection + read-only Tools inventory
-- Materialize a **detection catalog** of many agent CLIs (beyond the 10) only when their
-  binary is on PATH, via `whichOnPath`, unioned into the single `loadAgents()` merge
-  chokepoint (`agentRunner.ts:74-82`), de-duped by id.
-- **Fix macOS GUI-launch truncated PATH** (login-shell PATH augmentation at startup +
-  probe `/opt/homebrew/bin`, `/usr/local/bin`, `~/.local/bin`, `~/.cargo/bin`, npm prefix,
-  `~/.bun/bin`) — today installed tools read as missing under launchd's PATH. Run it before
-  the first `listAgentInfos`. Windows `.exe`/`.cmd` suffix handling.
-- **[correction — ship the read-only Tools inventory HERE, not M12]:** a first-class view of
-  detected agents + tools (status, resolved path, version, model count, why-unavailable,
-  re-scan) so the autodiscovery work is **visible from the start**.
+#### M1 — macOS PATH fix + read-only Tools inventory  *(shipped)*
+The autodiscovery foundation, made correct and visible.
+- **Fix macOS GUI-launch truncated PATH** — an app launched from Finder/launchd inherits a
+  truncated PATH, so Homebrew/cargo/npm/bun tools read as missing. `augmentedPath` (pure,
+  electron-free, unit-tested in `osPath.ts`) appends well-known install dirs that exist and
+  aren't already present (existing entries keep precedence); wired at startup before any tool
+  lookup. (Windows unchanged; `.exe`/`.cmd` suffix handling deferred to M1b.)
+- **Read-only Tools inventory** (`ToolsPanel`, a new "Tools" tab) — lists every detected agent
+  CLI with available state, the resolved binary path (`AgentInfo.path`), and capability counts,
+  with a Re-scan button. Reuses the existing `runner.listAgents` IPC (no new surface). Makes
+  autodiscovery a first-class, visible artifact.
 
-**Components:** `main/agentCatalog.ts` (new), `main/agentRunner.ts`, `main/agentConfig.ts`,
-`main/index.ts` (PATH aug), renderer Tools inventory (read-only). **Effort:** L. **Depends on:** M0.
+**Components:** `main/osPath.ts` (+test), `main/agentRunner.ts` (`listAgentInfos` resolves path),
+`shared/types.ts` (`AgentInfo.path`), `main/index.ts` (PATH aug at startup),
+`renderer/components/ToolsPanel.tsx` + `App.tsx` (Tools tab). **Depends on:** M0.
 
-**Accept:** with aider/goose/qwen installed and launched from Finder, `listAgentInfos()`
-reports them `available:true`; a catalog CLI not in `DEFAULT_AGENTS` appears without hand-editing
-`agents.json`; de-dup holds on id collision; the Tools view lists every detected tool live.
+**Accept (met):** a tool installed via Homebrew is detected `available:true` in a Finder-launched
+app; the Tools tab lists installed vs not-installed agents with their resolved paths and re-scans live.
+
+#### M1b — Broad, data-driven agent-CLI + quality-tool catalog  *(next)*
+Materialize many more CLIs (aider, goose, llm, continue, crush, qwen, openhands, amp, copilot,
+cline, plandex, sgpt, …) and local quality tools from a detection catalog unioned into the
+`loadAgents()` chokepoint (`agentRunner.ts:74-82`), de-duped by id — with each tool's **verified**
+headless-review invocation researched live (not guessed), and the catalog **data-driven /
+externally refreshable** (see M2) so it doesn't rot. Windows `.exe`/`.cmd` suffixes, and tighten `whichOnPath` to verify a
+match is an executable regular file (not a same-named directory). (This is the
+breadth half of the original M1; split out so the PATH fix + inventory ship correct now and each
+per-CLI command is verified before it's added.) **Depends on:** M1.
 
 #### M2 — Genuinely data-driven, self-maintaining catalog + dynamic model discovery
 **[correction — this is THE fix so autodiscovery doesn't rot like before]:** a hardcoded

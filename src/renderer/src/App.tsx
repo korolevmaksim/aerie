@@ -5,8 +5,9 @@ import ReposPanel from './components/ReposPanel'
 import RepoView from './components/RepoView'
 import HistoryPanel from './components/HistoryPanel'
 import SettingsPanel from './components/SettingsPanel'
+import ToolsPanel from './components/ToolsPanel'
 
-type View = 'repos' | 'accounts' | 'history' | 'settings'
+type View = 'repos' | 'accounts' | 'history' | 'tools' | 'settings'
 
 function App(): React.JSX.Element {
   const [accounts, setAccounts] = useState<AccountSummary[]>([])
@@ -99,6 +100,12 @@ function App(): React.JSX.Element {
               History
             </button>
             <button
+              className={`tab ${view === 'tools' ? 'tab--active' : ''}`}
+              onClick={() => setView('tools')}
+            >
+              Tools
+            </button>
+            <button
               className={`tab ${view === 'accounts' ? 'tab--active' : ''}`}
               onClick={() => setView('accounts')}
             >
@@ -114,7 +121,9 @@ function App(): React.JSX.Element {
         </div>
       </header>
       <main className="content">
-        {view === 'accounts' || !reposReady ? (
+        {view === 'tools' ? (
+          <ToolsPanel />
+        ) : view === 'accounts' || !reposReady ? (
           <AccountsPanel onAccountsChanged={reloadAccounts} />
         ) : view === 'history' ? (
           <HistoryPanel

@@ -152,6 +152,8 @@ export interface AgentInfo {
   reasoningLevels: string[]
   /** Whether the agent's CLI is installed on this machine (autodiscovery). */
   available: boolean
+  /** Absolute path where the CLI was found on PATH, or null if not installed. */
+  path: string | null
 }
 
 /** A saved review preset: a quick agent + model + reasoning bundle. */

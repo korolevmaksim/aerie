@@ -1,4 +1,5 @@
 import { app, dialog, shell, BrowserWindow, safeStorage } from 'electron'
+import { existsSync } from 'fs'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
@@ -9,6 +10,7 @@ import { isInternalUrl, isSafeExternalUrl } from './security'
 import { log } from './logger'
 import { hasActiveRuns, killAllRuns } from './agentRunner'
 import { pruneAllWorktreesAndDiffs } from './gitEngine'
+import { augmentedPath } from './osPath'
 import { onChange, onFinished, onOutput, onStatus } from './runEvents'
 import { initTray, destroyTray } from './tray'
 import { notifyRunFinished, showCloseToTrayHint } from './notifications'
@@ -154,6 +156,15 @@ if (!app.requestSingleInstanceLock()) {
   })
 
   app.whenReady().then(() => {
+    // Fix the macOS GUI-launch truncated PATH so tools installed via Homebrew,
+    // cargo, npm, bun, etc. are detected (autodiscovery). Must run before any tool
+    // lookup (listAgentInfos) and before the agent runner spawns a CLI.
+    process.env.PATH = augmentedPath(process.env.PATH ?? '', {
+      home: app.getPath('home'),
+      platform: process.platform,
+      exists: existsSync
+    })
+
     electronApp.setAppUserModelId('com.aerie.app')
 
     app.on('browser-window-created', (_, window) => {

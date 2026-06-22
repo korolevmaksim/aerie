@@ -24,6 +24,11 @@ same change set.
   automation — can't spawn unbounded clone+agent processes; a queued run waits for a slot.
 - Reusable electron-free `whichOnPath`/`isOnPath` PATH lookup (`pathLookup.ts`), the seam
   for the upcoming broad tool autodiscovery, replacing the inline check in the runner.
+- macOS GUI-launch PATH fix (`osPath.ts`): the app augments PATH with well-known install
+  dirs at startup, so agent CLIs installed via Homebrew/cargo/npm/bun are detected in a
+  packaged (Finder-launched) build instead of reading as "not installed".
+- A read-only **Tools** tab inventorying the agent CLIs Aerie auto-detects on your machine
+  (status, resolved path, capabilities, re-scan); `AgentInfo` now carries the resolved `path`.
 
 ### Changed
 

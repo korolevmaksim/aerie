@@ -21,7 +21,7 @@ import { decryptToken } from './auth'
 import { getPullRequestBaseSha } from './github'
 import { cleanupCheckout, prepareCheckout, type PreparedCheckout } from './gitEngine'
 import { log } from './logger'
-import { isOnPath } from './pathLookup'
+import { whichOnPath } from './pathLookup'
 import { activeCount, noteOutput, noteStatus, registerRun } from './runEvents'
 import { createSemaphore } from './semaphore'
 import {
@@ -105,22 +105,21 @@ export function setAgentReasoning(id: string, reasoning: string): void {
   setSetting(`agent.reasoning:${id}`, reasoning)
 }
 
-/** True if the agent's CLI is installed (its `detect` binary is on PATH). */
-function isInstalled(agent: Agent): boolean {
-  return isOnPath(agent.detect ?? agent.command)
-}
-
-/** Renderer-facing agent list with resolved model/reasoning + availability. */
+/** Renderer-facing agent list with resolved model/reasoning + availability + path. */
 export function listAgentInfos(): AgentInfo[] {
-  return loadAgents().map((a) => ({
-    id: a.id,
-    label: a.label,
-    model: resolveModel(a),
-    models: a.models ?? [],
-    reasoning: resolveReasoning(a),
-    reasoningLevels: a.reasoningLevels ?? [],
-    available: isInstalled(a)
-  }))
+  return loadAgents().map((a) => {
+    const path = whichOnPath(a.detect ?? a.command)
+    return {
+      id: a.id,
+      label: a.label,
+      model: resolveModel(a),
+      models: a.models ?? [],
+      reasoning: resolveReasoning(a),
+      reasoningLevels: a.reasoningLevels ?? [],
+      available: path !== null,
+      path
+    }
+  })
 }
 
 const running = new Map<number, ChildProcess>()
