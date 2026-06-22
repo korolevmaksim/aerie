@@ -20,6 +20,14 @@ same change set.
 
 ### Added
 
+- **Automate view + pipeline list** (ROADMAP M13): a new **Automate** view (nav tab + command
+  palette) listing each pipeline with its repo, trigger, an enable/disable toggle, **live run status**
+  (via the `pipeline:status` push), and **Run now** / **Dry run** buttons with an inline result. An
+  empty state invites creating the first pipeline (the editor lands next). All actions go through the
+  already-gated `aerie.pipelines.*` IPC; the view holds no privileged logic. Pure status/label/outcome
+  helpers (`lib/automate.ts`) are unit-tested; the React view is build-smoke verified (visual +
+  screen-reader sign-off pending). The `pipelines:list` item now also carries the repo's `owner/name`
+  for display.
 - **Automate UI — form logic** (ROADMAP M13, scaffolding): a pure, unit-tested
   `renderer/src/lib/pipelineForm.ts` mapping the pipeline-editor fields ↔ a `PipelineDraft`
   (`formToDraft`/`draftToForm`) with client-side validation, ahead of the Automate view itself.

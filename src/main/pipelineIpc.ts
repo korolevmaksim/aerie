@@ -68,11 +68,12 @@ export function rowToRunSummary(row: PipelineRunRow): PipelineRunSummary {
  */
 export function toPipelineWithRuns(
   row: PipelineRow,
-  runs: PipelineRunRow[]
+  runs: PipelineRunRow[],
+  repoFullName: string | null
 ): PipelineWithRuns | null {
   const pipeline = parsePipelineRow(row)
   if (!pipeline) return null
-  return { pipeline, runs: runs.map(rowToRunSummary) }
+  return { pipeline, repoFullName, runs: runs.map(rowToRunSummary) }
 }
 
 /**

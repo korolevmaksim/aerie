@@ -129,19 +129,24 @@ describe('rowToRunSummary', () => {
 })
 
 describe('toPipelineWithRuns', () => {
-  it('parses the config and attaches the run summaries', () => {
-    const item = toPipelineWithRuns(pipelineRow(), [runRow()])
+  it('parses the config, attaches runs, and includes the repo full name', () => {
+    const item = toPipelineWithRuns(pipelineRow(), [runRow()], 'o/r')
     expect(item).not.toBeNull()
     expect(item!.pipeline.id).toBe(3)
     expect(item!.pipeline.name).toBe('CI')
+    expect(item!.repoFullName).toBe('o/r')
     expect(item!.runs).toHaveLength(1)
     expect(item!.runs[0].id).toBe(10)
   })
 
+  it('carries a null repo full name (repo gone)', () => {
+    expect(toPipelineWithRuns(pipelineRow(), [], null)!.repoFullName).toBeNull()
+  })
+
   it('returns null when the config is corrupt (skipped, not surfaced)', () => {
-    expect(toPipelineWithRuns(pipelineRow({ config: '{not json' }), [])).toBeNull()
+    expect(toPipelineWithRuns(pipelineRow({ config: '{not json' }), [], 'o/r')).toBeNull()
     expect(
-      toPipelineWithRuns(pipelineRow({ config: JSON.stringify({ name: 'x' }) }), [])
+      toPipelineWithRuns(pipelineRow({ config: JSON.stringify({ name: 'x' }) }), [], 'o/r')
     ).toBeNull()
   })
 })

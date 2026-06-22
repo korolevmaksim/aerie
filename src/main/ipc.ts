@@ -849,7 +849,13 @@ export function registerIpcHandlers(): void {
     if (!isTrustedSender(event)) return fail('Untrusted sender.')
     try {
       const items = listPipelineRows()
-        .map((row) => toPipelineWithRuns(row, listPipelineRunsForPipeline(row.id, 20)))
+        .map((row) =>
+          toPipelineWithRuns(
+            row,
+            listPipelineRunsForPipeline(row.id, 20),
+            getRepoById(row.repo_id)?.full_name ?? null
+          )
+        )
         .filter((x): x is PipelineWithRuns => x !== null)
       return ok(items)
     } catch (error) {
@@ -875,7 +881,11 @@ export function registerIpcHandlers(): void {
         }
         row = getPipelineRow(parsed.value.id)!
       }
-      const item = toPipelineWithRuns(row, listPipelineRunsForPipeline(row.id, 20))
+      const item = toPipelineWithRuns(
+        row,
+        listPipelineRunsForPipeline(row.id, 20),
+        getRepoById(row.repo_id)?.full_name ?? null
+      )
       return item ? ok(item) : fail('Saved pipeline could not be loaded.')
     } catch (error) {
       return fail(error instanceof Error ? error.message : 'Could not save the pipeline.')

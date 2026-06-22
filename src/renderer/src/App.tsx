@@ -9,8 +9,9 @@ import RepoView from './components/RepoView'
 import HistoryPanel from './components/HistoryPanel'
 import SettingsPanel from './components/SettingsPanel'
 import ToolsPanel from './components/ToolsPanel'
+import AutomatePanel from './components/AutomatePanel'
 
-type View = 'repos' | 'accounts' | 'history' | 'tools' | 'settings'
+type View = 'repos' | 'accounts' | 'history' | 'tools' | 'automate' | 'settings'
 
 function App(): React.JSX.Element {
   const [accounts, setAccounts] = useState<AccountSummary[]>([])
@@ -94,6 +95,7 @@ function App(): React.JSX.Element {
       { id: 'repos', title: 'Repos' },
       { id: 'history', title: 'History' },
       { id: 'tools', title: 'Tools' },
+      { id: 'automate', title: 'Automate' },
       { id: 'accounts', title: 'Accounts' },
       { id: 'settings', title: 'Settings' }
     ]
@@ -192,6 +194,13 @@ function App(): React.JSX.Element {
               Tools
             </button>
             <button
+              className={`tab ${view === 'automate' ? 'tab--active' : ''}`}
+              onClick={() => setView('automate')}
+              aria-current={view === 'automate' ? 'page' : undefined}
+            >
+              Automate
+            </button>
+            <button
               className={`tab ${view === 'accounts' ? 'tab--active' : ''}`}
               onClick={() => setView('accounts')}
               aria-current={view === 'accounts' ? 'page' : undefined}
@@ -211,6 +220,8 @@ function App(): React.JSX.Element {
       <main className="content">
         {view === 'tools' ? (
           <ToolsPanel />
+        ) : view === 'automate' ? (
+          <AutomatePanel onCreate={() => undefined} />
         ) : view === 'accounts' || !reposReady ? (
           <AccountsPanel onAccountsChanged={reloadAccounts} />
         ) : view === 'history' ? (

@@ -652,6 +652,17 @@ edit and a new pipeline defaults **disabled** (review-then-enable). Main still r
 12 — happy path, scope/action/guardrail mapping, round-trip, and every validation branch). Code review
 APPROVED. **Still next:** the Automate view + pipeline list (slice 2), the editor modal (slice 3), and the
 run-history/dry-run panel (slice 4).
+**Shipped (M13 slice 2 — Automate view + pipeline list):** a new `automate` view in `App.tsx` (nav tab
++ `Go to Automate` palette command) rendering `AutomatePanel.tsx` — lists each pipeline (name, repo
+`owner/name`, trigger badge, an enable/disable toggle via `aerie.pipelines.setEnabled`, a live status
+pill via `aerie.pipelines.onStatus`, and Run-now / Dry-run buttons via `aerie.pipelines.runNow/dryRun`
+with an inline `aria-live` result); an empty state with a Create button (the editor is slice 3, stub
+for now). Pure `renderer/lib/automate.ts` (`displayRunStatus` — a live push wins over listed history;
+`statusLabel`/`statusTone` [text label, never color-only]; `applyLiveChange`; `describeOutcome`) →
+vitest (10). The `pipelines:list` DTO gained `repoFullName` (resolved in the handler) for display. The
+React view is build-smoke verified — **HUMAN visual + screen-reader sign-off pending**. No new
+privileged surface (all calls go through the gated IPC) → code-review only. Code review APPROVED.
+**Still next:** the editor modal (slice 3) + the run-history/dry-run panel (slice 4).
 
 #### M14 — Command palette, structured launcher, console, IA polish & onboarding
 Command palette (Cmd+K) + keyboard model; structured 2-column run launcher (labeled fields replacing the

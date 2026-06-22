@@ -1230,3 +1230,65 @@ select.field {
   font-size: 0.85rem;
   white-space: pre-wrap;
 }
+
+/* --- Automate / pipelines (M13) --------------------------------------------- */
+.pipeline-list {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.pipeline {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.65rem 0.8rem;
+  background: var(--panel);
+}
+.pipeline__head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+.pipeline__name {
+  font-weight: 600;
+}
+.pipeline__repo {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.pipeline__trigger {
+  text-transform: lowercase;
+}
+.status-pill {
+  margin-left: auto;
+  font-size: 0.8rem;
+  padding: 0.1rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+.status-pill--ok {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+.status-pill--warn {
+  color: var(--mid);
+  border-color: var(--mid);
+}
+.status-pill--bad {
+  color: var(--low);
+  border-color: var(--low);
+}
+.pipeline__actions {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+  flex-wrap: wrap;
+}
+.pipeline__msg {
+  margin: 0.45rem 0 0;
+  font-size: 0.85rem;
+}

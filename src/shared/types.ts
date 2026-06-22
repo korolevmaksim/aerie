@@ -235,6 +235,8 @@ export interface PipelineRunSummary {
 /** A pipeline plus its recent run history (the `pipelines:list` item). */
 export interface PipelineWithRuns {
   pipeline: Pipeline
+  /** The pipeline repo's `owner/name` for display, or null if the repo is gone. */
+  repoFullName: string | null
   runs: PipelineRunSummary[]
 }
 
