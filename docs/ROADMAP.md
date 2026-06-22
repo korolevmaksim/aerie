@@ -115,15 +115,22 @@ The autodiscovery foundation, made correct and visible.
 **Accept (met):** a tool installed via Homebrew is detected `available:true` in a Finder-launched
 app; the Tools tab lists installed vs not-installed agents with their resolved paths and re-scans live.
 
-#### M1b — Broad, data-driven agent-CLI + quality-tool catalog  *(next)*
-Materialize many more CLIs (aider, goose, llm, continue, crush, qwen, openhands, amp, copilot,
-cline, plandex, sgpt, …) and local quality tools from a detection catalog unioned into the
-`loadAgents()` chokepoint (`agentRunner.ts:74-82`), de-duped by id — with each tool's **verified**
-headless-review invocation researched live (not guessed), and the catalog **data-driven /
-externally refreshable** (see M2) so it doesn't rot. Windows `.exe`/`.cmd` suffixes, and tighten `whichOnPath` to verify a
-match is an executable regular file (not a same-named directory). (This is the
-breadth half of the original M1; split out so the PATH fix + inventory ship correct now and each
-per-CLI command is verified before it's added.) **Depends on:** M1.
+#### M1b — Broad agent-CLI catalog  *(partly shipped)*
+A detection catalog (`agentCatalog.ts`) of agent CLIs BEYOND the verified 10, materialized into the
+`loadAgents()` chokepoint via the pure `mergeAgents` (surfaced only when the CLI is on PATH, never
+persisted, never shadowing a default/user id). `whichOnPath` hardened: regular-file match only (no
+same-named directory) + Windows `.exe`/`.cmd`/`.bat` suffixes.
+- **Shipped (2, documentation-researched + adversarially flag-checked):** `qwen` (Qwen Code —
+  enforced read-only `--approval-mode plan`, clean `--output-format text`) and `cn` (Continue CLI —
+  `-p --readonly --silent`).
+- **Deferred (researched, not added — reason):** `crush` (`crush run` blocks on interactive
+  tool-approval headless — no working skip flag, `--yolo` rejected on `run`, so it hangs to timeout);
+  `amp` (no per-run read-only + paid execute, low confidence); `aider` (no clean-output flag —
+  banner/cost mixed into stdout); `goose` (read-only `chat` mode disables all tools, can't open the
+  diff); `llm`/`sgpt` (non-agentic — can't read the file-based diff under the current contract);
+  `plandex`/`openhands`/`forge` (no headless review mode).
+- **Still TODO here:** local quality tools (linters/SAST/type-checkers) as `kind:'tool'` entries; and
+  M2 makes the catalog data-driven / externally refreshable so it doesn't rot. **Depends on:** M1.
 
 #### M2 — Genuinely data-driven, self-maintaining catalog + dynamic model discovery
 **[correction — this is THE fix so autodiscovery doesn't rot like before]:** a hardcoded

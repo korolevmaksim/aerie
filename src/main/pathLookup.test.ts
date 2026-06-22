@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { delimiter, join } from 'path'
 import { afterAll, describe, expect, it } from 'vitest'
@@ -39,5 +39,21 @@ describe('whichOnPath', () => {
   it('isOnPath mirrors whichOnPath as a boolean', () => {
     expect(isOnPath(binName, { PATH: dir })).toBe(true)
     expect(isOnPath(binName, { PATH: otherDir })).toBe(false)
+  })
+
+  it('does not match a same-named directory (regular files only)', () => {
+    const pdir = mkdtempSync(join(tmpdir(), 'aerie-path-'))
+    mkdirSync(join(pdir, 'toolname')) // a DIRECTORY named like a binary
+    expect(whichOnPath('toolname', { PATH: pdir })).toBeNull()
+    rmSync(pdir, { recursive: true, force: true })
+  })
+
+  it('resolves Windows PATHEXT suffixes for a bare name', () => {
+    const wdir = mkdtempSync(join(tmpdir(), 'aerie-path-'))
+    writeFileSync(join(wdir, 'mytool.cmd'), 'echo')
+    expect(whichOnPath('mytool', { PATH: wdir }, 'win32')).toBe(join(wdir, 'mytool.cmd'))
+    // POSIX (default) does not add suffixes, so the bare name misses.
+    expect(whichOnPath('mytool', { PATH: wdir }, 'linux')).toBeNull()
+    rmSync(wdir, { recursive: true, force: true })
   })
 })

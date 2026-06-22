@@ -366,6 +366,30 @@ export function isAgent(value: unknown): value is Agent {
   )
 }
 
+/**
+ * Merges the agent registry from its three sources into (a) the set to PERSIST to
+ * agents.json and (b) the set to surface at RUNTIME. Defaults are authoritative;
+ * user-added agents (ids not among the defaults, and not retired) are preserved.
+ * Catalog entries (the broad autodiscovery set) are surfaced ONLY when their CLI
+ * is detected on PATH and are NEVER persisted — so they vanish when the tool is
+ * uninstalled and never shadow a user's own same-id edit. Pure (PATH detection is
+ * injected) so it stays electron-free and unit-testable.
+ */
+export function mergeAgents(opts: {
+  defaults: Agent[]
+  userAgents: Agent[]
+  catalog: Agent[]
+  retired: ReadonlySet<string>
+  isDetected: (agent: Agent) => boolean
+}): { persist: Agent[]; runtime: Agent[] } {
+  const defaultIds = new Set(opts.defaults.map((a) => a.id))
+  const userAdded = opts.userAgents.filter((a) => !defaultIds.has(a.id) && !opts.retired.has(a.id))
+  const persist = [...opts.defaults, ...userAdded]
+  const persistIds = new Set(persist.map((a) => a.id))
+  const detectedCatalog = opts.catalog.filter((a) => !persistIds.has(a.id) && opts.isDetected(a))
+  return { persist, runtime: [...persist, ...detectedCatalog] }
+}
+
 /** Replaces {{placeholder}} tokens; unknown placeholders are left intact. */
 export function substitute(text: string, vars: Record<string, string>): string {
   return text.replace(/\{\{(\w+)\}\}/g, (whole, key: string) => (key in vars ? vars[key] : whole))

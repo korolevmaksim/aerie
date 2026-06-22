@@ -9,10 +9,12 @@ import type {
   RunStatus,
   StartRunParams
 } from '../shared/types'
+import { AGENT_CATALOG } from './agentCatalog'
 import {
   buildPrompt,
   DEFAULT_AGENTS,
   isAgent,
+  mergeAgents,
   RETIRED_AGENT_IDS,
   substitute,
   type Agent
@@ -74,15 +76,21 @@ export function loadAgents(): Agent[] {
       })
     }
   }
-  const defaultIds = new Set(DEFAULT_AGENTS.map((a) => a.id))
-  const userAdded = userAgents.filter((a) => !defaultIds.has(a.id) && !RETIRED_AGENT_IDS.has(a.id))
-  const merged = [...DEFAULT_AGENTS, ...userAdded]
+  // Persist defaults + user-added agents; ALSO surface catalog entries whose CLI is
+  // detected on PATH (runtime-only, never written back to agents.json).
+  const { persist, runtime } = mergeAgents({
+    defaults: DEFAULT_AGENTS,
+    userAgents,
+    catalog: AGENT_CATALOG,
+    retired: RETIRED_AGENT_IDS,
+    isDetected: (a) => whichOnPath(a.detect ?? a.command) !== null
+  })
   try {
-    writeFileSync(path, JSON.stringify(merged, null, 2), 'utf8')
+    writeFileSync(path, JSON.stringify(persist, null, 2), 'utf8')
   } catch {
     /* registry is best-effort to persist */
   }
-  return merged
+  return runtime
 }
 
 /** The currently selected model for an agent (settings override → template default). */

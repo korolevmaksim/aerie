@@ -29,6 +29,12 @@ same change set.
   packaged (Finder-launched) build instead of reading as "not installed".
 - A read-only **Tools** tab inventorying the agent CLIs Aerie auto-detects on your machine
   (status, resolved path, capabilities, re-scan); `AgentInfo` now carries the resolved `path`.
+- Broad agent-CLI detection catalog (`agentCatalog.ts`): CLIs beyond the verified 10 are
+  surfaced automatically when found on PATH (never persisted to `agents.json`, never shadowing
+  a default/user agent). Ships **qwen** (Qwen Code) and **cn** (Continue CLI),
+  documentation-researched and adversarially flag-checked (both enforced read-only). `whichOnPath`
+  now matches only regular files (not a same-named directory) and resolves Windows `.exe`/`.cmd`
+  suffixes.
 
 ### Changed
 

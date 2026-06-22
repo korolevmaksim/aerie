@@ -6,7 +6,9 @@ import {
   SEED_PROMPTS,
   buildPrompt,
   isAgent,
-  substitute
+  mergeAgents,
+  substitute,
+  type Agent
 } from './agentConfig'
 
 describe('substitute', () => {
@@ -123,6 +125,70 @@ describe('DEFAULT_AGENTS', () => {
     expect(vibe.args).toContain('-p')
     expect(vibe.args).toContain('--auto-approve')
     expect(vibe.reasoningLevels ?? []).toEqual([])
+  })
+})
+
+describe('mergeAgents', () => {
+  const mk = (id: string): Agent => ({
+    id,
+    label: id,
+    command: id,
+    args: [],
+    promptDelivery: 'arg',
+    promptPlaceholder: '{{prompt}}',
+    outputCapture: 'stdout',
+    outputFile: null,
+    timeoutSec: 600,
+    env: {}
+  })
+  const retired: ReadonlySet<string> = new Set(['dummy'])
+
+  it('persists defaults + user-added (pruning retired); surfaces detected catalog at runtime only', () => {
+    const { persist, runtime } = mergeAgents({
+      defaults: [mk('codex')],
+      userAgents: [mk('mine'), mk('dummy')],
+      catalog: [mk('aider'), mk('goose')],
+      retired,
+      isDetected: (a) => a.id === 'aider' // only aider installed
+    })
+    // dummy pruned; catalog NEVER persisted.
+    expect(persist.map((a) => a.id)).toEqual(['codex', 'mine'])
+    // goose isn't detected, so only aider is surfaced at runtime.
+    expect(runtime.map((a) => a.id)).toEqual(['codex', 'mine', 'aider'])
+  })
+
+  it('is behavior-preserving with an empty catalog (runtime equals persist)', () => {
+    const { persist, runtime } = mergeAgents({
+      defaults: [mk('codex'), mk('claude')],
+      userAgents: [mk('mine')],
+      catalog: [],
+      retired,
+      isDetected: () => true
+    })
+    expect(runtime).toEqual(persist)
+    expect(persist.map((a) => a.id)).toEqual(['codex', 'claude', 'mine'])
+  })
+
+  it('never persists a catalog entry even when detected', () => {
+    const { persist } = mergeAgents({
+      defaults: [mk('codex')],
+      userAgents: [],
+      catalog: [mk('qwen'), mk('cn')],
+      retired,
+      isDetected: () => true // both installed
+    })
+    expect(persist.map((a) => a.id)).toEqual(['codex'])
+  })
+
+  it('never lets a catalog entry shadow a default or user-added id', () => {
+    const { runtime } = mergeAgents({
+      defaults: [mk('codex')],
+      userAgents: [mk('aider')], // user already defined their own 'aider'
+      catalog: [mk('aider')],
+      retired,
+      isDetected: () => true
+    })
+    expect(runtime.filter((a) => a.id === 'aider')).toHaveLength(1)
   })
 })
 
