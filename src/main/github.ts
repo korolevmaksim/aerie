@@ -4,6 +4,7 @@ import type {
   CommitFile,
   CommitSummary,
   Paginated,
+  PollResult,
   PullRequestDetail,
   PullRequestSummary,
   RepoSummary,
@@ -11,12 +12,17 @@ import type {
 } from '../shared/types'
 import { createOctokit, decryptToken } from './auth'
 import { log } from './logger'
+import { nextPollDelayMs, parseRateLimit, type RateLimit } from './rateLimit'
 import {
   getAccount,
+  getCacheEntry,
   getEtag,
   listReposForAccount,
+  setCacheEntry,
   setEtag,
   syncReposForAccount,
+  touchWatchPolled,
+  upsertWatch,
   type NewRepo,
   type RepoRow
 } from './store'
@@ -134,6 +140,42 @@ export async function listRepos(
 
 const PAGE_SIZE = 30
 
+// Default poll cadence bounds (M8). The poller (M9a) may override per pipeline.
+const POLL_BASE_INTERVAL_MS = 60_000
+const POLL_MAX_INTERVAL_MS = 15 * 60_000
+
+/** The serialized body cached for a list page, replayed verbatim on a 304. */
+interface CachedPage<T> {
+  items: T[]
+  hasMore: boolean
+}
+
+/**
+ * Runs a conditional list request: sends the stored ETag, and on a 304 (which GitHub
+ * does NOT charge against the rate budget) replays the cached page. On 200 it caches
+ * the fresh page + ETag. `force` skips the conditional probe. Mirrors `listRepos`.
+ */
+async function conditionalListPage<T>(
+  cacheKey: string,
+  force: boolean,
+  fetchPage: (etag: string | undefined) => Promise<{ items: T[]; hasMore: boolean; etag?: string }>
+): Promise<Paginated<T> & { page: number }> {
+  const cached = force ? undefined : getCacheEntry(cacheKey)
+  try {
+    const { items, hasMore, etag } = await fetchPage(cached?.etag)
+    if (etag) {
+      setCacheEntry(cacheKey, etag, JSON.stringify({ items, hasMore }), new Date().toISOString())
+    }
+    return { items, hasMore, page: 0, fromCache: false }
+  } catch (error) {
+    if (hasStatus(error, 304) && cached?.payload) {
+      const body = JSON.parse(cached.payload) as CachedPage<T>
+      return { items: body.items, hasMore: body.hasMore, page: 0, fromCache: true }
+    }
+    throw error
+  }
+}
+
 async function octokitAndRepo(
   accountId: number,
   repoFullName: string
@@ -200,22 +242,32 @@ export async function listBranches(
 export async function listCommits(
   accountId: number,
   repoFullName: string,
-  options: { branch?: string; page?: number } = {}
+  options: { branch?: string; page?: number; force?: boolean } = {}
 ): Promise<Paginated<CommitSummary>> {
   const { octokit, owner, repo } = await octokitAndRepo(accountId, repoFullName)
   const page = options.page ?? 1
-  const res = await octokit.request('GET /repos/{owner}/{repo}/commits', {
-    owner,
-    repo,
-    per_page: PAGE_SIZE,
-    page,
-    ...(options.branch ? { sha: options.branch } : {})
-  })
-  return {
-    items: (res.data as RawCommitListItem[]).map(toCommitSummary),
-    page,
-    hasMore: hasNextPage(res.headers.link)
-  }
+  const branch = options.branch ?? ''
+  const cacheKey = `commits:${accountId}:${repoFullName}:${branch}:${page}`
+  const result = await conditionalListPage<CommitSummary>(
+    cacheKey,
+    options.force ?? false,
+    async (etag) => {
+      const res = await octokit.request('GET /repos/{owner}/{repo}/commits', {
+        owner,
+        repo,
+        per_page: PAGE_SIZE,
+        page,
+        ...(branch ? { sha: branch } : {}),
+        headers: etag ? { 'if-none-match': etag } : {}
+      })
+      return {
+        items: (res.data as RawCommitListItem[]).map(toCommitSummary),
+        hasMore: hasNextPage(res.headers.link),
+        etag: res.headers.etag
+      }
+    }
+  )
+  return { ...result, page }
 }
 
 export async function getCommit(
@@ -270,24 +322,33 @@ function toPrSummary(p: RawPullListItem): PullRequestSummary {
 export async function listPullRequests(
   accountId: number,
   repoFullName: string,
-  options: { page?: number } = {}
+  options: { page?: number; force?: boolean } = {}
 ): Promise<Paginated<PullRequestSummary>> {
   const { octokit, owner, repo } = await octokitAndRepo(accountId, repoFullName)
   const page = options.page ?? 1
-  const res = await octokit.request('GET /repos/{owner}/{repo}/pulls', {
-    owner,
-    repo,
-    state: 'open',
-    sort: 'updated',
-    direction: 'desc',
-    per_page: PAGE_SIZE,
-    page
-  })
-  return {
-    items: (res.data as RawPullListItem[]).map(toPrSummary),
-    page,
-    hasMore: hasNextPage(res.headers.link)
-  }
+  const cacheKey = `pulls:${accountId}:${repoFullName}:${page}`
+  const result = await conditionalListPage<PullRequestSummary>(
+    cacheKey,
+    options.force ?? false,
+    async (etag) => {
+      const res = await octokit.request('GET /repos/{owner}/{repo}/pulls', {
+        owner,
+        repo,
+        state: 'open',
+        sort: 'updated',
+        direction: 'desc',
+        per_page: PAGE_SIZE,
+        page,
+        headers: etag ? { 'if-none-match': etag } : {}
+      })
+      return {
+        items: (res.data as RawPullListItem[]).map(toPrSummary),
+        hasMore: hasNextPage(res.headers.link),
+        etag: res.headers.etag
+      }
+    }
+  )
+  return { ...result, page }
 }
 
 export async function getPullRequest(
@@ -331,6 +392,75 @@ export async function getPullRequestBaseSha(
     pull_number: pullNumber
   })
   return pr.base.sha
+}
+
+// --- automation polling (M8) -------------------------------------------------
+
+/**
+ * Cheaply checks whether a watched branch's head moved since the watch last *saw* a
+ * commit. Sends a conditional 1-item commit probe with the stored ETag: a 304 (free,
+ * not charged against the rate budget) replays the cached head SHA; a 200 reads the
+ * fresh head. `changed` is true when that head differs from `watch.last_seen_sha`
+ * (true on a brand-new watch — there's an unprocessed head). The poll only records
+ * `last_polled_at`; the caller advances `last_seen_sha` via `markWatchSeen` AFTER the
+ * delta is processed, so no commit is ever skipped. Returns the current rate budget
+ * and the rate-aware delay before the next poll.
+ *
+ * `branch` should be a concrete branch name (the M9a poller resolves the repo's
+ * default branch before watching it); an empty string falls back to the repo default
+ * for the probe — matching `listCommits` — and keys the watch on ''.
+ */
+export async function pollCommitHead(
+  accountId: number,
+  repoId: number,
+  repoFullName: string,
+  branch: string
+): Promise<PollResult> {
+  const { octokit, owner, repo } = await octokitAndRepo(accountId, repoFullName)
+  const watch = upsertWatch(repoId, 'commit', branch)
+  const cacheKey = `pollhead:${accountId}:${repoFullName}:${branch}`
+  const cached = getCacheEntry(cacheKey)
+  const now = new Date().toISOString()
+
+  let headSha: string | null = null
+  let fromCache = false
+  let rate: RateLimit = { remaining: null, limit: null, resetAt: null }
+  try {
+    const res = await octokit.request('GET /repos/{owner}/{repo}/commits', {
+      owner,
+      repo,
+      per_page: 1,
+      ...(branch ? { sha: branch } : {}),
+      headers: cached?.etag ? { 'if-none-match': cached.etag } : {}
+    })
+    headSha = (res.data as RawCommitListItem[])[0]?.sha ?? null
+    rate = parseRateLimit(res.headers as Record<string, unknown>)
+    if (res.headers.etag) {
+      setCacheEntry(cacheKey, res.headers.etag, JSON.stringify({ sha: headSha }), now)
+    }
+  } catch (error) {
+    if (hasStatus(error, 304) && cached?.payload) {
+      headSha = (JSON.parse(cached.payload) as { sha: string | null }).sha
+      fromCache = true
+      const headers = (error as { response?: { headers?: Record<string, unknown> } }).response
+        ?.headers
+      rate = parseRateLimit(headers)
+    } else {
+      throw error
+    }
+  }
+
+  touchWatchPolled(repoId, 'commit', branch, now)
+  const lastSeenSha = watch.last_seen_sha
+  const changed = headSha !== null && headSha !== lastSeenSha
+  const nextDelay = nextPollDelayMs({
+    rate,
+    nowMs: Date.now(),
+    baseIntervalMs: POLL_BASE_INTERVAL_MS,
+    maxIntervalMs: POLL_MAX_INTERVAL_MS
+  })
+  log.info('poll commit head', { repoId, branch, headSha, changed, fromCache })
+  return { headSha, lastSeenSha, changed, fromCache, rate, nextPollDelayMs: nextDelay }
 }
 
 // --- writes (Stage 6) — every caller is behind an in-app confirm -------------

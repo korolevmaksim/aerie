@@ -150,10 +150,13 @@ Adding Agy / Kimi / Claude Code = editing `agents.json`. No code change. Ever.
 ```
 accounts(id, label, kind['user'|'org'], login, token_blob, created_at)
 repos(id, account_id, full_name, default_branch, remote_url,
-      user_local_path, app_clone_path, last_synced_at, etag_cache)
+      user_local_path, app_clone_path, last_synced_at)
 runs(id, repo_id, ref_type['commit'|'pr'|'working-tree'], ref_id, head_sha, agent_id,
      status['queued'|'running'|'done'|'error'|'killed'],
      exit_code, started_at, finished_at, output_path, posted_url)
+http_cache(key, etag, payload, updated_at)   -- conditional-request (ETag) cache; payload
+                                             -- holds the body to replay on a 304 (M8)
+watches(id, repo_id, ref_type['commit'|'pr'], ref, last_seen_sha, last_polled_at)  -- M8
 settings(key, value)
 ```
 
@@ -167,6 +170,22 @@ settings(key, value)
 > a deliberate, gated extension of §4 (a mapped clone + an explicit working-tree review is
 > the consent), narrower than the `use_local_worktree` checkout mode. Grounding still
 > honours the `ui.groundReviews` opt-out. Findings noise-filtering (M6) applies identically.
+
+> **ETag-cached polling foundation (ROADMAP M8).** The automation engine needs to detect a
+> new commit/PR head cheaply. `listCommits`/`listPullRequests` now mirror `listRepos`' ETag
+> pattern: each list page is keyed in `http_cache` (`commits:`/`pulls:` namespace) with its
+> ETag + JSON body, sent back as `if-none-match`; a **304** (which GitHub does NOT charge
+> against the primary rate budget) replays the cached page (`Paginated.fromCache`). A new
+> `watches` row tracks the **last-seen head SHA** per repo ref (`ref` = branch for `'commit'`,
+> `pr:<n>` for `'pr'`). `pollCommitHead(account, repoId, repo, branch)` does a 1-item
+> conditional commit probe and returns a `PollResult` (`headSha`, `changed`, `fromCache`,
+> `rate`, `nextPollDelayMs`); `changed` is true only when the head differs from
+> `last_seen_sha` (true on a fresh watch). A bare poll records `last_polled_at` only — the
+> caller advances `last_seen_sha` via `markWatchSeen` **after** the delta is processed, so no
+> commit is skipped. `rateLimit.ts` (pure) turns the `x-ratelimit-*` headers into a backoff:
+> base cadence on a healthy budget, exponential as the budget shrinks, park-until-reset when
+> exhausted. No write path and no renderer surface — this is main-only plumbing the M9a poller
+> consumes. (The dedupe cache, triggers, and the auto-post actioner are M9a.)
 
 > **Cross-agent consensus (ROADMAP M8/M9).** `aggregateFindings` (M6) gained a `groupBy:
 > 'issue' | 'location'` option and a per-kept-finding `agreement` count. `'location'` groups by

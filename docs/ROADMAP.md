@@ -353,17 +353,32 @@ noise-filter (M6) apply identically; clear error when no local clone is mapped.
 
 ### Phase 4 — Automation engine *(manual → automated)*
 
-#### M8 — ETag-cached polling foundation
+#### M8 — ETag-cached polling foundation  *(shipped)*
 - Mirror the `listRepos` ETag pattern (`github.ts:104-130`) onto `listCommits`/`listPullRequests`
   (today none) reusing the `http_cache` table; 304 = free. Rate-limit-aware backoff reading
   `X-RateLimit-Remaining/Reset`. New `watches` state: last-seen head SHA / PR per watched repo.
   PR deltas use merge-base..head (consistent with M0).
 
-**Components:** `main/github.ts`, `main/store.ts`. **Effort:** M. **Depends on:** M0.
+**Shipped (M8):** `listCommits`/`listPullRequests` route through one `conditionalListPage`
+helper that sends `if-none-match` and replays the cached page body on a thrown 304
+(`Paginated.fromCache`), caching `{items,hasMore}`+ETag per `(account,repo,branch,page)` in the
+`http_cache.payload` column (migration **v13**). New `watches` table (UNIQUE per repo+ref_type+ref,
+FK→repos ON DELETE CASCADE) + store helpers (`getWatch`/`upsertWatch`/`touchWatchPolled`/
+`markWatchSeen`/`listWatchesForRepo`). `pollCommitHead(account, repoId, repo, branch)` does a
+1-item conditional probe → `PollResult` (`headSha`/`changed`/`fromCache`/`rate`/`nextPollDelayMs`);
+a bare poll records `last_polled_at` only — `last_seen_sha` advances via `markWatchSeen` AFTER the
+delta is processed (so no commit is skipped). Pure, unit-tested `rateLimit.ts`
+(`parseRateLimit`/`nextPollDelayMs`: base cadence → exponential backoff as the budget shrinks →
+park-until-reset when exhausted). Validation: vitest (`rateLimit.test.ts`), `smoke:watches` (real
+better-sqlite3 v13 migration + helpers), build smoke. Code review APPROVED. **No write path, no
+renderer surface** — the M9a poller consumes these primitives.
 
-**Accept:** a second `listCommits` within the window returns the 304-cached result and does not
-decrement the rate budget; low remaining → exponential backoff defers the next poll; a new commit is
-reported only when head SHA changes vs last-seen.
+**Components:** `main/github.ts`, `main/store.ts`, `main/rateLimit.ts` (new), `shared/types.ts`,
+`scripts/smoke-watches.cjs` (new). **Effort:** M. **Depends on:** M0.
+
+**Accept (met):** a second `listCommits` within the window returns the 304-cached result and does
+not decrement the rate budget; low remaining → exponential backoff defers the next poll; a new commit
+is reported only when head SHA changes vs last-seen.
 
 #### M9a — Pipeline engine core
 **Shipped (first slice — multi-agent fan-out):** `runner:startBatch` + the pure `batch.ts`

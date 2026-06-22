@@ -209,6 +209,29 @@ const MIGRATIONS: ReadonlyArray<(db: Database.Database) => void> = [
     if (Array.isArray(violations) && violations.length > 0) {
       throw new Error('v12 migration left dangling foreign keys')
     }
+  },
+  // v13 — automation polling foundation (M8): give the conditional-request cache an
+  // optional JSON payload (so commit/PR list pages can be served straight from a 304,
+  // not just repo rows), and add a `watches` table tracking the last-seen head SHA /
+  // PR head per watched repo ref. The poller (M9a) reads/advances these; M8 only lays
+  // the store + ETag plumbing. `ref` is the branch name for 'commit' watches and
+  // `pr:<number>` for 'pr' watches; last_seen_sha is advanced ONLY after a delta is
+  // processed (never on a bare poll), so no unprocessed commit is ever skipped.
+  (db) => {
+    db.exec(`
+      ALTER TABLE http_cache ADD COLUMN payload TEXT;
+
+      CREATE TABLE watches (
+        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+        repo_id        INTEGER NOT NULL REFERENCES repos(id) ON DELETE CASCADE,
+        ref_type       TEXT    NOT NULL CHECK (ref_type IN ('commit', 'pr')),
+        ref            TEXT    NOT NULL,
+        last_seen_sha  TEXT,
+        last_polled_at TEXT,
+        UNIQUE (repo_id, ref_type, ref)
+      );
+      CREATE INDEX idx_watches_repo ON watches (repo_id);
+    `)
   }
 ]
 
@@ -445,6 +468,97 @@ export function setEtag(key: string, etag: string, updatedAt: string): void {
        ON CONFLICT (key) DO UPDATE SET etag = excluded.etag, updated_at = excluded.updated_at`
     )
     .run(key, etag, updatedAt)
+}
+
+/** A cached conditional-GET response: its ETag plus the serialized body to replay on a 304. */
+export interface CacheEntry {
+  etag: string
+  payload: string | null
+}
+
+/** Reads a cached ETag + payload (M8 commit/PR list caching). Undefined if never stored. */
+export function getCacheEntry(key: string): CacheEntry | undefined {
+  return requireDb().prepare(`SELECT etag, payload FROM http_cache WHERE key = ?`).get(key) as
+    | CacheEntry
+    | undefined
+}
+
+/** Stores an ETag together with the JSON body to serve on the next 304 (M8). */
+export function setCacheEntry(key: string, etag: string, payload: string, updatedAt: string): void {
+  requireDb()
+    .prepare(
+      `INSERT INTO http_cache (key, etag, payload, updated_at) VALUES (?, ?, ?, ?)
+       ON CONFLICT (key) DO UPDATE SET
+         etag = excluded.etag, payload = excluded.payload, updated_at = excluded.updated_at`
+    )
+    .run(key, etag, payload, updatedAt)
+}
+
+// --- automation watches (M8) -------------------------------------------------
+// Tracks the last-seen head SHA / PR head per watched repo ref so the poller can
+// report a delta only when it actually changes. last_seen_sha advances exclusively
+// via markWatchSeen (after a delta is processed), never on a bare poll.
+
+export type WatchRefType = 'commit' | 'pr'
+
+export interface WatchRow {
+  id: number
+  repo_id: number
+  ref_type: WatchRefType
+  ref: string
+  last_seen_sha: string | null
+  last_polled_at: string | null
+}
+
+export function getWatch(repoId: number, refType: WatchRefType, ref: string): WatchRow | undefined {
+  return requireDb()
+    .prepare(`SELECT * FROM watches WHERE repo_id = ? AND ref_type = ? AND ref = ?`)
+    .get(repoId, refType, ref) as WatchRow | undefined
+}
+
+/** Creates the watch row if absent (idempotent); returns the current row. */
+export function upsertWatch(repoId: number, refType: WatchRefType, ref: string): WatchRow {
+  requireDb()
+    .prepare(
+      `INSERT INTO watches (repo_id, ref_type, ref) VALUES (?, ?, ?)
+       ON CONFLICT (repo_id, ref_type, ref) DO NOTHING`
+    )
+    .run(repoId, refType, ref)
+  return getWatch(repoId, refType, ref)!
+}
+
+/** Records that a poll happened (without consuming the delta — last_seen_sha untouched). */
+export function touchWatchPolled(
+  repoId: number,
+  refType: WatchRefType,
+  ref: string,
+  polledAt: string
+): void {
+  requireDb()
+    .prepare(`UPDATE watches SET last_polled_at = ? WHERE repo_id = ? AND ref_type = ? AND ref = ?`)
+    .run(polledAt, repoId, refType, ref)
+}
+
+/** Advances the last-seen head SHA after a delta has been processed (consumes it). */
+export function markWatchSeen(
+  repoId: number,
+  refType: WatchRefType,
+  ref: string,
+  sha: string,
+  polledAt: string
+): void {
+  requireDb()
+    .prepare(
+      `UPDATE watches SET last_seen_sha = ?, last_polled_at = ?
+       WHERE repo_id = ? AND ref_type = ? AND ref = ?`
+    )
+    .run(sha, polledAt, repoId, refType, ref)
+}
+
+export function listWatchesForRepo(repoId: number): WatchRow[] {
+  return requireDb()
+    .prepare(`SELECT * FROM watches WHERE repo_id = ? ORDER BY ref_type ASC, ref ASC`)
+    .all(repoId) as WatchRow[]
 }
 
 // --- agent runs (Stage 5) ----------------------------------------------------

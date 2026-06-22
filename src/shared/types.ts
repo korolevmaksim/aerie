@@ -112,6 +112,22 @@ export interface Paginated<T> {
   items: T[]
   page: number
   hasMore: boolean
+  /** True when served unchanged from the local cache (ETag 304 — ~0 rate cost). */
+  fromCache?: boolean
+}
+
+/**
+ * Result of a cheap conditional head-probe of a watched ref (M8 polling foundation).
+ * `changed` is true only when the current head SHA differs from the watch's last-seen
+ * SHA; `fromCache` marks a free 304 hit; `rate`/`nextPollDelayMs` pace the next poll.
+ */
+export interface PollResult {
+  headSha: string | null
+  lastSeenSha: string | null
+  changed: boolean
+  fromCache: boolean
+  rate: { remaining: number | null; limit: number | null; resetAt: number | null }
+  nextPollDelayMs: number
 }
 
 // --- repo mapping & git engine (Stage 4) -------------------------------------

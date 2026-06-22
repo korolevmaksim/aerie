@@ -20,6 +20,15 @@ same change set.
 
 ### Added
 
+- **ETag-cached polling foundation** for the upcoming automation engine (ROADMAP M8):
+  `listCommits`/`listPullRequests` now cache each page's body + ETag in `http_cache` and send
+  a conditional request, so an unchanged re-list returns from cache on a 304 (`fromCache`) at
+  ~0 rate cost (mirrors the repo-list cache). A new `watches` table tracks the last-seen head
+  SHA per repo ref, and `pollCommitHead` does a cheap 1-item conditional probe reporting whether
+  the head moved since it was last *processed* — never advancing the last-seen SHA on a bare
+  poll, so no commit is skipped. A pure, unit-tested rate-limit backoff (`rateLimit.ts`) widens
+  the poll cadence as the GitHub budget shrinks and parks until reset when exhausted. Main-only
+  plumbing — no GitHub writes, no renderer surface (migration v13; `smoke:watches`).
 - Concurrency cap on agent runs (`semaphore.ts`, default 3) so a burst — or future
   automation — can't spawn unbounded clone+agent processes; a queued run waits for a slot.
 - Reusable electron-free `whichOnPath`/`isOnPath` PATH lookup (`pathLookup.ts`), the seam
