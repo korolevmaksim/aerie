@@ -185,11 +185,21 @@ per-CLI enumerator roster is just a longer static list. Make it data-driven:
   entries stay author-trusted in `CANONICAL_SIGNATURES` (M12). The same parser is the chokepoint a
   user catalog and a signed-remote update will reuse — neither auto-trusted (trust is
   signature-keyed in the runner, not granted by `parseCatalog`).
-- **Still TODO (M2):** wire a **user catalog** (userData JSON) + the **signed-remote** update
-  through `parseCatalog` (untrusted → exec-consent, build entries from an explicit field allow-list
-  so no extra parsed keys ride along), generic unknown-CLI candidate probes
-  (`--version`/`--help`/config globs), the `configFile` discovery kind (qwen/cn/codex — codex's
-  `debug models` JSON is Experimental, deferred), and provenance layering.
+- **Shipped (M2 — user catalog slice 2):** an optional `userData/agentCatalog.json` (same
+  schema) is read in `loadAgents` and merged through the SAME `parseCatalog` chokepoint.
+  `toAgentTemplate` now rebuilds every parsed entry from an EXPLICIT field allow-list (drops
+  `__proto__`/`constructor`/unknown keys; copies optionals only when present so signatures stay
+  byte-identical; `cloneModelDiscovery` keeps only a valid `command` descriptor). `mergeCatalogs`
+  combines bundled + user with **bundled winning** on id collision; `parseUserCatalog` JSON-parses
+  the file string and never throws; `loadUserCatalog` no-ops on a missing/unreadable file. User
+  entries are NOT in `CANONICAL_SIGNATURES` → `needsConsent: true`, refused at the spawn boundary
+  and excluded from discovery probes (`SHIPPED_IDS`) until consented. Pure logic unit-tested (incl.
+  a no-prototype-pollution case + signature stability); the userData read is build-smoke verified.
+- **Still TODO (M2):** the **signed-remote** catalog update through `parseCatalog` (add a read
+  size cap + signature verification before trust), generic unknown-CLI candidate probes
+  (`--version`/`--help`/config globs → non-runnable "candidate" in the Tools UI), the `configFile`
+  discovery kind (qwen/cn/codex — codex's `debug models` JSON is Experimental, deferred; extend
+  `cloneModelDiscovery`'s allow-list when it lands), and provenance layering.
 
 **Components:** `main/agentDiscovery.ts` (new), catalog files, `main/agentRunner.ts`,
 `shared/types.ts` (AgentInfo `version`/`modelsSource`), `shared/channels.ts` + `main/ipc.ts`

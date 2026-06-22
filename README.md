@@ -109,6 +109,14 @@ Each template was tuned for a **clean, headless, read-only** review invocation (
 final review is captured — no chat UI or tool-call transcript in the posted comment). You
 only see and can run the agents whose CLI is actually installed on your PATH.
 
+Beyond those, Aerie ships a broader **detection catalog** of agent-CLI templates that appear
+automatically when their binary is on your PATH (and vanish when it isn't). You can extend it
+with your own without touching `agents.json` by dropping an `agentCatalog.json` (a
+`{ "schemaVersion": 1, "agents": [ …templates… ] }` file) into the app's user-data dir; those
+entries likewise surface only when detected. Because they aren't author-shipped, a catalog
+entry must be **explicitly approved once** (the same exec-consent prompt as a user-edited
+agent) before it can run.
+
 ## Requirements
 
 - **Node.js ≥ 20.19** (CI runs on Node 22; see `.nvmrc`).

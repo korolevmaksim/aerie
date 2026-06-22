@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import bundledCatalog from './data/agentCatalog.json'
-import { CATALOG_SCHEMA_VERSION, isCatalogEntry, parseCatalog } from './catalogSchema'
+import {
+  CATALOG_SCHEMA_VERSION,
+  isCatalogEntry,
+  mergeCatalogs,
+  parseCatalog,
+  parseUserCatalog,
+  toAgentTemplate
+} from './catalogSchema'
 import { isAgent, type Agent } from './agentConfig'
+import { agentSignature } from './execConsent'
 
 // A minimal, structurally valid catalog entry (an Agent template carrying a detect binary).
 const entry = (over: Partial<Agent> = {}): Agent => ({
@@ -114,5 +122,91 @@ describe('parseCatalog', () => {
     const res = parseCatalog(catalog([noDetect]))
     expect(res.entries).toEqual([])
     expect(res.errors[0]).toMatch(/entry 0 is invalid/)
+  })
+
+  it('strips extra (attacker-controlled) keys from each entry via the allow-list', () => {
+    const dirty = { ...entry({ id: 'x' }), evil: 'rm -rf', extra: 42 }
+    const res = parseCatalog(catalog([dirty]))
+    expect(res.entries).toHaveLength(1)
+    expect(res.entries[0]).not.toHaveProperty('evil')
+    expect(res.entries[0]).not.toHaveProperty('extra')
+    expect(res.entries[0].command).toBe('qwen')
+  })
+
+  it('does not pollute Object.prototype when an entry carries a __proto__ key', () => {
+    const res = parseCatalog(JSON.parse('{"schemaVersion":1,"agents":[]}'))
+    // A crafted payload with a literal __proto__ key parses without leaking onto the prototype.
+    parseCatalog(JSON.parse('{"schemaVersion":1,"agents":[],"__proto__":{"polluted":true}}'))
+    expect(res.errors).toEqual([])
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined()
+  })
+})
+
+describe('toAgentTemplate (allow-list reconstruction)', () => {
+  it('keeps only known contract fields', () => {
+    const out = toAgentTemplate({ ...entry(), evil: true } as unknown as Agent)
+    expect(out).not.toHaveProperty('evil')
+    expect(isAgent(out)).toBe(true)
+  })
+
+  it('omits absent optional fields (cn-style: no model key) and preserves the exec signature', () => {
+    const noModel = entry({ detect: 'cn' }) // entry() has no `model` by default
+    const out = toAgentTemplate(noModel)
+    expect(Object.prototype.hasOwnProperty.call(out, 'model')).toBe(false)
+    // The reconstruction must be byte-identical to the source for the signed material
+    // (command/args/env/modelDiscovery.argv) — otherwise provenance trust would break.
+    expect(agentSignature(out)).toBe(agentSignature(noModel))
+  })
+
+  it('shallow-copies arrays/maps so the template shares no mutable structure', () => {
+    const src = entry({ args: ['--prompt', '{{prompt}}'], env: { A: '1' } })
+    const out = toAgentTemplate(src)
+    out.args.push('x')
+    out.env.B = '2'
+    expect(src.args).toEqual(['--prompt', '{{prompt}}'])
+    expect(src.env).toEqual({ A: '1' })
+  })
+
+  it('clones a valid command modelDiscovery and drops a malformed one', () => {
+    const good = toAgentTemplate(
+      entry({ modelDiscovery: { kind: 'command', argv: ['m', 'ls'], format: 'lines' } })
+    )
+    expect(good.modelDiscovery).toEqual({ kind: 'command', argv: ['m', 'ls'], format: 'lines' })
+    const bad = toAgentTemplate(
+      entry({ modelDiscovery: { kind: 'configFile', path: '/x' } as never })
+    )
+    expect(bad.modelDiscovery).toBeUndefined()
+  })
+})
+
+describe('parseUserCatalog', () => {
+  it('parses a valid catalog file string', () => {
+    const res = parseUserCatalog(JSON.stringify(catalog([entry({ id: 'mine' })])))
+    expect(res.errors).toEqual([])
+    expect(res.entries.map((a) => a.id)).toEqual(['mine'])
+  })
+
+  it('returns an error (never throws) on invalid JSON', () => {
+    const res = parseUserCatalog('{ not json')
+    expect(res.entries).toEqual([])
+    expect(res.errors[0]).toMatch(/not valid JSON/)
+  })
+})
+
+describe('mergeCatalogs (bundled wins)', () => {
+  const bundled = [entry({ id: 'qwen' }), entry({ id: 'cn' })]
+
+  it('drops a user entry that collides with a bundled id (trusted shipped entry survives)', () => {
+    const user = [entry({ id: 'qwen', label: 'Evil Qwen', command: 'evil' }), entry({ id: 'new' })]
+    const merged = mergeCatalogs(bundled, user)
+    expect(merged.map((a) => a.id)).toEqual(['qwen', 'cn', 'new'])
+    expect(merged.find((a) => a.id === 'qwen')?.command).toBe('qwen') // bundled, not 'evil'
+  })
+
+  it('appends non-colliding user entries and yields unique ids', () => {
+    const merged = mergeCatalogs(bundled, [entry({ id: 'a' }), entry({ id: 'b' })])
+    const ids = merged.map((a) => a.id)
+    expect(ids).toEqual(['qwen', 'cn', 'a', 'b'])
+    expect(new Set(ids).size).toBe(ids.length)
   })
 })

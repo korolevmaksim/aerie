@@ -11,6 +11,21 @@ same change set.
 
 ## [Unreleased]
 
+### Added
+
+- **User agent-CLI catalog** (ROADMAP M2): drop an `agentCatalog.json`
+  (`{ "schemaVersion": 1, "agents": [ … ] }`) into the app's user-data dir to add agent-CLI
+  templates as DATA, without editing `agents.json`. Parsed through the same
+  `parseCatalog` chokepoint as the bundled catalog: surfaced only when the entry's `detect`
+  binary is on PATH, never persisted, never shadowing a default/user-added id, and — since the
+  entry isn't author-shipped — **not** auto-trusted: it requires the same one-time exec-consent
+  as a user-edited agent before it can run (its model-discovery probe is likewise gated off).
+  Bundled entries win on any id collision, so a user catalog can't shadow a trusted shipped id.
+  Each parsed entry is rebuilt from an explicit field allow-list, so no extra keys
+  (`__proto__`/`constructor`/unknown) from an untrusted file ride along. Pure parse / allow-list
+  / merge logic is unit-tested (incl. a no-prototype-pollution case); the user-data read is
+  build-smoke verified.
+
 ### Changed
 
 - **Agent-CLI catalog is now data-driven** (ROADMAP M2): the broad autodiscovery catalog

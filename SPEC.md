@@ -154,11 +154,21 @@ bundled, schema-versioned JSON (`main/data/agentCatalog.json` — `schemaVersion
 by a pure, electron-free loader (`main/catalogSchema.ts` — `parseCatalog` / `isCatalogEntry`).
 `parseCatalog` rejects a wrong schema version, a non-array `agents`, a malformed entry, a
 duplicate id, or an entry without `detect`, collecting errors and **never throwing** (one bad
-entry can't sink agent loading). The same validator is the single chokepoint a future **user
-catalog** and **signed-remote update** will reuse. **Trust is provenance-keyed, not granted by
-validation**: only entries whose exec signature is in `CANONICAL_SIGNATURES` (the
-author-shipped bundled catalog) run without exec-consent (§4, M12); a user/remote-catalog entry
-is subject to the same consent gate as a user-authored agent.
+entry can't sink agent loading), and rebuilds each surviving entry from an explicit field
+allow-list (`toAgentTemplate`) so no extra keys from an untrusted file survive. The same
+validator is the single chokepoint the **user catalog** (and a future **signed-remote update**)
+reuses. **Trust is provenance-keyed, not granted by validation**: only entries whose exec
+signature is in `CANONICAL_SIGNATURES` (the author-shipped bundled catalog) run without
+exec-consent (§4, M12); a user/remote-catalog entry is subject to the same consent gate as a
+user-authored agent.
+
+The **user catalog** is an optional `userData/agentCatalog.json` (same schema) read in
+`loadAgents`: its entries are combined with the bundled catalog by `mergeCatalogs` (**bundled
+wins** on an id collision, so an untrusted entry can never shadow a trusted shipped id), then
+flow through the normal `mergeAgents` path — surfaced only when detected, never persisted. The
+read is wrapped so a missing/unreadable/corrupt file is a clean no-op, never crashing agent
+loading. (A size cap on the read is deferred to the signed-remote-update slice, where the input
+is no longer a local user-owned file.)
 
 ## 8. Data model (SQLite)
 

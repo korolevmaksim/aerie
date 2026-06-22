@@ -16,6 +16,7 @@ import type {
 } from '../shared/types'
 import { assessReviewQuality } from '../shared/quality'
 import { AGENT_CATALOG } from './agentCatalog'
+import { mergeCatalogs, parseUserCatalog } from './catalogSchema'
 import { discoverAllModels, overlayModels } from './agentDiscovery'
 import { aggregateFindings } from './aggregate'
 import { planBatch } from './batch'
@@ -88,6 +89,41 @@ function agentsPath(): string {
   return join(app.getPath('userData'), 'agents.json')
 }
 
+/**
+ * Optional USER catalog (ROADMAP M2): a `userData/agentCatalog.json` with the same
+ * schema-versioned shape as the bundled catalog, letting a power user add an agent-CLI
+ * template as DATA without editing `agents.json`. Read through the SAME `parseUserCatalog`
+ * chokepoint (validated + allow-list-rebuilt + never-throws). These entries are NOT
+ * author-shipped, so their ids are NOT in `CANONICAL_SIGNATURES` — they surface only when
+ * detected on PATH (via mergeAgents), are never persisted, and still require M12 exec-consent
+ * before they can run.
+ */
+function userCatalogPath(): string {
+  return join(app.getPath('userData'), 'agentCatalog.json')
+}
+
+function loadUserCatalog(): Agent[] {
+  const path = userCatalogPath()
+  if (!existsSync(path)) return []
+  let raw: string
+  try {
+    raw = readFileSync(path, 'utf8')
+  } catch (e) {
+    // A present-but-unreadable file (permissions / I/O race) must not crash agent loading.
+    log.warn('agentCatalog.json (user catalog) could not be read — skipping', {
+      error: e instanceof Error ? e.message : String(e)
+    })
+    return []
+  }
+  const parsed = parseUserCatalog(raw)
+  if (parsed.errors.length > 0) {
+    log.warn('agentCatalog.json (user catalog) had invalid entries — they were skipped', {
+      errors: parsed.errors.join('; ')
+    })
+  }
+  return parsed.entries
+}
+
 // Canonical exec signature per AUTHOR-SHIPPED id (default templates + catalog + tools).
 const CANONICAL_SIGNATURES: ReadonlyMap<string, string> = new Map(
   [...DEFAULT_AGENTS, ...AGENT_CATALOG, ...TOOL_CATALOG].map((a) => [a.id, agentSignature(a)])
@@ -135,11 +171,14 @@ export function loadAgents(): Agent[] {
     }
   }
   // Persist defaults + user-added agents; ALSO surface catalog entries whose CLI is
-  // detected on PATH (runtime-only, never written back to agents.json).
+  // detected on PATH (runtime-only, never written back to agents.json). The catalog is the
+  // author-shipped bundled set PLUS an optional user catalog, with bundled winning on any id
+  // collision (so an untrusted user entry can never shadow a trusted shipped id).
+  const catalog = mergeCatalogs([...AGENT_CATALOG, ...TOOL_CATALOG], loadUserCatalog())
   const { persist, runtime } = mergeAgents({
     defaults: DEFAULT_AGENTS,
     userAgents,
-    catalog: [...AGENT_CATALOG, ...TOOL_CATALOG],
+    catalog,
     retired: RETIRED_AGENT_IDS,
     isDetected: (a) => whichOnPath(a.detect ?? a.command) !== null
   })
