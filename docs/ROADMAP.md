@@ -395,6 +395,20 @@ table (a batch = runs sharing repo+sha+ref). Code + security review APPROVED.
 to `.out`/the posted comment and persists the agent's findings (the M-Q gate runs on the prose).
 New `runner:findings` IPC + a compact severity-tagged findings list under each review. This is the
 **structured-output dependency** the fan-out flagged.
+**Shipped (M9a foundation slice — model + persistence):** the pipeline data model + pure core
+logic + the SQLite persistence, with the security crux landed and reviewed in isolation before any
+live engine wires it. `shared/types.ts`: `Pipeline`/`PipelineDraft`/`PipelineStep`/`PipelineScope`/
+`PipelineAction`/`PipelineGuardrails`/`PipelineRunSummary`. Pure, unit-tested `main/pipelineModel.ts`:
+`isPipelineDraft` (validate before the engine), `matchesScope` (branch/label/author/path/draft/
+maxCommits — absent = wildcard), `pipelineConfigHash` + `dedupeKey` (finished-run dedupe so the poller
+never re-runs identical work), and the **auto-post gate** `mayAutoPost`/`assertMayPost`/
+`effectiveAction` (a write needs `kind==='post' && autoPost===true`; a disabled post degrades to
+`stage`, never posts silently). `store.ts` migration **v14**: `pipelines` (config JSON + promoted
+`enabled`/`action_kind`/`auto_post` columns) + `pipeline_runs` (indexed `dedupe_key`, `posted` flag) +
+CRUD/dedupe helpers + `reconcileInterruptedPipelineRuns` (crash recovery that never advances watch
+state past an unprocessed delta). Validation: vitest (`pipelineModel.test.ts`, 15) + `smoke:pipelines`
+(real better-sqlite3 v14 migration, CRUD, dedupe, crash recovery, CASCADE) + build smoke. Code +
+security review APPROVED. **No engine/poller/IPC yet** — next slices.
 **Shipped (cross-agent consensus):** `aggregateFindings` gained `groupBy:'issue'|'location'` + a
 per-finding `agreement` count; `'location'` (file+line) is the robust cross-agent mode (agents
 phrase differently). `runner:consensus({runIds, consensusMin, minSeverity, groupBy})` aggregates a

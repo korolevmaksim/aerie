@@ -48,6 +48,7 @@
     "smoke:findings": "npm run build && electron scripts/smoke-findings.cjs",
     "smoke:migration": "electron scripts/smoke-migration-v12.cjs",
     "smoke:watches": "electron scripts/smoke-watches.cjs",
+    "smoke:pipelines": "electron scripts/smoke-pipelines.cjs",
     "postinstall": "electron-rebuild -f -w better-sqlite3",
     "build:unpack": "npm run build && electron-builder --dir",
     "build:mac": "electron-vite build && electron-builder --mac"

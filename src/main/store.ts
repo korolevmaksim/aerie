@@ -1,7 +1,14 @@
 import { join } from 'path'
 import { app } from 'electron'
 import Database from 'better-sqlite3'
-import type { AccountKind, RefType } from '../shared/types'
+import type {
+  AccountKind,
+  PipelineActionKind,
+  PipelineDraft,
+  PipelineRunStatus,
+  PipelineTrigger,
+  RefType
+} from '../shared/types'
 import {
   DEFAULT_REVIEW_INSTRUCTIONS,
   LEGACY_DEFAULT_REVIEW_INSTRUCTIONS,
@@ -232,6 +239,50 @@ const MIGRATIONS: ReadonlyArray<(db: Database.Database) => void> = [
       );
       CREATE INDEX idx_watches_repo ON watches (repo_id);
     `)
+  },
+  // v14 — automation pipelines (M9a): a `pipelines` config table (per repo) and a
+  // `pipeline_runs` execution-history table. The full authored config lives as JSON
+  // in `pipelines.config`; a few columns are PROMOTED for querying + defense-in-depth:
+  // `enabled` (the poller only runs enabled rows) and `auto_post` (a hard opt-in — the
+  // engine asserts it in code AND can scope writes at the SQL layer). `pipeline_runs`
+  // carries the `dedupe_key` (indexed) so the poller never re-runs identical work, and
+  // `posted` flags the runs that actually wrote to GitHub.
+  (db) => {
+    db.exec(`
+      CREATE TABLE pipelines (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        repo_id     INTEGER NOT NULL REFERENCES repos(id) ON DELETE CASCADE,
+        name        TEXT    NOT NULL,
+        trigger     TEXT    NOT NULL CHECK (trigger IN ('commit','pr','schedule','manual')),
+        enabled     INTEGER NOT NULL DEFAULT 0 CHECK (enabled IN (0, 1)),
+        action_kind TEXT    NOT NULL CHECK (action_kind IN ('notify','stage','post')),
+        auto_post   INTEGER NOT NULL DEFAULT 0 CHECK (auto_post IN (0, 1)),
+        config      TEXT    NOT NULL,
+        created_at  TEXT    NOT NULL,
+        updated_at  TEXT    NOT NULL,
+        -- Belt-and-suspenders: a row can carry auto_post=1 ONLY when it is a 'post'
+        -- action, so the DB itself can never hold an "auto-post a non-post" config.
+        CHECK (auto_post = 0 OR action_kind = 'post')
+      );
+      CREATE INDEX idx_pipelines_repo ON pipelines (repo_id);
+
+      CREATE TABLE pipeline_runs (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        pipeline_id INTEGER NOT NULL REFERENCES pipelines(id) ON DELETE CASCADE,
+        trigger     TEXT    NOT NULL CHECK (trigger IN ('commit','pr','schedule','manual')),
+        ref_type    TEXT    NOT NULL CHECK (ref_type IN ('commit','pr','working-tree')),
+        ref         TEXT    NOT NULL,
+        head_sha    TEXT    NOT NULL,
+        status      TEXT    NOT NULL CHECK (status IN ('pending','running','done','error','skipped')),
+        action      TEXT    NOT NULL CHECK (action IN ('notify','stage','post')),
+        posted      INTEGER NOT NULL DEFAULT 0,
+        dedupe_key  TEXT    NOT NULL,
+        started_at  TEXT    NOT NULL,
+        finished_at TEXT
+      );
+      CREATE INDEX idx_pipeline_runs_pipeline ON pipeline_runs (pipeline_id);
+      CREATE INDEX idx_pipeline_runs_dedupe ON pipeline_runs (dedupe_key);
+    `)
   }
 ]
 
@@ -269,6 +320,7 @@ export function initStore(dbPath = join(app.getPath('userData'), 'aerie.db')): D
   migrate(database)
   db = database
   reconcileInterruptedRuns()
+  reconcileInterruptedPipelineRuns()
   return db
 }
 
@@ -281,6 +333,21 @@ export function reconcileInterruptedRuns(): number {
   return requireDb()
     .prepare(
       `UPDATE runs SET status = 'error', finished_at = ? WHERE status IN ('running','queued')`
+    )
+    .run(new Date().toISOString()).changes
+}
+
+/**
+ * Pipeline-run crash recovery (M9a): on startup no pipeline run can still be live, so
+ * any row left 'pending'/'running' was interrupted (crash/quit) — mark it 'error'. This
+ * does NOT touch `watches.last_seen_sha`, so an interrupted delta stays unprocessed and
+ * the poller re-detects it (no delta is skipped past an unfinished run).
+ */
+export function reconcileInterruptedPipelineRuns(): number {
+  return requireDb()
+    .prepare(
+      `UPDATE pipeline_runs SET status = 'error', finished_at = ?
+       WHERE status IN ('pending','running')`
     )
     .run(new Date().toISOString()).changes
 }
@@ -833,4 +900,190 @@ export function updatePrompt(id: number, patch: { name: string; body: string }):
 
 export function deletePrompt(id: number): boolean {
   return requireDb().prepare(`DELETE FROM prompts WHERE id = ?`).run(id).changes > 0
+}
+
+// --- automation pipelines (M9a) ----------------------------------------------
+// The authored config is the source of truth, persisted as JSON in `config`. The
+// promoted columns (enabled, action_kind, auto_post) are DERIVED from the draft on
+// every write and used for cheap querying + a SQL-level auto-post guard; never set
+// them out of sync with the JSON. Row→Pipeline reconstruction lives in the engine
+// layer (it parses `config` and overlays the row id).
+
+export interface PipelineRow {
+  id: number
+  repo_id: number
+  name: string
+  trigger: PipelineTrigger
+  enabled: number
+  action_kind: PipelineActionKind
+  auto_post: number
+  config: string
+  created_at: string
+  updated_at: string
+}
+
+export function insertPipeline(draft: PipelineDraft, now: string): PipelineRow {
+  const result = requireDb()
+    .prepare(
+      `INSERT INTO pipelines (repo_id, name, trigger, enabled, action_kind, auto_post, config,
+                              created_at, updated_at)
+       VALUES (@repoId, @name, @trigger, @enabled, @actionKind, @autoPost, @config, @now, @now)`
+    )
+    .run({
+      repoId: draft.repoId,
+      name: draft.name,
+      trigger: draft.trigger,
+      enabled: draft.enabled ? 1 : 0,
+      actionKind: draft.action.kind,
+      autoPost: draft.action.autoPost ? 1 : 0,
+      config: JSON.stringify(draft),
+      now
+    })
+  return getPipelineRow(Number(result.lastInsertRowid))!
+}
+
+/** Replaces a pipeline's config (and the derived promoted columns). */
+export function updatePipeline(id: number, draft: PipelineDraft, now: string): boolean {
+  return (
+    requireDb()
+      .prepare(
+        `UPDATE pipelines SET
+           name = @name, trigger = @trigger, enabled = @enabled, action_kind = @actionKind,
+           auto_post = @autoPost, config = @config, updated_at = @now
+         WHERE id = @id`
+      )
+      .run({
+        id,
+        name: draft.name,
+        trigger: draft.trigger,
+        enabled: draft.enabled ? 1 : 0,
+        actionKind: draft.action.kind,
+        autoPost: draft.action.autoPost ? 1 : 0,
+        config: JSON.stringify(draft),
+        now
+      }).changes > 0
+  )
+}
+
+export function setPipelineEnabled(id: number, enabled: boolean): void {
+  requireDb()
+    .prepare(`UPDATE pipelines SET enabled = ?, updated_at = ? WHERE id = ?`)
+    .run(enabled ? 1 : 0, new Date().toISOString(), id)
+}
+
+export function deletePipeline(id: number): boolean {
+  return requireDb().prepare(`DELETE FROM pipelines WHERE id = ?`).run(id).changes > 0
+}
+
+export function getPipelineRow(id: number): PipelineRow | undefined {
+  return requireDb().prepare(`SELECT * FROM pipelines WHERE id = ?`).get(id) as
+    | PipelineRow
+    | undefined
+}
+
+export function listPipelineRows(): PipelineRow[] {
+  return requireDb()
+    .prepare(`SELECT * FROM pipelines ORDER BY created_at ASC, id ASC`)
+    .all() as PipelineRow[]
+}
+
+export function listPipelineRowsForRepo(repoId: number): PipelineRow[] {
+  return requireDb()
+    .prepare(`SELECT * FROM pipelines WHERE repo_id = ? ORDER BY created_at ASC, id ASC`)
+    .all(repoId) as PipelineRow[]
+}
+
+/** Enabled pipelines only — what the poller schedules (saves a parse of disabled rows). */
+export function listEnabledPipelineRows(): PipelineRow[] {
+  return requireDb()
+    .prepare(`SELECT * FROM pipelines WHERE enabled = 1 ORDER BY id ASC`)
+    .all() as PipelineRow[]
+}
+
+// --- pipeline runs (execution history + dedupe) ------------------------------
+
+export interface PipelineRunRow {
+  id: number
+  pipeline_id: number
+  trigger: PipelineTrigger
+  ref_type: RefType
+  ref: string
+  head_sha: string
+  status: PipelineRunStatus
+  action: PipelineActionKind
+  posted: number
+  dedupe_key: string
+  started_at: string
+  finished_at: string | null
+}
+
+export interface NewPipelineRun {
+  pipelineId: number
+  trigger: PipelineTrigger
+  refType: RefType
+  ref: string
+  headSha: string
+  action: PipelineActionKind
+  dedupeKey: string
+  startedAt: string
+}
+
+export function insertPipelineRun(run: NewPipelineRun): PipelineRunRow {
+  const result = requireDb()
+    .prepare(
+      `INSERT INTO pipeline_runs (pipeline_id, trigger, ref_type, ref, head_sha, status, action,
+                                  dedupe_key, started_at)
+       VALUES (@pipelineId, @trigger, @refType, @ref, @headSha, 'pending', @action,
+               @dedupeKey, @startedAt)`
+    )
+    .run(run)
+  return getPipelineRun(Number(result.lastInsertRowid))!
+}
+
+export function updatePipelineRunStatus(
+  id: number,
+  status: PipelineRunStatus,
+  finishedAt?: string | null
+): void {
+  requireDb()
+    .prepare(
+      `UPDATE pipeline_runs SET status = @status, finished_at = COALESCE(@finishedAt, finished_at)
+       WHERE id = @id`
+    )
+    .run({ id, status, finishedAt: finishedAt ?? null })
+}
+
+/** Flags a run as having actually written to GitHub (an enabled auto-post). */
+export function setPipelineRunPosted(id: number): void {
+  requireDb().prepare(`UPDATE pipeline_runs SET posted = 1 WHERE id = ?`).run(id)
+}
+
+export function getPipelineRun(id: number): PipelineRunRow | undefined {
+  return requireDb().prepare(`SELECT * FROM pipeline_runs WHERE id = ?`).get(id) as
+    | PipelineRunRow
+    | undefined
+}
+
+export function listPipelineRunsForPipeline(pipelineId: number, limit = 100): PipelineRunRow[] {
+  return requireDb()
+    .prepare(
+      `SELECT * FROM pipeline_runs WHERE pipeline_id = ? ORDER BY started_at DESC, id DESC LIMIT ?`
+    )
+    .all(pipelineId, limit) as PipelineRunRow[]
+}
+
+/**
+ * The most recent COMPLETED run for a dedupe key, or undefined. The poller consults
+ * this to skip identical work on an unchanged head — only a 'done' run counts as
+ * "already processed" (an errored/skipped run should be retried). The key deliberately
+ * excludes pipeline identity (see `pipelineConfigHash`), so two pipelines whose work is
+ * byte-identical share this cache — intentional, not a per-pipeline lookup.
+ */
+export function findCompletedPipelineRunByDedupe(dedupeKey: string): PipelineRunRow | undefined {
+  return requireDb()
+    .prepare(
+      `SELECT * FROM pipeline_runs WHERE dedupe_key = ? AND status = 'done'
+       ORDER BY id DESC LIMIT 1`
+    )
+    .get(dedupeKey) as PipelineRunRow | undefined
 }

@@ -130,6 +130,108 @@ export interface PollResult {
   nextPollDelayMs: number
 }
 
+// --- automation pipelines (ROADMAP M9a) --------------------------------------
+// A pipeline is a configurable `trigger → scope filter → steps → aggregate → action`
+// automation. Persisted per repo; the engine/poller (later M9a slices) execute it.
+// SPEC §10: no real-time webhooks (pipelines are user-run or scheduled), every GitHub
+// write stays behind the explicit confirm, and auto-post is a hard per-pipeline opt-in.
+
+export type PipelineTrigger = 'commit' | 'pr' | 'schedule' | 'manual'
+
+/** What the pipeline does with the aggregated result. `post` is gated by `autoPost`. */
+export type PipelineActionKind = 'notify' | 'stage' | 'post'
+
+/** Where an enabled auto-post lands (only consulted for an enabled `post`). */
+export type PostTarget = 'commit' | 'pr' | 'issue'
+
+export interface PipelineStep {
+  /** Stable id within the pipeline (for `dependsOn` references + run correlation). */
+  id: string
+  kind: 'agent' | 'tool'
+  /** The agent id (`kind:'agent'`) or quality-tool id (`kind:'tool'`) to run. */
+  ref: string
+  /** Optional model override for an agent step. */
+  model?: string
+  /** Step ids this one waits for; empty/absent = runs in the first wave. */
+  dependsOn?: string[]
+}
+
+/** Trigger-scoping filter — a delta must pass ALL provided predicates to run. */
+export interface PipelineScope {
+  /** Allowed branch names (commit trigger) — empty/absent = any branch. */
+  branches?: string[]
+  /** PR labels — empty/absent = any; otherwise the PR must carry at least one. */
+  labels?: string[]
+  /** Allowed commit/PR author logins — empty/absent = any. */
+  authors?: string[]
+  /** Changed-path prefixes that must be touched — empty/absent = any. */
+  paths?: string[]
+  /** Draft-PR handling (pr trigger): absent/true = include; set `false` to exclude. */
+  includeDrafts?: boolean
+  /** Skip a push landing more than N commits at once (noise guard). 0/absent = no cap. */
+  maxCommits?: number
+}
+
+export interface PipelineAction {
+  kind: PipelineActionKind
+  /**
+   * HARD per-pipeline opt-in for auto-posting to GitHub (SPEC §10). The engine may
+   * reach a write API ONLY when `kind==='post'` AND `autoPost===true`. Defaults false;
+   * an unset/false flag can NEVER post (defense-in-depth assertion in the engine — a
+   * disabled `post` degrades to `stage`, holding the result for the manual confirm).
+   */
+  autoPost: boolean
+  /** Where an enabled post lands. */
+  target?: PostTarget
+}
+
+export interface PipelineGuardrails {
+  /** Cap on concurrent runs this pipeline starts (bounded again by the global semaphore). */
+  maxConcurrentRuns?: number
+  /** Minimum seconds between two runs for the same repo. */
+  perRepoCooldownSeconds?: number
+  /** Cap on runs started per rolling hour. */
+  maxRunsPerHour?: number
+}
+
+/** The authored pipeline config (everything except the DB-assigned id). */
+export interface PipelineDraft {
+  name: string
+  repoId: number
+  trigger: PipelineTrigger
+  /** Cron-ish schedule for `trigger==='schedule'`, interpreted by the poller. */
+  schedule?: string
+  enabled: boolean
+  scope: PipelineScope
+  steps: PipelineStep[]
+  action: PipelineAction
+  guardrails: PipelineGuardrails
+}
+
+/** A persisted pipeline (config + its DB id). */
+export interface Pipeline extends PipelineDraft {
+  id: number
+}
+
+export type PipelineRunStatus = 'pending' | 'running' | 'done' | 'error' | 'skipped'
+
+export interface PipelineRunSummary {
+  id: number
+  pipelineId: number
+  trigger: PipelineTrigger
+  refType: RefType
+  ref: string
+  headSha: string
+  status: PipelineRunStatus
+  /** The action actually taken (a disabled `post` resolves to `stage`). */
+  action: PipelineActionKind
+  /** True only when this run actually wrote to GitHub (an enabled auto-post). */
+  posted: boolean
+  dedupeKey: string
+  startedAt: string
+  finishedAt: string | null
+}
+
 // --- repo mapping & git engine (Stage 4) -------------------------------------
 
 export interface RepoMapping {

@@ -157,6 +157,11 @@ runs(id, repo_id, ref_type['commit'|'pr'|'working-tree'], ref_id, head_sha, agen
 http_cache(key, etag, payload, updated_at)   -- conditional-request (ETag) cache; payload
                                              -- holds the body to replay on a 304 (M8)
 watches(id, repo_id, ref_type['commit'|'pr'], ref, last_seen_sha, last_polled_at)  -- M8
+pipelines(id, repo_id, name, trigger['commit'|'pr'|'schedule'|'manual'], enabled,
+          action_kind['notify'|'stage'|'post'], auto_post, config, created_at, updated_at)  -- M9a
+pipeline_runs(id, pipeline_id, trigger, ref_type, ref, head_sha,
+              status['pending'|'running'|'done'|'error'|'skipped'], action, posted,
+              dedupe_key, started_at, finished_at)  -- M9a
 settings(key, value)
 ```
 
@@ -170,6 +175,31 @@ settings(key, value)
 > a deliberate, gated extension of §4 (a mapped clone + an explicit working-tree review is
 > the consent), narrower than the `use_local_worktree` checkout mode. Grounding still
 > honours the `ui.groundReviews` opt-out. Findings noise-filtering (M6) applies identically.
+
+> **Automation pipelines — foundation (ROADMAP M9a).** A pipeline is a configurable
+> `trigger → scope filter → steps → aggregate → action` automation, persisted per repo. The
+> authored config (`PipelineDraft`: trigger/schedule/scope/steps/action/guardrails) is the
+> source of truth, stored as JSON in `pipelines.config`; `enabled`, `action_kind`, and
+> `auto_post` are PROMOTED to columns (derived on every write) for cheap querying and a
+> SQL-level auto-post guard. Pure, unit-tested `pipelineModel.ts` holds the security-critical
+> logic: `isPipelineDraft` (validate before anything reaches the engine), `matchesScope`
+> (branch/label/author/path/draft/maxCommits — absent predicate = wildcard), `dedupeKey` +
+> `pipelineConfigHash` (so the poller never re-runs identical work on an unchanged head), and
+> the **auto-post gate** — `mayAutoPost`/`assertMayPost`/`effectiveAction`. Per SPEC §10
+> auto-post is a HARD per-pipeline opt-in: the engine may reach a GitHub write ONLY when
+> `action.kind==='post'` AND `action.autoPost===true`; `assertMayPost` throws otherwise (a
+> defense-in-depth check called immediately before any write), and a disabled `post` degrades
+> to `stage` (the prepared result is held for the existing manual confirm — never posted
+> silently). The **in-code gate is authoritative**: the engine parses `config`, re-validates it
+> with `isPipelineDraft`, and calls `assertMayPost` on the parsed `action` before any write; the
+> promoted `auto_post` column (with its `CHECK (auto_post = 0 OR action_kind = 'post')`) is a
+> belt-and-suspenders filter, never the sole guard. `pipeline_runs` records each execution with
+> its `dedupe_key` (indexed), the action
+> actually taken, and a `posted` flag; `reconcileInterruptedPipelineRuns` flips any
+> pending/running row to `error` on startup WITHOUT advancing watch state, so an interrupted
+> delta is re-detected and never skipped. This slice lays the model + persistence only — the
+> live poller, `onFinished` step-chaining/barrier, the M6 aggregator wiring, the actioner, and
+> the IPC surface are the next M9a slices.
 
 > **ETag-cached polling foundation (ROADMAP M8).** The automation engine needs to detect a
 > new commit/PR head cheaply. `listCommits`/`listPullRequests` now mirror `listRepos`' ETag

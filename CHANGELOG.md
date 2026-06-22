@@ -20,6 +20,16 @@ same change set.
 
 ### Added
 
+- **Automation pipelines — foundation** (ROADMAP M9a): the data model + persistence for
+  configurable `trigger → scope → steps → aggregate → action` pipelines (per repo), plus the
+  pure, unit-tested core logic. The security crux ships here: the **auto-post gate** — the
+  engine may write to GitHub only for an explicitly enabled `post` action (`autoPost===true`),
+  enforced by an `assertMayPost` defense-in-depth check; a disabled `post` degrades to `stage`
+  (held for the existing manual confirm), never posting silently. Also: config validation
+  (`isPipelineDraft`), trigger scope-matching (branch/label/author/path/draft/maxCommits), and a
+  dedupe key so a future poller never re-runs identical work on an unchanged head. New tables
+  `pipelines` + `pipeline_runs` (migration v14) with crash recovery that never skips an
+  unprocessed delta. No engine/poller/IPC yet — those are the next slices (`smoke:pipelines`).
 - **ETag-cached polling foundation** for the upcoming automation engine (ROADMAP M8):
   `listCommits`/`listPullRequests` now cache each page's body + ETag in `http_cache` and send
   a conditional request, so an unchanged re-list returns from cache on a 304 (`fromCache`) at
