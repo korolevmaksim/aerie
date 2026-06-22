@@ -52,6 +52,9 @@ third-party service.
   your own in Settings, then pick one per run. Aerie always prepends the machine context
   (repo, SHA, working-copy + diff paths) so a custom prompt can never leave the agent
   without something to review.
+- **Structured findings** — each review also extracts the agent's concrete findings (file, line,
+  severity, message) into a compact list under the review; the raw block is kept out of the posted
+  comment. Sets up cross-agent consensus across a panel.
 - **Panel review (multi-agent)** — flip on "Panel review" to run one change through several
   agents at once; each streams its own review side by side (up to 3 run concurrently, the rest
   queue). A second opinion in one click.

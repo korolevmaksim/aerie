@@ -5,6 +5,7 @@ import {
   fingerprintOf,
   inChangedRange,
   parseActionlint,
+  parseAgentFindings,
   parseBandit,
   parseBiome,
   parseChangedLineRanges,
@@ -15,6 +16,7 @@ import {
   parseToolOutput,
   parseTsc,
   parseYamllint,
+  redactFinding,
   renderFindingsForPrompt,
   scopeToChanges,
   type Finding,
@@ -308,6 +310,111 @@ describe('parseOxlint', () => {
   it('returns [] for malformed/empty output', () => {
     expect(parseOxlint('x')).toEqual([])
     expect(parseOxlint('{"diagnostics":[]}')).toEqual([])
+  })
+})
+
+describe('parseAgentFindings', () => {
+  const block = (json: string): string =>
+    `Here is my review.\n\nLooks mostly good.\n\n\`\`\`aerie-findings\n${json}\n\`\`\`\n`
+
+  it('extracts findings (tool = agentId) and strips the block from the prose', () => {
+    const out = block(
+      JSON.stringify([
+        { file: 'src/a.ts', line: 42, severity: 'high', ruleId: 'no-x', message: 'bad thing' },
+        { file: 'src/b.ts', line: 7, severity: 'CRITICAL', message: 'worse thing' }
+      ])
+    )
+    const { findings, prose } = parseAgentFindings('codex', out)
+    expect(findings).toHaveLength(2)
+    expect(findings[0]).toMatchObject({
+      tool: 'codex',
+      file: 'src/a.ts',
+      line: 42,
+      ruleId: 'no-x',
+      severity: 'high',
+      message: 'bad thing'
+    })
+    expect(findings[1].severity).toBe('critical') // case-normalized
+    expect(prose).not.toContain('aerie-findings')
+    expect(prose).toContain('Here is my review.')
+  })
+
+  it('returns prose unchanged with no findings when the block is absent', () => {
+    const out = 'Just a prose review, no block.'
+    expect(parseAgentFindings('codex', out)).toEqual({ findings: [], prose: out })
+  })
+
+  it('leaves prose intact for a malformed block (does not strip / mangle, no findings)', () => {
+    const out = block('{not json')
+    const { findings, prose } = parseAgentFindings('codex', out)
+    expect(findings).toEqual([])
+    // A block that doesn't parse is NOT stripped (so backticks-in-a-message can't mangle prose).
+    expect(prose).toBe(out)
+  })
+
+  it('keeps a truncation marker (appended after the block) in the prose', () => {
+    const out = `${block(JSON.stringify([{ file: 'a.ts', line: 1, message: 'm' }]))}\n[aerie] output truncated at 10 bytes`
+    const { findings, prose } = parseAgentFindings('codex', out)
+    expect(findings).toHaveLength(1)
+    expect(prose).toContain('output truncated') // M-Q can still detect truncation on the prose
+    expect(prose).not.toContain('aerie-findings')
+  })
+
+  it('handles CRLF line endings in the block', () => {
+    const out =
+      'Review.\r\n\r\n```aerie-findings\r\n[{"file":"a.ts","line":2,"message":"crlf"}]\r\n```\r\n'
+    const { findings } = parseAgentFindings('codex', out)
+    expect(findings).toHaveLength(1)
+    expect(findings[0].message).toBe('crlf')
+  })
+
+  it('caps the number of findings', () => {
+    const many = Array.from({ length: 800 }, (_, i) => ({
+      file: `f${i}.ts`,
+      line: i,
+      message: 'x'
+    }))
+    const { findings } = parseAgentFindings('codex', block(JSON.stringify(many)))
+    expect(findings).toHaveLength(500)
+  })
+
+  it('skips entries missing a file or message, defaults bad severity to medium', () => {
+    const out = block(
+      JSON.stringify([
+        { line: 1, message: 'no file' },
+        { file: 'x.ts', line: 2 },
+        { file: 'ok.ts', line: 3, severity: 'bogus', message: 'kept' }
+      ])
+    )
+    const { findings } = parseAgentFindings('claude-code', out)
+    expect(findings).toHaveLength(1)
+    expect(findings[0]).toMatchObject({ file: 'ok.ts', severity: 'medium', message: 'kept' })
+  })
+
+  it('tolerates a non-array JSON body', () => {
+    expect(parseAgentFindings('codex', block('{"file":"a"}')).findings).toEqual([])
+  })
+})
+
+describe('redactFinding', () => {
+  const f: Finding = {
+    tool: 'codex',
+    ruleId: 'r',
+    severity: 'high',
+    file: 'a.ts',
+    line: 3,
+    message: 'leaked ghp_0123456789abcdef0123456789abcdef0123 here',
+    fingerprint: 'old'
+  }
+  it('scrubs secrets from the message and re-fingerprints', () => {
+    const redact = (s: string): string => s.replace(/ghp_[A-Za-z0-9]+/g, '«redacted»')
+    const r = redactFinding(f, redact)
+    expect(r.message).not.toContain('ghp_')
+    expect(r.message).toContain('«redacted»')
+    expect(r.fingerprint).not.toBe('old') // recomputed from the redacted fields
+  })
+  it('leaves a null ruleId null', () => {
+    expect(redactFinding({ ...f, ruleId: null }, (s) => s).ruleId).toBeNull()
   })
 })
 

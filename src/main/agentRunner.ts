@@ -4,6 +4,7 @@ import { join } from 'path'
 import { app } from 'electron'
 import type {
   AgentInfo,
+  RunFinding,
   RunHistoryItem,
   RunRecord,
   RunStatus,
@@ -26,7 +27,15 @@ import {
   type Agent
 } from './agentConfig'
 import { decryptToken } from './auth'
-import { extractSecrets, parseChangedLineRanges, parseToolOutput, scopeToChanges } from './findings'
+import {
+  extractSecrets,
+  parseAgentFindings,
+  parseChangedLineRanges,
+  parseToolOutput,
+  redactFinding,
+  scopeToChanges,
+  type Finding
+} from './findings'
 import { getPullRequestBaseSha } from './github'
 import {
   cleanupCheckout,
@@ -51,6 +60,7 @@ import {
   insertFindings,
   insertRun,
   listAllRuns,
+  listFindingsForRun,
   listRunsForRepo,
   setSetting,
   updateRunStatus,
@@ -406,6 +416,17 @@ async function execute(
 
   // Always reach a terminal state: persist output (best-effort) then finish+clean.
   const finalize = (status: RunStatus, exitCode: number | null, output: string): void => {
+    // For an LLM agent run, split the prose review from its machine-readable findings
+    // block (M8/M9): the clean prose becomes the .out (and the posted comment), the
+    // findings are persisted. Tool runs keep their raw machine output as-is.
+    let reviewBody = output
+    let agentFindings: Finding[] = []
+    if (agent.kind !== 'tool') {
+      const parsed = parseAgentFindings(agent.id, output)
+      reviewBody = parsed.prose
+      agentFindings = parsed.findings
+    }
+
     // Scrub secrets before anything is written to disk: GitHub tokens always, plus the
     // matched secret values a gitleaks tool run surfaced. (Findings below are parsed
     // from the RAW output; the gitleaks parser already drops secrets.)
@@ -416,7 +437,7 @@ async function execute(
     try {
       mkdirSync(runsDir, { recursive: true })
       outputPath = join(runsDir, `${runId}.out`)
-      writeFileSync(outputPath, scrub(output), 'utf8')
+      writeFileSync(outputPath, scrub(reviewBody), 'utf8')
     } catch (e) {
       outputPath = null
       const message = e instanceof Error ? e.message : String(e)
@@ -432,32 +453,39 @@ async function execute(
     } catch {
       /* transcript is best-effort */
     }
-    // For a deterministic tool run, normalize the captured output into structured
-    // findings, scope them to the change, and persist them. Best-effort — must never
-    // break the run. LLM runs stay prose-only until agents emit structured output.
-    if (agent.kind === 'tool') {
-      try {
-        let findings = parseToolOutput(agent.id, output)
+    // Persist structured findings. A deterministic TOOL run is parsed from its machine
+    // output and scoped to the changed lines (it scans the whole tree); an LLM AGENT
+    // run uses the findings it emitted in its block (already about the reviewed change,
+    // so not re-scoped). Best-effort — must never break the run.
+    try {
+      let findings: Finding[]
+      if (agent.kind === 'tool') {
+        findings = parseToolOutput(agent.id, output)
         const diffPath = prepared?.diffPath
         if (diffPath && existsSync(diffPath)) {
           const ranges = parseChangedLineRanges(readFileSync(diffPath, 'utf8'))
           if (ranges.size > 0) findings = scopeToChanges(findings, ranges)
         }
-        insertFindings(runId, findings)
-      } catch (e) {
-        log.warn('could not persist findings', {
-          runId,
-          error: e instanceof Error ? e.message : String(e)
-        })
+      } else {
+        // Agent findings are free text — scrub any echoed secret (and re-fingerprint)
+        // before persisting, mirroring the prose path; tool parsers already drop secrets.
+        findings = agentFindings.map((f) => redactFinding(f, scrub))
       }
+      insertFindings(runId, findings)
+    } catch (e) {
+      log.warn('could not persist findings', {
+        runId,
+        error: e instanceof Error ? e.message : String(e)
+      })
     }
     // Reliability gate (M-Q): an LLM review that exits 0 can still be empty, truncated,
     // or a leaked transcript. Flag it in the transcript so the user sees it isn't a real
-    // review (and so the future auto-post path, M9, can refuse to publish it). The exit
-    // status is unchanged — this is advisory, not a failure.
+    // review (and so the future auto-post path, M9, can refuse to publish it). Assessed
+    // on the PROSE (block stripped). The exit status is unchanged — advisory, not a fail.
     if (agentSpawned && agent.kind !== 'tool' && status === 'done') {
-      const quality = assessReviewQuality(output, { kind: 'agent' })
-      if (quality.level === 'low') {
+      const quality = assessReviewQuality(reviewBody, { kind: 'agent' })
+      // A block-only response (real findings, terse/empty prose) isn't low-quality.
+      if (quality.level === 'low' && agentFindings.length === 0) {
         emit('system', `\n[aerie] ⚠ low-quality review: ${quality.reasons.join(' ')}\n`)
       }
     }
@@ -758,6 +786,20 @@ export function getRunTranscript(runId: number, outputPath: string | null): stri
 
 export function listRunRecords(repoId: number): RunRecord[] {
   return listRunsForRepo(repoId).map(rowToRecord)
+}
+
+const SEVERITIES = new Set(['critical', 'high', 'medium', 'low', 'info'])
+
+/** A run's persisted structured findings (tool output or an agent's findings block). */
+export function listRunFindings(runId: number): RunFinding[] {
+  return listFindingsForRun(runId).map((f) => ({
+    tool: f.tool,
+    ruleId: f.rule_id,
+    severity: (SEVERITIES.has(f.severity) ? f.severity : 'medium') as RunFinding['severity'],
+    file: f.file,
+    line: f.line,
+    message: f.message
+  }))
 }
 
 export function listAllRunHistory(): RunHistoryItem[] {

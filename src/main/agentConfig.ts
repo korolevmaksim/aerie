@@ -578,5 +578,16 @@ export function buildPrompt(
     gt && !effective.includes('{{groundTruth}}')
       ? `\n\n## Deterministic findings from local tools — treat as ground truth\nConfirm, refute, or merge each below; add only substantiated NEW issues; do not pad.\n\n${gt}`
       : ''
-  return `${context}\n\n${body}${grounding}\n`
+  // Ask the agent to ALSO emit a machine-readable findings block so Aerie can persist
+  // and aggregate findings across agents (M8/M9). Best-effort: it's stripped from the
+  // posted comment and the run never fails if it's absent or malformed.
+  const findingsRequest =
+    '\n\n## Machine-readable findings (append after your review)\n' +
+    'End your response with a fenced block in EXACTLY this format — a JSON array of your ' +
+    'concrete findings (omit the block entirely if you found none):\n\n' +
+    '```aerie-findings\n' +
+    '[{"file":"path/from/repo/root","line":42,"severity":"high","ruleId":"optional","message":"one concise line"}]\n' +
+    '```\n' +
+    'severity is one of critical|high|medium|low|info. Only real, substantiated issues — do not pad.'
+  return `${context}\n\n${body}${grounding}${findingsRequest}\n`
 }

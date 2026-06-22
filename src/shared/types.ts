@@ -221,6 +221,17 @@ export interface StartBatchResult {
   skipped: { id: string; reason: 'not-eligible' | 'over-cap' | 'already-running' }[]
 }
 
+/** A normalized finding persisted for a run (tool output or an agent's findings block). */
+export interface RunFinding {
+  /** The tool/agent that produced it (e.g. 'eslint', 'codex'). */
+  tool: string
+  ruleId: string | null
+  severity: 'critical' | 'high' | 'medium' | 'low' | 'info'
+  file: string
+  line: number | null
+  message: string
+}
+
 export interface RunRecord {
   id: number
   repoId: number

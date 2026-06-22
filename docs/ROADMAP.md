@@ -373,9 +373,17 @@ M0 semaphore). The shared run validation + working-tree HEAD resolution was fact
 `resolveRunTarget` IPC helper (used by both single + batch starts). A **Panel review** toggle in
 `RunPanel` multi-selects installed agents and streams each agent's review side by side; an
 already-running agent for the ref is skipped, not-installed/over-cap agents are reported. No new
-table (a batch = runs sharing repo+sha+ref). Code + security review APPROVED. **Still TODO (M9a):**
-the wait-for-all-steps barrier + the M6 aggregator for cross-agent consensus (needs **structured
-agent output** first — agents emit prose), the actioner (`notify|stage|post`, `auto_post` default
+table (a batch = runs sharing repo+sha+ref). Code + security review APPROVED.
+**Shipped (structured agent output):** `buildPrompt` asks the agent to append a fenced
+`aerie-findings` JSON block; pure `parseAgentFindings` (unit-tested) extracts it best-effort
+(findings carry `tool = agentId`) and strips it from the prose, so the runner writes clean prose
+to `.out`/the posted comment and persists the agent's findings (the M-Q gate runs on the prose).
+New `runner:findings` IPC + a compact severity-tagged findings list under each review. This is the
+**structured-output dependency** the fan-out flagged — cross-agent consensus (aggregating panel
+findings via the M6 aggregator with `consensusMin`) is the next slice.
+**Still TODO (M9a):**
+the wait-for-all-steps barrier + the M6 aggregator for cross-agent consensus (now unblocked by
+structured agent output), the actioner (`notify|stage|post`, `auto_post` default
 0, gated on M-Q), pipeline persistence (`pipelines`/`pipeline_runs`), the poller/triggers (needs
 M8), and the dedupe cache. Greenfield main-process engine reusing the strongest seams.
 - `pipelines.ts` (CRUD + orchestration, subscribes to `runEvents.onFinished`) + `poller.ts`

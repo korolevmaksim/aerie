@@ -22,6 +22,7 @@ import type {
   RefType,
   RepoMapping,
   ReposResult,
+  RunFinding,
   RunHistoryItem,
   RunRecord,
   SettingKey,
@@ -36,6 +37,7 @@ import {
   killRun,
   listAgentInfos,
   listAllRunHistory,
+  listRunFindings,
   listRunRecords,
   readRunOutput,
   setAgentModel,
@@ -638,6 +640,17 @@ export function registerIpcHandlers(): void {
     const run = getRun(runId)
     if (!run) return fail('Run not found.')
     return ok(run.output_path ? readRunOutput(run.output_path) : '')
+  })
+
+  // A run's persisted structured findings (tool output or an agent's findings block).
+  ipcMain.handle(CHANNELS.runnerFindings, (event, runId: unknown): ApiResult<RunFinding[]> => {
+    if (!isTrustedSender(event)) return fail('Untrusted sender.')
+    if (!isValidId(runId)) return fail('Invalid run id.')
+    try {
+      return ok(listRunFindings(runId))
+    } catch {
+      return ok([])
+    }
   })
 
   // The full console transcript (live for a running run, recorded for a finished

@@ -37,6 +37,7 @@ export const CHANNELS = {
   runnerKill: 'runner:kill',
   runnerListRuns: 'runner:listRuns',
   runnerReadOutput: 'runner:readOutput',
+  runnerFindings: 'runner:findings',
   runnerTranscript: 'runner:transcript',
   runsListAll: 'runs:listAll',
   githubPost: 'github:post',

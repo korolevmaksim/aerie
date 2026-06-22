@@ -148,6 +148,16 @@ settings(key, value)
 > the consent), narrower than the `use_local_worktree` checkout mode. Grounding still
 > honours the `ui.groundReviews` opt-out. Findings noise-filtering (M6) applies identically.
 
+> **Structured agent findings (ROADMAP M8/M9).** `buildPrompt` asks the LLM agent to append a
+> fenced ```aerie-findings JSON array (`file/line/severity/ruleId/message`) after its prose.
+> `parseAgentFindings(agentId, output)` (pure) extracts it best-effort — findings carry
+> `tool = agentId` so cross-agent consensus counts distinct agents — and returns the prose with
+> the block REMOVED. The runner writes that clean prose to `<id>.out` (and the posted comment),
+> persists the findings (no diff-scoping — an agent's findings already pertain to the change),
+> and runs the M-Q quality gate on the prose. Absent/malformed block → prose-only, run never
+> fails. `runner:findings(runId)` returns a run's persisted findings (`RunFinding[]`) for display.
+> The block is data, never executed; on-disk artifacts stay secret-scrubbed.
+
 > **Multi-agent fan-out (ROADMAP M8/M9 — first slice).** `runner:startBatch` launches one
 > review across several agents on a single ref: each eligible agent becomes its own
 > correlated `runs` row (shared repo+sha+ref, differing agent, its own saved model), started

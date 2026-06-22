@@ -157,6 +157,62 @@ select.field {
   font-size: 0.85rem;
 }
 
+/* Structured findings (M8/M9): a compact list of a run's normalized findings. */
+.run__findings {
+  margin-top: 0.6rem;
+}
+
+.run__findings-head {
+  margin: 0 0 0.4rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.run__findings-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.run__finding {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.run__finding-loc {
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.run__finding-msg {
+  min-width: 0;
+}
+
+.sev {
+  text-transform: uppercase;
+  font-size: 0.68rem;
+  letter-spacing: 0.03em;
+}
+.sev--critical,
+.sev--high {
+  background: rgba(248, 81, 73, 0.16);
+  color: #ff9b94;
+}
+.sev--medium {
+  background: rgba(210, 153, 34, 0.16);
+  color: #e3b341;
+}
+.sev--low,
+.sev--info {
+  background: rgba(88, 166, 255, 0.14);
+  color: var(--accent);
+}
+
 /* Low-quality-review caution (M-Q): amber, distinct from the red .alert error. */
 .run__warn {
   background: rgba(210, 153, 34, 0.12);

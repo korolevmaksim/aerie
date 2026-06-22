@@ -66,6 +66,14 @@ same change set.
   how much noise was removed. Pure + unit-tested; built so multi-agent consensus (future parallel
   runs) reuses the same aggregator.
 
+- **Structured agent findings** — review prompts now ask the agent to append a fenced
+  `aerie-findings` JSON block (file/line/severity/ruleId/message). Aerie parses it best-effort,
+  persists the findings per run (alongside the existing tool findings), and shows a compact,
+  severity-tagged list under each review. The block is **stripped from the posted comment** so it
+  stays clean prose, and the quality gate now assesses that prose. Absent or malformed block →
+  prose-only, the run never fails. This is the structured-output foundation for cross-agent
+  consensus (aggregating findings across a panel of agents). New `runner:findings` IPC.
+
 - **Panel review (multi-agent fan-out)** — the first slice of the automation engine: a "Panel
   review" toggle on the run launcher lets you pick several installed agents and review one
   change with all of them at once. Each agent starts as its own correlated run (shared

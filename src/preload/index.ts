@@ -19,6 +19,7 @@ import type {
   PullRequestSummary,
   RepoMapping,
   ReposResult,
+  RunFinding,
   RunHistoryItem,
   RunOutputChunk,
   RunRecord,
@@ -134,6 +135,8 @@ const api = {
       ipcRenderer.invoke(CHANNELS.runsListAll),
     readOutput: (runId: number): Promise<ApiResult<string>> =>
       ipcRenderer.invoke(CHANNELS.runnerReadOutput, runId),
+    findings: (runId: number): Promise<ApiResult<RunFinding[]>> =>
+      ipcRenderer.invoke(CHANNELS.runnerFindings, runId),
     transcript: (runId: number): Promise<ApiResult<string>> =>
       ipcRenderer.invoke(CHANNELS.runnerTranscript, runId),
     /** Post a finished run's output to GitHub. Gated by the in-app confirm UI. */

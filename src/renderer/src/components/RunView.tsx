@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { PostKind, RunRecord, RunStatus } from '@shared/types'
+import type { PostKind, RunFinding, RunRecord, RunStatus } from '@shared/types'
 import PostConfirmModal from './PostConfirmModal'
 
 const MAX_DISPLAY = 256 * 1024
@@ -25,6 +25,7 @@ function RunView({
   const [output, setOutput] = useState('')
   const [status, setStatus] = useState<RunStatus>(run.status)
   const [cleanOutput, setCleanOutput] = useState('')
+  const [findings, setFindings] = useState<RunFinding[]>([])
   const [postModal, setPostModal] = useState<{ kind: PostKind; targetLabel: string } | null>(null)
   const [posting, setPosting] = useState(false)
   const [postedUrl, setPostedUrl] = useState<string | null>(run.postedUrl)
@@ -55,6 +56,8 @@ function RunView({
       if (isTerminal(run.status)) {
         const o = await window.aerie.runner.readOutput(run.id)
         if (!cancelled && o.ok) setCleanOutput(o.value)
+        const f = await window.aerie.runner.findings(run.id)
+        if (!cancelled && f.ok) setFindings(f.value)
       }
     })()
     return () => {
@@ -80,6 +83,7 @@ function RunView({
       onStatusChange?.(p.status)
       if (isTerminal(p.status)) {
         void window.aerie.runner.readOutput(p.runId).then((o) => o.ok && setCleanOutput(o.value))
+        void window.aerie.runner.findings(p.runId).then((f) => f.ok && setFindings(f.value))
       }
     })
     return () => {
@@ -158,6 +162,26 @@ function RunView({
       <pre className="run__console" ref={consoleRef}>
         {output || (active ? '…' : 'No output recorded.')}
       </pre>
+
+      {findings.length > 0 && (
+        <div className="run__findings">
+          <h4 className="run__findings-head">
+            {findings.length} structured finding{findings.length === 1 ? '' : 's'}
+          </h4>
+          <ul className="run__findings-list">
+            {findings.map((f, i) => (
+              <li key={i} className="run__finding">
+                <span className={`chip sev sev--${f.severity}`}>{f.severity}</span>
+                <code className="run__finding-loc">
+                  {f.file}
+                  {f.line != null ? `:${f.line}` : ''}
+                </code>
+                <span className="run__finding-msg">{f.message}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {isTerminal(status) && lowQualityNote && (
         <p className="run__warn" role="alert">
