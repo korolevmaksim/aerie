@@ -10,8 +10,9 @@
 // by a timeout + killTree via the shared `runToolCapture`.
 //
 // SECURITY: only AUTHOR-SHIPPED descriptors are executed. A `modelDiscovery` on a
-// user-added agent is arbitrary local exec and is NOT run until exec-consent (M12);
-// `discoverAllModels` enforces this via the `trustedIds` allowlist.
+// user-added/edited agent is arbitrary local exec and is NOT run until exec-consent
+// (M12); `discoverAllModels` enforces this via the caller's `isTrusted` predicate
+// (provenance: the descriptor must match the canonical shipped one).
 
 import type { Agent } from './agentConfig'
 import { runToolCapture } from './grounding'
@@ -100,18 +101,18 @@ export async function discoverModels(
 
 /**
  * Discover models for every agent that has an AUTHOR-SHIPPED command descriptor and is
- * installed. `trustedIds` is the set of shipped template/catalog ids — an agent whose
- * id is absent (a user-added agent) is SKIPPED even if it carries a descriptor, so a
- * user-authored probe is never executed without exec-consent (M12). Probes run in
- * parallel; a failing one contributes nothing.
+ * installed. `isTrusted` decides trust by PROVENANCE (the descriptor matches the canonical
+ * shipped one), not just id — a user-authored/edited probe is SKIPPED so it is never
+ * executed without exec-consent (M12). Probes run in parallel; a failing one contributes
+ * nothing.
  */
 export async function discoverAllModels(
   agents: Agent[],
-  trustedIds: ReadonlySet<string>,
+  isTrusted: (agent: Agent) => boolean,
   cwd: string,
   timeoutMs = 10_000
 ): Promise<DiscoveredModels[]> {
-  const targets = agents.filter((a) => a.modelDiscovery?.kind === 'command' && trustedIds.has(a.id))
+  const targets = agents.filter((a) => a.modelDiscovery?.kind === 'command' && isTrusted(a))
   const results = await Promise.all(
     targets.map(async (a) => ({ agentId: a.id, models: await discoverModels(a, cwd, timeoutMs) }))
   )

@@ -167,6 +167,12 @@ export interface AgentInfo {
   available: boolean
   /** Absolute path where the CLI was found on PATH, or null if not installed. */
   path: string | null
+  /**
+   * True when this is a user-authored/edited agent whose command has NOT been approved
+   * to run (M12 exec-consent). Such an agent is refused at the spawn boundary until the
+   * user explicitly approves it. Always false for author-shipped templates/catalog.
+   */
+  needsConsent: boolean
 }
 
 /** A saved review preset: a quick agent + model + reasoning bundle. */

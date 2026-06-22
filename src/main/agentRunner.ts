@@ -19,6 +19,7 @@ import { AGENT_CATALOG } from './agentCatalog'
 import { discoverAllModels, overlayModels } from './agentDiscovery'
 import { aggregateFindings } from './aggregate'
 import { planBatch } from './batch'
+import { agentNeedsConsent, agentSignature } from './execConsent'
 import {
   buildPrompt,
   DEFAULT_AGENTS,
@@ -84,6 +85,31 @@ import {
 
 function agentsPath(): string {
   return join(app.getPath('userData'), 'agents.json')
+}
+
+// Canonical exec signature per AUTHOR-SHIPPED id (default templates + catalog + tools).
+const CANONICAL_SIGNATURES: ReadonlyMap<string, string> = new Map(
+  [...DEFAULT_AGENTS, ...AGENT_CATALOG, ...TOOL_CATALOG].map((a) => [a.id, agentSignature(a)])
+)
+
+/**
+ * Trusted to spawn WITHOUT consent only when the id is author-shipped AND the agent's full
+ * descriptor STILL MATCHES the canonical shipped one. Keyed on PROVENANCE, not just id:
+ * only DEFAULT ids are authoritative in mergeAgents, so a user agent that claims a CATALOG
+ * or TOOL id (e.g. 'eslint', 'qwen') but carries a different command/args/env/discovery
+ * does not match the canonical signature → it is untrusted and must be explicitly approved.
+ */
+function isTrustedAgent(agent: Agent): boolean {
+  return CANONICAL_SIGNATURES.get(agent.id) === agentSignature(agent)
+}
+
+/** True when a user-authored/edited agent still lacks matching exec consent. */
+function agentBlocked(agent: Agent): boolean {
+  return agentNeedsConsent(
+    agent,
+    isTrustedAgent(agent),
+    getSetting(`agent.execConsent:${agent.id}`)
+  )
 }
 
 /**
@@ -172,9 +198,24 @@ export function listAgentInfos(): AgentInfo[] {
       reasoning: resolveReasoning(a),
       reasoningLevels: a.reasoningLevels ?? [],
       available: path !== null,
-      path
+      path,
+      // User-authored agents must be approved before they can run (M12); shipped never.
+      needsConsent: agentBlocked(a)
     }
   })
+}
+
+/**
+ * Records the user's explicit approval to run a NON-shipped agent's exact current command
+ * (M12 exec-consent). Stores the signature so a later edit to the command/args re-requires
+ * approval. No-op for a shipped id (those are implicitly trusted) or an unknown id.
+ */
+export function approveAgentExec(id: string): AgentInfo[] {
+  const agent = loadAgents().find((a) => a.id === id)
+  if (agent && !isTrustedAgent(agent)) {
+    setSetting(`agent.execConsent:${id}`, agentSignature(agent))
+  }
+  return listAgentInfos()
 }
 
 /**
@@ -186,11 +227,10 @@ export function listAgentInfos(): AgentInfo[] {
  */
 export async function discoverAgentModels(): Promise<AgentInfo[]> {
   const agents = loadAgents()
-  const trustedIds = new Set<string>(
-    [...DEFAULT_AGENTS, ...AGENT_CATALOG, ...TOOL_CATALOG].map((a) => a.id)
-  )
   const cwd = app.getPath('userData')
-  const discovered = await discoverAllModels(agents, trustedIds, cwd)
+  // Only AUTHOR-SHIPPED (provenance-matched) descriptors are probed — a user-authored
+  // model-discovery argv is arbitrary local exec and must never run without consent.
+  const discovered = await discoverAllModels(agents, isTrustedAgent, cwd)
   const found = new Set(discovered.map((d) => d.agentId))
   for (const d of discovered) {
     setSetting(`agent.discoveredModels:${d.agentId}`, JSON.stringify(d.models))
@@ -199,7 +239,7 @@ export async function discoverAgentModels(): Promise<AgentInfo[]> {
   // (e.g. the CLI was uninstalled since the last discovery), so the picker falls back to
   // the seed instead of showing an outdated "live" list.
   for (const a of agents) {
-    if (a.modelDiscovery?.kind === 'command' && trustedIds.has(a.id) && !found.has(a.id)) {
+    if (a.modelDiscovery?.kind === 'command' && isTrustedAgent(a) && !found.has(a.id)) {
       deleteSetting(`agent.discoveredModels:${a.id}`)
     }
   }
@@ -369,10 +409,12 @@ async function execute(
   agents: Agent[]
 ): Promise<void> {
   // The concurrency slot acquired below (before any heavy work) is released exactly
-  // once on every terminal path via this guard.
+  // once on every terminal path via this guard. `slotAcquired` guards against an early
+  // terminal path (e.g. the exec-consent refusal) releasing a slot it never took.
   let slotReleased = false
+  let slotAcquired = false
   const releaseSlot = (): void => {
-    if (slotReleased) return
+    if (slotReleased || !slotAcquired) return
     slotReleased = true
     runSlots.release()
   }
@@ -498,12 +540,31 @@ async function execute(
     releaseSlot()
   }
 
+  // Exec-consent gate (M12 — the core trust boundary): a user-authored/edited agent's
+  // command is arbitrary local code and must be explicitly approved before it is EVER
+  // spawned. Author-shipped templates/catalog are implicitly trusted. Enforced HERE, in
+  // main, at the spawn boundary — never relying on the renderer. Refuse (don't queue or
+  // spawn) when consent is missing or no longer matches the current command.
+  if (agentBlocked(agent)) {
+    emit(
+      'system',
+      `[aerie] "${agent.id}" is not approved to run. Approve its command in the Tools tab before Aerie will spawn it.\n`
+    )
+    finalize(
+      'error',
+      null,
+      `[aerie] "${agent.id}" needs approval before it can run. Approve its command in the Tools tab, then re-run.`
+    )
+    return
+  }
+
   // Wait for a concurrency slot before any heavy work (clone/fetch/spawn). The run
   // stays 'queued' until one frees; announce a real wait so it isn't read as a stall.
   if (runSlots.active() >= MAX_CONCURRENT_RUNS) {
     emit('system', '[aerie] waiting for a free run slot…\n')
   }
   await runSlots.acquire()
+  slotAcquired = true
 
   try {
     updateRunStatus(runId, { status: 'running' })
@@ -589,7 +650,10 @@ async function execute(
           cwd: prepared.worktreePath,
           diff: diffContent,
           diffFile: prepared.diffPath,
-          changedFiles
+          changedFiles,
+          // Exec-consent (M12): never auto-run a user-authored kind:'tool' agent that
+          // hasn't been approved — the same boundary the direct-run path enforces.
+          isAllowed: (a) => !agentBlocked(a)
         })
         groundTruth = g.groundTruth
         emit(

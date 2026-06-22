@@ -344,7 +344,12 @@ function RunPanel({
               className="btn btn--primary"
               onClick={onStart}
               disabled={
-                !agentId || !selectedAgent || active || starting || !selectedAgent.available
+                !agentId ||
+                !selectedAgent ||
+                active ||
+                starting ||
+                !selectedAgent.available ||
+                selectedAgent.needsConsent
               }
             >
               {active || starting ? 'Running…' : 'Review with agent'}
@@ -354,6 +359,12 @@ function RunPanel({
             <p className="hint">
               The <code>{selectedAgent.label}</code> CLI isn’t on your PATH — install it to use this
               agent.
+            </p>
+          )}
+          {selectedAgent?.needsConsent && (
+            <p className="hint">
+              <code>{selectedAgent.label}</code> is a user-added agent. Approve its command in the{' '}
+              <strong>Tools</strong> tab before it can run.
             </p>
           )}
           {error && <p className="alert">{error}</p>}

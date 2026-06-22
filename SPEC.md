@@ -55,6 +55,19 @@ If any fixed choice blocks you, STOP and flag it. Do not swap it on your own.
 - Agent runs operate on **app-owned clones** (see §6), never on the user's
   personal working copies — unless he explicitly opts a repo into read-only
   worktree mode.
+- **Exec-consent (ROADMAP M12).** Spawning an agent runs its `command` — for an
+  author-shipped template/catalog id that's vetted, but a **user-authored or
+  user-edited** agent (in `agents.json`, or via the in-app editor) is arbitrary local
+  code. The runner refuses to spawn such an agent at the **spawn boundary in main**
+  unless the user has recorded explicit consent for its exact command: a persisted
+  `sha256` signature over `command + args + env + model-discovery argv`. Editing any of
+  those re-keys the signature, so stale consent never auto-approves a changed command.
+  Shipped ids are implicitly trusted (and `mergeAgents` keeps default ids authoritative,
+  so a user can't shadow one to smuggle a command). The renderer only names an id to
+  approve — main re-derives and stores the signature; it can never fabricate consent.
+  Model-discovery probes are already gated to shipped ids (M2). `AgentInfo.needsConsent`
+  surfaces the state; an unapproved agent can't be launched from the UI and is refused
+  if reached anyway.
 
 ## 5. Architecture
 

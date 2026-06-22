@@ -243,6 +243,17 @@ select.field {
   font-size: 0.85rem;
 }
 
+/* Exec-consent (M12): a user-added agent awaiting approval to run. */
+.agent-consent {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.agent-consent__warn {
+  color: #e3b341;
+  font-size: 0.8rem;
+}
+
 .onboarding {
   max-width: 46rem;
   line-height: 1.5;

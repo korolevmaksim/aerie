@@ -16,12 +16,26 @@ function describeCapabilities(agent: AgentInfo): string {
   return parts.join(' · ')
 }
 
-function ToolRow({ agent }: { agent: AgentInfo }): React.JSX.Element {
+function ToolRow({
+  agent,
+  onApprove
+}: {
+  agent: AgentInfo
+  onApprove: (id: string) => void
+}): React.JSX.Element {
   return (
     <div className="mapping__row">
       <span className="mapping__key">{agent.label}</span>
       <code className="mapping__val">{agent.available ? (agent.path ?? '(on PATH)') : '—'}</code>
       <span className="muted">{describeCapabilities(agent) || '—'}</span>
+      {agent.needsConsent && agent.available && (
+        <span className="agent-consent">
+          <span className="agent-consent__warn">⚠ needs approval</span>
+          <button className="btn btn--ghost" onClick={() => onApprove(agent.id)}>
+            Approve to run
+          </button>
+        </span>
+      )}
     </div>
   )
 }
@@ -39,6 +53,14 @@ function ToolsPanel(): React.JSX.Element {
     if (res.ok) setAgents(res.value)
     else setError(res.error)
     setScanning(false)
+  }, [])
+
+  // Exec-consent (M12): approve a user-added agent's exact command so it may be spawned.
+  const approve = useCallback(async (id: string): Promise<void> => {
+    setError(null)
+    const res = await window.aerie.runner.approveAgent(id)
+    if (res.ok) setAgents(res.value)
+    else setError(res.error)
   }, [])
 
   // Live model discovery (M2): runs each installed agent's model-list probe (e.g.
@@ -114,7 +136,7 @@ function ToolsPanel(): React.JSX.Element {
           ) : (
             <div className="mapping">
               {installed.map((a) => (
-                <ToolRow key={a.id} agent={a} />
+                <ToolRow key={a.id} agent={a} onApprove={approve} />
               ))}
             </div>
           )}
@@ -124,7 +146,7 @@ function ToolsPanel(): React.JSX.Element {
               <h3 className="subhead">Not installed ({missing.length})</h3>
               <div className="mapping">
                 {missing.map((a) => (
-                  <ToolRow key={a.id} agent={a} />
+                  <ToolRow key={a.id} agent={a} onApprove={approve} />
                 ))}
               </div>
             </>

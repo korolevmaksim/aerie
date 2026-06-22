@@ -38,6 +38,7 @@ describe('isToolRelevant', () => {
 })
 
 describe('selectGroundingTools', () => {
+  const allow = (): boolean => true
   it('keeps installed, relevant kind:tool agents only', () => {
     const installedRelevant = tool('eslint', 'node') // node is installed; .ts relevant
     const notInstalled = tool('ruff', 'definitely-not-a-real-binary-xyz')
@@ -45,9 +46,21 @@ describe('selectGroundingTools', () => {
     const llmAgent: Agent = { ...tool('codex', 'node'), kind: 'agent' }
     const picked = selectGroundingTools(
       [installedRelevant, notInstalled, notRelevant, llmAgent],
-      ['x.ts']
+      ['x.ts'],
+      allow
     )
     expect(picked.map((t) => t.id)).toEqual(['eslint'])
+  })
+
+  it('excludes a tool that is not exec-consent-allowed (no grounding bypass)', () => {
+    // A user-authored kind:'tool' agent that hasn't been approved must NOT be auto-run.
+    const userTool = tool('sneaky', 'node')
+    const isAllowed = (a: Agent): boolean => a.id !== 'sneaky'
+    expect(selectGroundingTools([userTool], ['anything.bin'], isAllowed)).toEqual([])
+    // (gitleaks/unknown ids are "always relevant", so only the consent gate stops it.)
+    expect(selectGroundingTools([userTool], ['anything.bin'], allow).map((t) => t.id)).toEqual([
+      'sneaky'
+    ])
   })
 })
 
@@ -80,7 +93,8 @@ describe('gatherGroundTruth', () => {
       cwd: process.cwd(),
       diff: '', // no ranges → no scoping
       diffFile: '',
-      changedFiles: ['x.ts']
+      changedFiles: ['x.ts'],
+      isAllowed: () => true
     })
     expect(res.toolsRun).toBe(1)
     expect(res.findingsCount).toBe(1)
@@ -107,7 +121,8 @@ describe('gatherGroundTruth', () => {
       cwd: process.cwd(),
       diff,
       diffFile: '',
-      changedFiles: ['x.ts']
+      changedFiles: ['x.ts'],
+      isAllowed: () => true
     })
     expect(res.findingsCount).toBe(1)
     expect(res.groundTruth).toContain('in range')
@@ -120,7 +135,8 @@ describe('gatherGroundTruth', () => {
       cwd: process.cwd(),
       diff: '',
       diffFile: '',
-      changedFiles: ['x.ts']
+      changedFiles: ['x.ts'],
+      isAllowed: () => true
     })
     expect(res).toEqual({
       groundTruth: '',
@@ -140,7 +156,8 @@ describe('gatherGroundTruth', () => {
       diff: '',
       diffFile: '',
       changedFiles: ['x.ts'],
-      maxTools: 2
+      maxTools: 2,
+      isAllowed: () => true
     })
     expect(res.toolsRun).toBe(2)
     expect(res.toolsSkipped).toBe(1)

@@ -475,6 +475,17 @@ console autoscroll-only-near-bottom + "Jump to latest". **Effort:** M. **Depends
   (shows the exact argv). Inline security-review here. The exec-consent gate must **precede** broad
   quality-tool execution (linters run repo-local configs/plugins too). **Effort:** L. **Depends on:**
   M2, M3, M11.
+- **Shipped (M12 — exec-consent SECURITY CORE):** pure `execConsent.ts` (`agentSignature` = sha256
+  over `command+args+env+discovery-argv`; `isExecAllowed`/`agentNeedsConsent`, unit-tested). The
+  runner enforces it at the **spawn boundary** in `execute()` (a non-shipped agent without matching
+  consent is REFUSED — never queued or spawned — and finalized `error` with a clear message);
+  `SHIPPED_AGENT_IDS` (defaults+catalog) are implicitly trusted and reuse the existing discovery
+  gate. `runner:approveAgent` (main re-derives + persists the signature; renderer only names the
+  id), `AgentInfo.needsConsent`, a Tools "⚠ needs approval / Approve to run" affordance, and the
+  run launcher disables an unapproved agent. Slot accounting hardened so the early refusal can't
+  over-release the semaphore. Code + **security review** done. **Still TODO (M12):** the in-app
+  Agents EDITOR (`runner:saveAgent/deleteAgent/cloneAgent/setEnabled` writing only the user slice)
+  — the consent core now safely backstops it.
 
 #### M13 — Automate section + pipeline editor UI
 No-code linear `Watch → Run → Ground → Filter → Act` stepper reusing presets/prompts/agent picklists;

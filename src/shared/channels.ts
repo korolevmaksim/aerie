@@ -24,6 +24,7 @@ export const CHANNELS = {
   gitPrepare: 'git:prepare',
   runnerListAgents: 'runner:listAgents',
   runnerDiscoverAgents: 'runner:discoverAgents',
+  runnerApproveAgent: 'runner:approveAgent',
   runnerSetAgentModel: 'runner:setAgentModel',
   runnerSetAgentReasoning: 'runner:setAgentReasoning',
   runnerStart: 'runner:start',

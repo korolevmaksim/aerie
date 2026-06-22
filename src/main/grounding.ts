@@ -37,11 +37,21 @@ export function isToolRelevant(toolId: string, changedFiles: string[]): boolean 
   return changedFiles.some((f) => exts.some((e) => f.toLowerCase().endsWith(e)))
 }
 
-/** The kind:'tool' agents that are installed on PATH AND relevant to the change. */
-export function selectGroundingTools(agents: Agent[], changedFiles: string[]): Agent[] {
+/**
+ * The kind:'tool' agents that are installed on PATH AND relevant to the change AND allowed
+ * to spawn. `isAllowed` is the exec-consent gate (M12): a user-authored `kind:'tool'` agent
+ * is arbitrary local code and must be approved before grounding auto-runs it — it would
+ * otherwise bypass the consent boundary that the direct-run path enforces.
+ */
+export function selectGroundingTools(
+  agents: Agent[],
+  changedFiles: string[],
+  isAllowed: (agent: Agent) => boolean
+): Agent[] {
   return agents.filter(
     (a) =>
       a.kind === 'tool' &&
+      isAllowed(a) &&
       whichOnPath(a.detect ?? a.command) !== null &&
       isToolRelevant(a.id, changedFiles)
   )
@@ -146,12 +156,14 @@ export async function gatherGroundTruth(args: {
   /** Noise-filter knobs (M6); default off — pure dedup. */
   consensusMin?: number
   minSeverity?: Severity
+  /** Exec-consent gate (M12): a user `kind:'tool'` agent must be approved to auto-run. */
+  isAllowed: (agent: Agent) => boolean
 }): Promise<GroundingResult> {
   // Relevance gating is the real limiter (only tools matching the changed files run);
   // the cap is a safety ceiling above the current catalog (9 tools) so even a polyglot
   // diff isn't truncated in practice. If the cap is ever hit, `toolsSkipped` makes the
   // drop visible (never silent) — the runner surfaces it.
-  const relevant = selectGroundingTools(args.agents, args.changedFiles)
+  const relevant = selectGroundingTools(args.agents, args.changedFiles, args.isAllowed)
   const selected = relevant.slice(0, args.maxTools ?? 12)
   const toolsSkipped = relevant.length - selected.length
   if (selected.length === 0) {

@@ -66,6 +66,14 @@ same change set.
   how much noise was removed. Pure + unit-tested; built so multi-agent consensus (future parallel
   runs) reuses the same aggregator.
 
+- **Exec-consent for user-added agents (security)** — Aerie now refuses to spawn a user-authored
+  or user-edited agent (one whose id isn't a shipped template/catalog entry) until you explicitly
+  **approve its command**. Approval records a signature over the agent's `command + args + env +
+  model-discovery argv`; editing any of those re-requires approval, so a changed command can never
+  run on stale consent. The check is enforced in the main process at the spawn boundary (never the
+  renderer); shipped agents stay implicitly trusted. The Tools tab shows "⚠ needs approval" with an
+  **Approve to run** button, and an unapproved agent can't be launched from the run screen.
+
 - **First-run onboarding + nav landmarks** — with no accounts, the Accounts panel now shows a
   proper welcome explaining the token to add (classic PAT, `repo` scope, `read:org` for orgs), a
   link to create one, and a reassurance that tokens are encrypted and stay local. The top nav is a

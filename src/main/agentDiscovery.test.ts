@@ -92,13 +92,13 @@ describe('discoverAllModels', () => {
   it('discovers only AUTHOR-SHIPPED (trusted) agents; skips user-added descriptors', async () => {
     const shipped = agent('opencode', 'node', linesProbe('opencode/x\n'))
     const userAdded = agent('evil', 'node', linesProbe('pwned/model\n'))
-    const trusted = new Set(['opencode']) // 'evil' is NOT trusted
-    const res = await discoverAllModels([shipped, userAdded], trusted, process.cwd(), 5000)
+    const isTrusted = (a: Agent): boolean => a.id === 'opencode' // 'evil' is NOT trusted
+    const res = await discoverAllModels([shipped, userAdded], isTrusted, process.cwd(), 5000)
     expect(res).toEqual([{ agentId: 'opencode', models: ['opencode/x'] }])
   })
   it('omits agents whose probe returns nothing (static seed stays)', async () => {
     const a = agent('opencode', 'node', linesProbe('\n\n'))
-    const res = await discoverAllModels([a], new Set(['opencode']), process.cwd(), 5000)
+    const res = await discoverAllModels([a], () => true, process.cwd(), 5000)
     expect(res).toEqual([])
   })
 })

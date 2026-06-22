@@ -386,7 +386,9 @@ export function isAgent(value: unknown): value is Agent {
     a.args.every((x) => typeof x === 'string') &&
     (a.promptDelivery === 'arg' || a.promptDelivery === 'stdin' || a.promptDelivery === 'file') &&
     (a.outputCapture === 'stdout' || a.outputCapture === 'file') &&
-    typeof a.timeoutSec === 'number'
+    typeof a.timeoutSec === 'number' &&
+    // kind drives spawn routing (run vs grounding tool), so reject a malformed value.
+    (a.kind === undefined || a.kind === 'agent' || a.kind === 'tool')
   )
 }
 

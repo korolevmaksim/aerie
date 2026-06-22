@@ -35,6 +35,7 @@ import type {
 } from '../shared/types'
 import {
   aggregateRunFindings,
+  approveAgentExec,
   discoverAgentModels,
   getRunTranscript,
   killRun,
@@ -481,6 +482,19 @@ export function registerIpcHandlers(): void {
       return ok(await discoverAgentModels())
     } catch (error) {
       return fail(error instanceof Error ? error.message : 'Model discovery failed.')
+    }
+  })
+
+  // Exec-consent (M12): record the user's approval to run a user-authored agent's exact
+  // current command. Main computes + persists the signature; the renderer can't fabricate
+  // consent (it only names the id, and main re-derives the signature). No-op for shipped ids.
+  ipcMain.handle(CHANNELS.runnerApproveAgent, (event, id: unknown): ApiResult<AgentInfo[]> => {
+    if (!isTrustedSender(event)) return fail('Untrusted sender.')
+    if (typeof id !== 'string' || id.length === 0) return fail('Invalid agent id.')
+    try {
+      return ok(approveAgentExec(id))
+    } catch (error) {
+      return fail(error instanceof Error ? error.message : 'Could not approve the agent.')
     }
   })
 

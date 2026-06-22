@@ -121,6 +121,8 @@ const api = {
       ipcRenderer.invoke(CHANNELS.runnerListAgents),
     discoverAgents: (): Promise<ApiResult<AgentInfo[]>> =>
       ipcRenderer.invoke(CHANNELS.runnerDiscoverAgents),
+    approveAgent: (id: string): Promise<ApiResult<AgentInfo[]>> =>
+      ipcRenderer.invoke(CHANNELS.runnerApproveAgent, id),
     setAgentModel: (agentId: string, model: string): Promise<ApiResult<AgentInfo[]>> =>
       ipcRenderer.invoke(CHANNELS.runnerSetAgentModel, agentId, model),
     setAgentReasoning: (agentId: string, reasoning: string): Promise<ApiResult<AgentInfo[]>> =>
