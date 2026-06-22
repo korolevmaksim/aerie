@@ -490,8 +490,13 @@ console autoscroll-only-near-bottom + "Jump to latest". **Effort:** M. **Depends
   read/write ONLY the user slice (`[...DEFAULT_AGENTS, ...userSlice]`, so a default is never
   shadowed/clobbered) and clean up orphaned per-id settings on rename/delete + `runner:saveAgent`/
   `deleteAgent`/`cloneAgent` IPC (each `isTrustedSender` + validated). Code + security review done.
-  **Still TODO (M12):** the editor FORM UI (full Agent-contract fields), and `setEnabled` (a
-  disabled flag). The consent core gates anything the editor creates.
+- **Shipped (M12 — editor UI → M12 COMPLETE):** the `Agent` contract moved to `shared/types`
+  (re-exported from `agentConfig`) so the renderer can edit it; `AgentInfo.editable` + a
+  `runner:getAgent` IPC return the full descriptor. Pure `lib/agentForm.ts` (form ↔ Agent mapping +
+  client validation, unit-tested) + an `AgentEditor` component in the Tools tab: list/add/clone/
+  edit/delete user agents (full contract incl. args/env editors) with inline errors and the
+  Approve-to-run consent step. Code review done. **Deferred (minor):** `setEnabled` (a per-agent
+  disabled flag) + the shared `ConfirmDialog` (the editor's delete still uses `window.confirm`).
 
 #### M13 — Automate section + pipeline editor UI
 No-code linear `Watch → Run → Ground → Filter → Act` stepper reusing presets/prompts/agent picklists;

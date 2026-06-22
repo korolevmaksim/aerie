@@ -243,6 +243,61 @@ select.field {
   font-size: 0.85rem;
 }
 
+/* In-app agent editor (M12). */
+.agent-editor {
+  margin-top: 1.4rem;
+  border-top: 1px solid var(--border, #2a2f37);
+  padding-top: 0.8rem;
+}
+.agent-editor__actions,
+.agent-editor__add {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.agent-editor__add {
+  margin-top: 0.8rem;
+  flex-wrap: wrap;
+}
+.agent-editor__clone {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.agent-editor__form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  max-width: 48rem;
+}
+.agent-editor__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+}
+.agent-editor__row {
+  display: flex;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+}
+.agent-editor__row .agent-editor__field {
+  flex: 1;
+  min-width: 8rem;
+}
+.agent-editor__env-row {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.3rem;
+}
+.agent-editor__form-actions {
+  display: flex;
+  gap: 0.6rem;
+  margin-top: 0.4rem;
+}
+
 /* Exec-consent (M12): a user-added agent awaiting approval to run. */
 .agent-consent {
   display: inline-flex;

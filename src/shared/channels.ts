@@ -25,6 +25,7 @@ export const CHANNELS = {
   runnerListAgents: 'runner:listAgents',
   runnerDiscoverAgents: 'runner:discoverAgents',
   runnerApproveAgent: 'runner:approveAgent',
+  runnerGetAgent: 'runner:getAgent',
   runnerSaveAgent: 'runner:saveAgent',
   runnerDeleteAgent: 'runner:deleteAgent',
   runnerCloneAgent: 'runner:cloneAgent',

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { AgentInfo } from '@shared/types'
+import AgentEditor from './AgentEditor'
 
 /**
  * Read-only inventory of the agent CLIs Aerie auto-detects on this machine — the
@@ -151,6 +152,8 @@ function ToolsPanel(): React.JSX.Element {
               </div>
             </>
           )}
+
+          <AgentEditor agents={agents} onChange={setAgents} />
         </>
       )}
     </section>

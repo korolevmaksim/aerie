@@ -5,6 +5,7 @@ import { CHANNELS } from '../shared/channels'
 import type {
   AccountSummary,
   AddAccountInput,
+  Agent,
   AgentInfo,
   ApiResult,
   BranchSummary,
@@ -39,6 +40,7 @@ import {
   cloneAgentToUser,
   deleteUserAgentById,
   discoverAgentModels,
+  getAgentById,
   getRunTranscript,
   killRun,
   listAgentInfos,
@@ -501,9 +503,21 @@ export function registerIpcHandlers(): void {
     }
   })
 
-  // In-app agent editor (M12). Saves write ONLY the user slice; main validates the payload
-  // (isAgent + id rules) and never lets a user shadow a shipped id. Anything saved still
-  // needs exec-consent before it can run, so these are not an exec-bypass.
+  // In-app agent editor (M12). The full descriptor for editing/cloning (command/args/env
+  // aren't secrets — the renderer is the app's own UI; the token is never in here).
+  ipcMain.handle(CHANNELS.runnerGetAgent, (event, id: unknown): ApiResult<Agent | null> => {
+    if (!isTrustedSender(event)) return fail('Untrusted sender.')
+    if (typeof id !== 'string' || id.length === 0) return fail('Invalid agent id.')
+    try {
+      return ok(getAgentById(id))
+    } catch (error) {
+      return fail(error instanceof Error ? error.message : 'Could not read the agent.')
+    }
+  })
+
+  // Saves write ONLY the user slice; main validates the payload (isAgent + id rules) and
+  // never lets a user shadow a shipped id. Anything saved still needs exec-consent before
+  // it can run, so these are not an exec-bypass.
   ipcMain.handle(
     CHANNELS.runnerSaveAgent,
     (event, agent: unknown, editingId: unknown): ApiResult<AgentInfo[]> => {

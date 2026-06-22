@@ -149,6 +149,47 @@ export type RefType = 'commit' | 'pr' | 'working-tree'
 /** The two working-tree review modes, used as `refId` when refType is 'working-tree'. */
 export type WorkingTreeMode = 'working-tree' | 'staged'
 
+/**
+ * Live model-list discovery descriptor (M2): a non-interactive probe to enumerate the
+ * models an agent CLI offers. `lines` = one model id per line (e.g. `opencode models`).
+ */
+export type ModelDiscovery = { kind: 'command'; argv: string[]; format: 'lines' }
+
+/**
+ * The editable agent contract (SPEC §7). An agent is an external CLI: `command` + `args`
+ * are spawned, `{{placeholder}}` tokens are substituted, and the review is captured from
+ * stdout or a file. Shared so the in-app editor (renderer) and the runner (main) agree on
+ * the shape. (Defined here, re-exported from `main/agentConfig` for existing imports.)
+ */
+export interface Agent {
+  id: string
+  label: string
+  command: string
+  args: string[]
+  promptDelivery: 'arg' | 'stdin' | 'file'
+  promptPlaceholder: string
+  outputCapture: 'stdout' | 'file'
+  outputFile: string | null
+  timeoutSec: number
+  env: Record<string, string>
+  /** Currently selected model (substituted into {{model}}). */
+  model?: string
+  /** Selectable models for this agent (UI dropdown). */
+  models?: string[]
+  /** Default reasoning/thinking level (substituted into {{reasoning}}). */
+  reasoning?: string
+  /** Selectable reasoning levels (empty/absent → the CLI has no reasoning control). */
+  reasoningLevels?: string[]
+  /** Binary to check for availability (defaults to `command`). */
+  detect?: string
+  /** 'agent' (LLM CLI, default) or 'tool' (deterministic linter/SAST/type-checker). */
+  kind?: 'agent' | 'tool'
+  /** Exit codes that mean the run SUCCEEDED (findings may be present). Defaults to [0]. */
+  successExitCodes?: number[]
+  /** Optional live model-list discovery (M2); overlays the static `models` seed. */
+  modelDiscovery?: ModelDiscovery
+}
+
 /** Renderer-facing agent identity (the full config, incl. command/env, stays in main). */
 export interface AgentInfo {
   id: string
@@ -173,6 +214,8 @@ export interface AgentInfo {
    * user explicitly approves it. Always false for author-shipped templates/catalog.
    */
   needsConsent: boolean
+  /** True when this is a user agent (in the editable user slice) — the editor can edit/delete it. */
+  editable: boolean
 }
 
 /** A saved review preset: a quick agent + model + reasoning bundle. */

@@ -38,6 +38,10 @@ third-party service.
   changes in your mapped local clone (all changes via `git diff HEAD`, or just what's
   staged) for a pre-PR pass. Zero GitHub calls, no checkout, never touches your working
   copy — read-only `git diff` only.
+- **Edit your own agents** — the Tools tab has an in-app editor to add, clone, edit, and delete
+  custom agent CLIs (the full contract: command, args, env, output capture, …). A user-added agent
+  must be **explicitly approved** before Aerie will run its command — editing the command re-requires
+  approval — and a custom agent can never shadow a built-in.
 - **Run any local agent** — a small, editable registry ships templates for Codex,
   Claude Code, Cursor Agent, opencode, Kimi, Gemini, Mistral Vibe, Grok, Antigravity, and
   MiMo. Installed agents are auto-detected; pick a model and (where supported) a

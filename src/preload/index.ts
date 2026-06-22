@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 import { CHANNELS } from '../shared/channels'
 import type {
+  Agent,
   AccountSummary,
   AddAccountInput,
   AgentInfo,
@@ -124,7 +125,9 @@ const api = {
     approveAgent: (id: string): Promise<ApiResult<AgentInfo[]>> =>
       ipcRenderer.invoke(CHANNELS.runnerApproveAgent, id),
     // Agent editor (M12). `agent` is an Agent-shaped object; main validates it.
-    saveAgent: (agent: unknown, editingId?: string): Promise<ApiResult<AgentInfo[]>> =>
+    getAgent: (id: string): Promise<ApiResult<Agent | null>> =>
+      ipcRenderer.invoke(CHANNELS.runnerGetAgent, id),
+    saveAgent: (agent: Agent, editingId?: string): Promise<ApiResult<AgentInfo[]>> =>
       ipcRenderer.invoke(CHANNELS.runnerSaveAgent, agent, editingId),
     deleteAgent: (id: string): Promise<ApiResult<AgentInfo[]>> =>
       ipcRenderer.invoke(CHANNELS.runnerDeleteAgent, id),

@@ -187,6 +187,7 @@ export function setAgentReasoning(id: string, reasoning: string): void {
 
 /** Renderer-facing agent list with resolved model/reasoning + availability + path. */
 export function listAgentInfos(): AgentInfo[] {
+  const userIds = new Set(readPersistedUserAgents().map((a) => a.id))
   return loadAgents().map((a) => {
     const path = whichOnPath(a.detect ?? a.command)
     const { models, source } = resolveModels(a)
@@ -201,9 +202,15 @@ export function listAgentInfos(): AgentInfo[] {
       available: path !== null,
       path,
       // User-authored agents must be approved before they can run (M12); shipped never.
-      needsConsent: agentBlocked(a)
+      needsConsent: agentBlocked(a),
+      editable: userIds.has(a.id)
     }
   })
+}
+
+/** The full descriptor for an agent id (for the editor to edit/clone). Null if unknown. */
+export function getAgentById(id: string): Agent | null {
+  return loadAgents().find((a) => a.id === id) ?? null
 }
 
 /**

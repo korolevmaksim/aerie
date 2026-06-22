@@ -5,49 +5,11 @@
 // code-review invocation (only the final review is captured — no chat UI, no
 // reasoning/tool-call transcript). Adding/editing an agent is a config edit.
 
-import type { RefType } from '../shared/types'
-
-/**
- * How to discover an agent's live model list at runtime (ROADMAP M2), overlaying the
- * static `models` seed. `command` runs a NON-INTERACTIVE subcommand and parses stdout
- * (`lines` = one model id per line, e.g. `opencode models`). The probe runs with a
- * token-stripped env + timeout; only AUTHOR-SHIPPED descriptors are ever executed —
- * a user-authored descriptor needs explicit exec-consent (M12) before it runs.
- */
-export type ModelDiscovery = { kind: 'command'; argv: string[]; format: 'lines' }
-
-export interface Agent {
-  id: string
-  label: string
-  command: string
-  args: string[]
-  promptDelivery: 'arg' | 'stdin' | 'file'
-  promptPlaceholder: string
-  outputCapture: 'stdout' | 'file'
-  outputFile: string | null
-  timeoutSec: number
-  env: Record<string, string>
-  /** Currently selected model (substituted into {{model}}). */
-  model?: string
-  /** Selectable models for this agent (UI dropdown). */
-  models?: string[]
-  /** Default reasoning/thinking level (substituted into {{reasoning}}). */
-  reasoning?: string
-  /** Selectable reasoning levels (empty/absent → the CLI has no reasoning control). */
-  reasoningLevels?: string[]
-  /** Binary to check for availability (defaults to `command`). */
-  detect?: string
-  /** 'agent' (LLM CLI, default) or 'tool' (deterministic linter/SAST/type-checker). */
-  kind?: 'agent' | 'tool'
-  /**
-   * Exit codes that mean the run SUCCEEDED (findings may or may not be present), so a
-   * linter that exits non-zero when it finds issues is recorded 'done', not 'error'.
-   * Defaults to [0] when absent or empty.
-   */
-  successExitCodes?: number[]
-  /** Optional live model-list discovery (M2); overlays the static `models` seed. */
-  modelDiscovery?: ModelDiscovery
-}
+// The Agent + ModelDiscovery contract now lives in shared/types (the in-app editor needs
+// it renderer-side); re-exported here so existing `import { Agent } from './agentConfig'`
+// keep working.
+import type { Agent, ModelDiscovery, RefType } from '../shared/types'
+export type { Agent, ModelDiscovery }
 
 const REVIEW_TIMEOUT = 900
 
