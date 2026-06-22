@@ -27,6 +27,7 @@ export const CHANNELS = {
   runnerSetAgentModel: 'runner:setAgentModel',
   runnerSetAgentReasoning: 'runner:setAgentReasoning',
   runnerStart: 'runner:start',
+  runnerStartBatch: 'runner:startBatch',
   presetsList: 'presets:list',
   presetsSave: 'presets:save',
   presetsDelete: 'presets:delete',

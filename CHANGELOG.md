@@ -66,6 +66,16 @@ same change set.
   how much noise was removed. Pure + unit-tested; built so multi-agent consensus (future parallel
   runs) reuses the same aggregator.
 
+- **Panel review (multi-agent fan-out)** — the first slice of the automation engine: a "Panel
+  review" toggle on the run launcher lets you pick several installed agents and review one
+  change with all of them at once. Each agent starts as its own correlated run (shared
+  repo+sha+ref, its own saved model) and streams side by side; concurrency stays bounded by the
+  run semaphore (up to 3 at a time, the rest queue). Not-installed / over-cap (max 8) agents are
+  reported, not started; an agent already running for the ref is skipped. New `runner:startBatch`
+  IPC; every per-run guarantee is unchanged (no GitHub token in any agent env; posting still
+  behind the explicit confirm). Foundation for configurable pipelines (aggregation/consensus and
+  the actioner come next).
+
 - **Live model discovery** — the Tools tab gained a **Discover models** button that runs each
   installed agent's model-list probe (currently `opencode models`, offline + no-auth) and overlays
   the discovered model ids on the static seed, so the picker shows what you can *actually* select

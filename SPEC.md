@@ -148,6 +148,18 @@ settings(key, value)
 > the consent), narrower than the `use_local_worktree` checkout mode. Grounding still
 > honours the `ui.groundReviews` opt-out. Findings noise-filtering (M6) applies identically.
 
+> **Multi-agent fan-out (ROADMAP M8/M9 — first slice).** `runner:startBatch` launches one
+> review across several agents on a single ref: each eligible agent becomes its own
+> correlated `runs` row (shared repo+sha+ref, differing agent, its own saved model), started
+> via the same `startRun()` keystone, with concurrency bounded by the run semaphore. The
+> shared validation + working-tree HEAD resolution is factored into one `resolveRunTarget`
+> helper used by both `runner:start` and `runner:startBatch`. The pure `planBatch` decides which
+> requested agents run (dedup + installed-only + cap 8) vs. are skipped. No new table — a "batch"
+> is just the set of runs sharing a ref. Every per-run guarantee holds (no token in any agent
+> env; GitHub writes still behind the explicit confirm). Cross-agent aggregation/consensus (reusing
+> the M6 aggregator) and an actioner are later milestones; agents emit prose today, so structured
+> cross-agent consensus needs structured agent output first.
+
 > **Live model discovery (ROADMAP M2).** An agent template may carry an optional
 > `modelDiscovery` descriptor (`{kind:'command', argv, format:'lines'}`) describing a
 > non-interactive probe (e.g. `opencode models`) that lists the models the user can pick.

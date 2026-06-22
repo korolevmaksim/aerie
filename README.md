@@ -52,6 +52,9 @@ third-party service.
   your own in Settings, then pick one per run. Aerie always prepends the machine context
   (repo, SHA, working-copy + diff paths) so a custom prompt can never leave the agent
   without something to review.
+- **Panel review (multi-agent)** — flip on "Panel review" to run one change through several
+  agents at once; each streams its own review side by side (up to 3 run concurrently, the rest
+  queue). A second opinion in one click.
 - **Presets** — save an agent + model + reasoning bundle and apply it in one click.
 - **Live output, kill, and history** — watch the agent's transcript stream, stop a run,
   and reopen any past run's logs and result.

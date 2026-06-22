@@ -19,11 +19,14 @@ import type {
   Prompt,
   PullRequestDetail,
   PullRequestSummary,
+  RefType,
   RepoMapping,
   ReposResult,
   RunHistoryItem,
   RunRecord,
   SettingKey,
+  StartBatchParams,
+  StartBatchResult,
   StartRunParams,
   SystemInfo
 } from '../shared/types'
@@ -37,6 +40,7 @@ import {
   readRunOutput,
   setAgentModel,
   setAgentReasoning,
+  startBatch,
   startRun
 } from './agentRunner'
 import {
@@ -107,6 +111,62 @@ function ok<T>(value: T): ApiResult<T> {
 
 function fail(error: string): ApiResult<never> {
   return { ok: false, error }
+}
+
+interface RunTarget {
+  accountId: number
+  repoId: number
+  sha: string
+  refType: RefType
+  refId: string
+  promptId?: number
+  authorLogin: string | null
+}
+
+/**
+ * Validate the SHARED fields of a run/batch request and resolve a working-tree HEAD
+ * (the renderer supplies no sha for those). Agent id(s) are validated by the caller.
+ * Returns the normalized target or a typed error — used by both single and batch starts.
+ */
+async function resolveRunTarget(p: Partial<StartRunParams>): Promise<ApiResult<RunTarget>> {
+  if (!p || typeof p !== 'object') return fail('Invalid run parameters.')
+  if (!isValidId(p.accountId) || !isValidId(p.repoId)) return fail('Invalid account or repo id.')
+  if (p.refType !== 'commit' && p.refType !== 'pr' && p.refType !== 'working-tree') {
+    return fail('Invalid ref type.')
+  }
+  if (typeof p.refId !== 'string') return fail('Invalid run parameters.')
+  if (p.promptId !== undefined && p.promptId !== null && !isValidId(p.promptId)) {
+    return fail('Invalid prompt id.')
+  }
+
+  let sha = p.sha
+  if (p.refType === 'working-tree') {
+    if (p.refId !== 'working-tree' && p.refId !== 'staged')
+      return fail('Invalid working-tree mode.')
+    const repo = getRepoById(p.repoId)
+    if (!repo) return fail('Repository not found.')
+    if (!repo.user_local_path) {
+      return fail('Map a local clone for this repository to review its working tree.')
+    }
+    try {
+      sha = await headShaOf(repo.user_local_path)
+    } catch (e) {
+      return fail(e instanceof Error ? e.message : 'Could not read the local clone HEAD.')
+    }
+  }
+  if (!isValidSha(sha)) return fail('Invalid SHA.')
+
+  const authorLogin =
+    typeof p.authorLogin === 'string' && isGithubLogin(p.authorLogin) ? p.authorLogin : null
+  return ok({
+    accountId: p.accountId,
+    repoId: p.repoId,
+    sha,
+    refType: p.refType,
+    refId: p.refId,
+    promptId: p.promptId ?? undefined,
+    authorLogin
+  })
 }
 
 /**
@@ -510,58 +570,47 @@ export function registerIpcHandlers(): void {
     async (event, params: unknown): Promise<ApiResult<RunRecord>> => {
       if (!isTrustedSender(event)) return fail('Untrusted sender.')
       const p = params as Partial<StartRunParams>
-      if (!p || typeof p !== 'object') return fail('Invalid run parameters.')
-      if (!isValidId(p.accountId) || !isValidId(p.repoId))
-        return fail('Invalid account or repo id.')
-      if (p.refType !== 'commit' && p.refType !== 'pr' && p.refType !== 'working-tree')
-        return fail('Invalid ref type.')
-      if (typeof p.refId !== 'string' || typeof p.agentId !== 'string')
-        return fail('Invalid run parameters.')
-      if (p.promptId !== undefined && p.promptId !== null && !isValidId(p.promptId)) {
-        return fail('Invalid prompt id.')
-      }
-
-      // Working-tree runs review uncommitted changes in the user's OWN mapped clone
-      // (read-only, zero GitHub calls). The head sha is NOT renderer-supplied — resolve
-      // the clone's HEAD here (the commit the changes sit on) so the row records a real
-      // sha and isValidSha holds. Hard-requires a mapped local path.
-      if (p.refType === 'working-tree') {
-        if (p.refId !== 'working-tree' && p.refId !== 'staged') {
-          return fail('Invalid working-tree mode.')
-        }
-        const repo = getRepoById(p.repoId)
-        if (!repo) return fail('Repository not found.')
-        if (!repo.user_local_path) {
-          return fail('Map a local clone for this repository to review its working tree.')
-        }
-        try {
-          p.sha = await headShaOf(repo.user_local_path)
-        } catch (e) {
-          return fail(e instanceof Error ? e.message : 'Could not read the local clone HEAD.')
-        }
-      }
-
-      if (!isValidSha(p.sha)) return fail('Invalid SHA.')
-
-      // Only accept a well-formed GitHub login for the @-mention; anything else → none.
-      p.authorLogin =
-        typeof p.authorLogin === 'string' && isGithubLogin(p.authorLogin) ? p.authorLogin : null
+      if (typeof p?.agentId !== 'string') return fail('Invalid run parameters.')
+      const target = await resolveRunTarget(p)
+      if (!target.ok) return target
+      const t = target.value
       // Dedup on the resolved HEAD + agent; for working-tree also on the mode (refId),
       // since 'working-tree' and 'staged' share a HEAD but review different diffs.
       if (
-        hasActiveRun(p.repoId, p.sha, p.agentId, p.refType === 'working-tree' ? p.refId : undefined)
+        hasActiveRun(t.repoId, t.sha, p.agentId, t.refType === 'working-tree' ? t.refId : undefined)
       ) {
-        const subject = p.refType === 'working-tree' ? 'working-tree review' : 'commit'
+        const subject = t.refType === 'working-tree' ? 'working-tree review' : 'commit'
         return fail(`A run for this ${subject} and agent is already in progress.`)
       }
-
-      // Output and status now flow through the central run-events hub, which the
-      // main process broadcasts to ALL windows (so a re-shown window keeps streaming)
-      // and the tray subscribes to. No per-sender wiring here.
+      // Output and status flow through the central run-events hub (broadcast to all
+      // windows + the tray); no per-sender wiring here.
       try {
-        return ok(startRun(p as StartRunParams))
+        return ok(startRun({ ...t, agentId: p.agentId }))
       } catch (error) {
         return fail(error instanceof Error ? error.message : 'Failed to start run.')
+      }
+    }
+  )
+
+  // Multi-agent fan-out (M8/M9): start one review across several agents on the same ref.
+  ipcMain.handle(
+    CHANNELS.runnerStartBatch,
+    async (event, params: unknown): Promise<ApiResult<StartBatchResult>> => {
+      if (!isTrustedSender(event)) return fail('Untrusted sender.')
+      const p = params as Partial<StartBatchParams>
+      if (
+        !Array.isArray(p?.agentIds) ||
+        p.agentIds.length === 0 ||
+        !p.agentIds.every((a) => typeof a === 'string')
+      ) {
+        return fail('Select at least one agent.')
+      }
+      const target = await resolveRunTarget(p as Partial<StartRunParams>)
+      if (!target.ok) return target
+      try {
+        return ok(startBatch({ ...target.value, agentIds: p.agentIds }))
+      } catch (error) {
+        return fail(error instanceof Error ? error.message : 'Failed to start the review.')
       }
     }
   )

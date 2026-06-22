@@ -7,11 +7,14 @@ import type {
   RunHistoryItem,
   RunRecord,
   RunStatus,
+  StartBatchParams,
+  StartBatchResult,
   StartRunParams
 } from '../shared/types'
 import { assessReviewQuality } from '../shared/quality'
 import { AGENT_CATALOG } from './agentCatalog'
 import { discoverAllModels, overlayModels } from './agentDiscovery'
+import { planBatch } from './batch'
 import {
   buildPrompt,
   DEFAULT_AGENTS,
@@ -44,6 +47,7 @@ import {
   getRepoById,
   deleteSetting,
   getSetting,
+  hasActiveRun,
   insertFindings,
   insertRun,
   listAllRuns,
@@ -263,6 +267,52 @@ export function startRun(params: StartRunParams): RunRecord {
   // output listener) before the first status/output events are emitted.
   setImmediate(() => void execute(run.id, params, agent, repo, account.token_blob, agents))
   return rowToRecord(run)
+}
+
+/**
+ * Multi-agent fan-out (ROADMAP M8/M9 — first slice): start one review across SEVERAL
+ * agents on the same ref. Each eligible agent becomes its own correlated run (shared
+ * repo+sha+ref, differing agent), reusing `startRun`; concurrency stays bounded by the
+ * run semaphore. Not-installed / unknown / over-cap agents are reported, not started.
+ * The caller (IPC) has already validated the ref + resolved any working-tree sha.
+ */
+export function startBatch(params: StartBatchParams): StartBatchResult {
+  const installed = new Set(
+    loadAgents()
+      .filter((a) => whichOnPath(a.detect ?? a.command) !== null)
+      .map((a) => a.id)
+  )
+  const plan = planBatch(params.agentIds, installed)
+  const runs: RunRecord[] = []
+  const skipped: StartBatchResult['skipped'] = [...plan.skipped]
+  for (const agentId of plan.run) {
+    // Skip an agent already running for this exact ref (mirrors the single-run guard) —
+    // and report it, so the UI explains why no RunView appeared for that agent.
+    if (
+      hasActiveRun(
+        params.repoId,
+        params.sha,
+        agentId,
+        params.refType === 'working-tree' ? params.refId : undefined
+      )
+    ) {
+      skipped.push({ id: agentId, reason: 'already-running' })
+      continue
+    }
+    runs.push(
+      startRun({
+        accountId: params.accountId,
+        repoId: params.repoId,
+        sha: params.sha,
+        refType: params.refType,
+        refId: params.refId,
+        agentId,
+        promptId: params.promptId,
+        authorLogin: params.authorLogin
+      })
+    )
+  }
+  return { runs, skipped }
 }
 
 // Cap the in-memory capture so a runaway agent can't bloat the main process or

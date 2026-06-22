@@ -199,6 +199,28 @@ export interface StartRunParams {
   authorLogin?: string | null
 }
 
+/**
+ * Launch one review across SEVERAL agents on the same ref (multi-agent fan-out). Same
+ * shape as a single run but with `agentIds` instead of `agentId`; each eligible agent
+ * starts as its own correlated run (per-agent default model/reasoning).
+ */
+export interface StartBatchParams {
+  accountId: number
+  repoId: number
+  sha: string
+  refType: RefType
+  refId: string
+  agentIds: string[]
+  promptId?: number
+  authorLogin?: string | null
+}
+
+/** Result of a fan-out: the runs that started, and any requested agents that didn't. */
+export interface StartBatchResult {
+  runs: RunRecord[]
+  skipped: { id: string; reason: 'not-eligible' | 'over-cap' | 'already-running' }[]
+}
+
 export interface RunRecord {
   id: number
   repoId: number

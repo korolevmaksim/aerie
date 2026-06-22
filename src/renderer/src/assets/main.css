@@ -333,6 +333,42 @@ select.field {
   flex-wrap: wrap;
 }
 
+/* Panel review (multi-agent fan-out): the toggle, the agent checklist, per-agent runs. */
+.run__panel-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+  cursor: pointer;
+  margin-bottom: 0.5rem;
+}
+
+.run__agent-picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.1rem;
+  margin: 0.4rem 0;
+}
+
+.run__agent-pick {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+}
+
+.run__batch-item {
+  margin-top: 0.8rem;
+  border-top: 1px solid var(--border, #2a2f37);
+  padding-top: 0.6rem;
+}
+
+.run__batch-agent {
+  margin: 0 0 0.4rem;
+  font-size: 0.9rem;
+}
+
 .account__main {
   display: flex;
   align-items: baseline;

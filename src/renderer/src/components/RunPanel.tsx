@@ -1,5 +1,13 @@
 import { useEffect, useState } from 'react'
-import type { AgentInfo, Preset, Prompt, RefType, RunRecord, RunStatus } from '@shared/types'
+import type {
+  AgentInfo,
+  Preset,
+  Prompt,
+  RefType,
+  RunRecord,
+  RunStatus,
+  StartBatchResult
+} from '@shared/types'
 import RunView from './RunView'
 
 /**
@@ -35,6 +43,11 @@ function RunPanel({
   const [currentStatus, setCurrentStatus] = useState<RunStatus | null>(null)
   const [starting, setStarting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Panel-review (multi-agent fan-out) state. Off by default — single-agent is the norm.
+  const [panelMode, setPanelMode] = useState(false)
+  const [panelIds, setPanelIds] = useState<Set<string>>(new Set())
+  const [batchRuns, setBatchRuns] = useState<RunRecord[]>([])
+  const [batchSkipped, setBatchSkipped] = useState<StartBatchResult['skipped']>([])
 
   useEffect(() => {
     let cancelled = false
@@ -69,7 +82,12 @@ function RunPanel({
     let cancelled = false
     void (async () => {
       const res = await window.aerie.runner.listRuns(repoId)
-      if (cancelled || !res.ok) return
+      if (cancelled) return
+      // Panel runs are session-only (not rehydrated), so clear them when the ref changes —
+      // otherwise commit A's panel reviews would linger when navigating to commit B.
+      setBatchRuns([])
+      setBatchSkipped([])
+      if (!res.ok) return
       // commit runs are keyed by head SHA; PR and working-tree runs by refId
       // (the PR number, or the working-tree mode), since their head SHA varies.
       const match = res.value.find(
@@ -165,102 +183,225 @@ function RunPanel({
     }
   }
 
+  // Panel review: fan out the selected agents on this ref; each runs with its own
+  // saved/default model. The runs stream side by side below.
+  const onStartBatch = async (): Promise<void> => {
+    setStarting(true)
+    setError(null)
+    try {
+      const res = await window.aerie.runner.startBatch({
+        accountId,
+        repoId,
+        sha: sha ?? '',
+        refType,
+        refId,
+        agentIds: [...panelIds],
+        promptId: effectivePromptId ?? undefined,
+        authorLogin: authorLogin ?? null
+      })
+      if (res.ok) {
+        setBatchRuns(res.value.runs)
+        setBatchSkipped(res.value.skipped)
+        if (res.value.runs.length === 0) setError('No agents could be started for this review.')
+      } else {
+        setError(res.error)
+      }
+    } finally {
+      setStarting(false)
+    }
+  }
+
+  const togglePanelId = (id: string): void =>
+    setPanelIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+
+  const installedAgents = agents.filter((a) => a.available)
+  const labelFor = (id: string): string => agents.find((a) => a.id === id)?.label ?? id
+
   return (
     <div className="run">
-      <div className="run__controls">
-        {presets.length > 0 && (
-          <select
-            className="field"
-            value={selectedPresetId}
-            onChange={(e) => onApplyPreset(e.target.value)}
-            disabled={active || starting}
-            title="Apply a saved preset"
-          >
-            <option value="" disabled>
-              Preset…
-            </option>
-            {presets.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        )}
-        <select
-          className="field"
-          value={agentId}
-          onChange={(e) => onChangeAgent(e.target.value)}
-          disabled={active || starting}
-        >
-          {agents.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.label}
-              {a.available ? '' : ' — not installed'}
-            </option>
+      <label className="run__panel-toggle" title="Run several agents on this change at once">
+        <input
+          type="checkbox"
+          checked={panelMode}
+          onChange={(e) => {
+            setPanelMode(e.target.checked)
+            setError(null)
+          }}
+          disabled={starting}
+        />
+        Panel review (run several agents)
+      </label>
+
+      {!panelMode ? (
+        <>
+          <div className="run__controls">
+            {presets.length > 0 && (
+              <select
+                className="field"
+                value={selectedPresetId}
+                onChange={(e) => onApplyPreset(e.target.value)}
+                disabled={active || starting}
+                title="Apply a saved preset"
+              >
+                <option value="" disabled>
+                  Preset…
+                </option>
+                {presets.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            )}
+            <select
+              className="field"
+              value={agentId}
+              onChange={(e) => onChangeAgent(e.target.value)}
+              disabled={active || starting}
+            >
+              {agents.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.label}
+                  {a.available ? '' : ' — not installed'}
+                </option>
+              ))}
+            </select>
+            {prompts.length > 0 && (
+              <select
+                className="field"
+                value={effectivePromptId ?? ''}
+                onChange={(e) => setPromptId(Number(e.target.value))}
+                disabled={active || starting}
+                title="Review prompt"
+              >
+                {prompts.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            )}
+            {selectedAgent && selectedAgent.models.length > 0 && (
+              <select
+                className="field"
+                value={selectedAgent.model}
+                onChange={(e) => onChangeModel(e.target.value)}
+                disabled={active || starting}
+                title="Model"
+              >
+                {selectedAgent.models.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            )}
+            {selectedAgent && selectedAgent.reasoningLevels.length > 0 && (
+              <select
+                className="field"
+                value={selectedAgent.reasoning}
+                onChange={(e) => onChangeReasoning(e.target.value)}
+                disabled={active || starting}
+                title="Reasoning / thinking effort"
+              >
+                {selectedAgent.reasoningLevels.map((lvl) => (
+                  <option key={lvl} value={lvl}>
+                    {lvl}
+                  </option>
+                ))}
+              </select>
+            )}
+            <button
+              className="btn btn--primary"
+              onClick={onStart}
+              disabled={
+                !agentId || !selectedAgent || active || starting || !selectedAgent.available
+              }
+            >
+              {active || starting ? 'Running…' : 'Review with agent'}
+            </button>
+          </div>
+          {selectedAgent && !selectedAgent.available && (
+            <p className="hint">
+              The <code>{selectedAgent.label}</code> CLI isn’t on your PATH — install it to use this
+              agent.
+            </p>
+          )}
+          {error && <p className="alert">{error}</p>}
+          {currentRun && (
+            <RunView key={currentRun.id} run={currentRun} onStatusChange={setCurrentStatus} />
+          )}
+        </>
+      ) : (
+        <>
+          <div className="run__controls">
+            {prompts.length > 0 && (
+              <select
+                className="field"
+                value={effectivePromptId ?? ''}
+                onChange={(e) => setPromptId(Number(e.target.value))}
+                disabled={starting}
+                title="Review prompt (shared by every agent)"
+              >
+                {prompts.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            )}
+            <button
+              className="btn btn--primary"
+              onClick={onStartBatch}
+              disabled={panelIds.size === 0 || starting}
+            >
+              {starting
+                ? 'Starting…'
+                : `Review with ${panelIds.size} agent${panelIds.size === 1 ? '' : 's'}`}
+            </button>
+          </div>
+          {installedAgents.length === 0 ? (
+            <p className="hint">No installed agents to run — install an agent CLI and re-scan.</p>
+          ) : (
+            <div className="run__agent-picks">
+              {installedAgents.map((a) => (
+                <label key={a.id} className="run__agent-pick">
+                  <input
+                    type="checkbox"
+                    checked={panelIds.has(a.id)}
+                    onChange={() => togglePanelId(a.id)}
+                    disabled={starting}
+                  />
+                  {a.label}
+                </label>
+              ))}
+            </div>
+          )}
+          <p className="hint">
+            Each agent runs with its own saved model; up to 3 run at once (the rest queue).
+          </p>
+          {error && <p className="alert">{error}</p>}
+          {batchSkipped.length > 0 && (
+            <p className="hint">
+              Skipped:{' '}
+              {batchSkipped
+                .map((s) => `${labelFor(s.id)} (${s.reason.replace(/-/g, ' ')})`)
+                .join(', ')}
+              .
+            </p>
+          )}
+          {batchRuns.map((r) => (
+            <div key={r.id} className="run__batch-item">
+              <h4 className="run__batch-agent">{labelFor(r.agentId)}</h4>
+              <RunView run={r} />
+            </div>
           ))}
-        </select>
-        {prompts.length > 0 && (
-          <select
-            className="field"
-            value={effectivePromptId ?? ''}
-            onChange={(e) => setPromptId(Number(e.target.value))}
-            disabled={active || starting}
-            title="Review prompt"
-          >
-            {prompts.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        )}
-        {selectedAgent && selectedAgent.models.length > 0 && (
-          <select
-            className="field"
-            value={selectedAgent.model}
-            onChange={(e) => onChangeModel(e.target.value)}
-            disabled={active || starting}
-            title="Model"
-          >
-            {selectedAgent.models.map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
-          </select>
-        )}
-        {selectedAgent && selectedAgent.reasoningLevels.length > 0 && (
-          <select
-            className="field"
-            value={selectedAgent.reasoning}
-            onChange={(e) => onChangeReasoning(e.target.value)}
-            disabled={active || starting}
-            title="Reasoning / thinking effort"
-          >
-            {selectedAgent.reasoningLevels.map((lvl) => (
-              <option key={lvl} value={lvl}>
-                {lvl}
-              </option>
-            ))}
-          </select>
-        )}
-        <button
-          className="btn btn--primary"
-          onClick={onStart}
-          disabled={!agentId || !selectedAgent || active || starting || !selectedAgent.available}
-        >
-          {active || starting ? 'Running…' : 'Review with agent'}
-        </button>
-      </div>
-      {selectedAgent && !selectedAgent.available && (
-        <p className="hint">
-          The <code>{selectedAgent.label}</code> CLI isn’t on your PATH — install it to use this
-          agent.
-        </p>
-      )}
-      {error && <p className="alert">{error}</p>}
-      {currentRun && (
-        <RunView key={currentRun.id} run={currentRun} onStatusChange={setCurrentStatus} />
+        </>
       )}
     </div>
   )

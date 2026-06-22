@@ -24,6 +24,8 @@ import type {
   RunRecord,
   RunStatusUpdate,
   SettingKey,
+  StartBatchParams,
+  StartBatchResult,
   StartRunParams,
   SystemInfo,
   TrayOpenRun
@@ -122,6 +124,8 @@ const api = {
       ipcRenderer.invoke(CHANNELS.runnerSetAgentReasoning, agentId, reasoning),
     start: (params: StartRunParams): Promise<ApiResult<RunRecord>> =>
       ipcRenderer.invoke(CHANNELS.runnerStart, params),
+    startBatch: (params: StartBatchParams): Promise<ApiResult<StartBatchResult>> =>
+      ipcRenderer.invoke(CHANNELS.runnerStartBatch, params),
     kill: (runId: number): Promise<ApiResult<true>> =>
       ipcRenderer.invoke(CHANNELS.runnerKill, runId),
     listRuns: (repoId: number): Promise<ApiResult<RunRecord[]>> =>

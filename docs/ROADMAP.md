@@ -366,7 +366,18 @@ decrement the rate budget; low remaining → exponential backoff defers the next
 reported only when head SHA changes vs last-seen.
 
 #### M9a — Pipeline engine core
-Greenfield main-process engine reusing the strongest seams.
+**Shipped (first slice — multi-agent fan-out):** `runner:startBatch` + the pure `batch.ts`
+`planBatch` (dedup + installed-only + cap 8, unit-tested) + `startBatch()` in the runner, which
+starts one correlated run per eligible agent on a single ref (reusing `startRun`, bounded by the
+M0 semaphore). The shared run validation + working-tree HEAD resolution was factored into one
+`resolveRunTarget` IPC helper (used by both single + batch starts). A **Panel review** toggle in
+`RunPanel` multi-selects installed agents and streams each agent's review side by side; an
+already-running agent for the ref is skipped, not-installed/over-cap agents are reported. No new
+table (a batch = runs sharing repo+sha+ref). Code + security review APPROVED. **Still TODO (M9a):**
+the wait-for-all-steps barrier + the M6 aggregator for cross-agent consensus (needs **structured
+agent output** first — agents emit prose), the actioner (`notify|stage|post`, `auto_post` default
+0, gated on M-Q), pipeline persistence (`pipelines`/`pipeline_runs`), the poller/triggers (needs
+M8), and the dedupe cache. Greenfield main-process engine reusing the strongest seams.
 - `pipelines.ts` (CRUD + orchestration, subscribes to `runEvents.onFinished`) + `poller.ts`
   (timer + ETag delta detection). Triggers: **commit, pr, schedule, manual**. The engine calls the
   renderer-free `startRun()` per step (keystone reuse), chains via `onFinished`, **owns the
