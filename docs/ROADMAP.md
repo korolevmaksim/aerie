@@ -185,7 +185,13 @@ through the unchanged runner (`kind:'tool'`, no runner-path divergence); catalog
 
 ### Phase 2 — Structured findings & quality grounding *(the differentiator)*
 
-#### M4 — Structured-finding capture (keystone) + provenance + output redaction
+#### M4 — Structured-finding capture (keystone) + provenance + output redaction  *(in progress)*
+- **Shipped (M4a):** pure `findings.ts` — the common `Finding` shape (tool/ruleId/severity/file/line/
+  message/fingerprint), a stable `fingerprintOf` dedup key, the **ESLint** parser (verified against
+  real `eslint -f json` output), and diff-scoping (`parseChangedLineRanges`/`scopeToChanges`,
+  abs↔relative path match). All unit-tested. **Next (M4b):** gitleaks/ruff/biome/tsc parsers (schema-
+  verified), persistence (findings table), runner wiring + `{{changedFiles}}`, and secret-redaction of
+  on-disk `runs/*.out|*.log` (M3 security-review item).
 - Normalize tool JSON/SARIF and agent output to a common shape and **persist** it per run
   (new migration appended to `MIGRATIONS`, `store.ts:157`) alongside the existing raw text.
 - **[correction — richer provenance]:** carry `tool id+version`, exact command, exit code,
