@@ -1116,6 +1116,55 @@ select.field {
   z-index: 50;
 }
 
+/* Command palette (M14) — sits near the top, like a spotlight launcher. */
+.palette {
+  width: 100%;
+  max-width: 560px;
+  align-self: flex-start;
+  margin-top: 8vh;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.palette__input {
+  border: none;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  font-size: 1rem;
+  padding: 0.8rem 1rem;
+}
+.palette__list {
+  list-style: none;
+  margin: 0;
+  padding: 0.3rem;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+.palette__item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  padding: 0.5rem 0.7rem;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.palette__item--active {
+  background: rgba(88, 166, 255, 0.16);
+}
+.palette__hint {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+.palette__empty {
+  list-style: none;
+  padding: 0.7rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
 .modal {
   width: 100%;
   max-width: 640px;

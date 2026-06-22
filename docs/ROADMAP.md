@@ -520,6 +520,13 @@ onboarding** (Welcome → Connect account → **detected-tools reveal** → land
 flag, replay from Settings; **poller observability** (last/next poll, ETag hit/miss, rate-limit, why a run
 did/didn't fire) + **notification-fatigue controls** (batching, quiet hours, don't-notify-same-fingerprint).
 **Effort:** L. **Depends on:** M11, M12, M13.
+- **Shipped (M14 — command palette slice):** pure `lib/palette.ts` (`scoreMatch` subsequence fuzzy
+  scorer with consecutive/word-boundary bonuses + `filterCommands`, unit-tested) + a focus-trapped
+  `CommandPalette` overlay (role=dialog/listbox, arrow-key nav, Enter to run, Esc/overlay-click to
+  close) + a global **Cmd/Ctrl-K** handler in `App` wiring view-switch, account-switch, and
+  jump-to-repo (repos loaded lazily from the ETag cache on first open). Code review done.
+  **Still TODO (M14):** structured 2-column launcher, console toolbar, Runs search/filter/export,
+  left-rail IA, value-first onboarding, poller observability.
 
 ---
 

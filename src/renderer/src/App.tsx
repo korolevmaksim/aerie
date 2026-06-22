@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { AccountSummary, RepoSummary } from '@shared/types'
 import { clickableRow } from './lib/a11y'
+import type { PaletteCommand } from './lib/palette'
 import AccountsPanel from './components/AccountsPanel'
+import CommandPalette from './components/CommandPalette'
 import ReposPanel from './components/ReposPanel'
 import RepoView from './components/RepoView'
 import HistoryPanel from './components/HistoryPanel'
@@ -17,6 +19,9 @@ function App(): React.JSX.Element {
   const [openRepo, setOpenRepo] = useState<RepoSummary | null>(null)
   // A run the tray (or a finish notification) asked us to open; consumed by History.
   const [pendingRunId, setPendingRunId] = useState<number | null>(null)
+  // Command palette (M14): Cmd/Ctrl-K opens it; repos are loaded lazily for "jump to repo".
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  const [paletteRepos, setPaletteRepos] = useState<RepoSummary[]>([])
 
   const reloadAccounts = useCallback(async (): Promise<void> => {
     const list = await window.aerie.accounts.list()
@@ -56,6 +61,78 @@ function App(): React.JSX.Element {
   }
 
   const reposReady = selectedId !== null
+
+  // Cmd/Ctrl-K toggles the command palette (Esc closes it from inside the palette).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setPaletteOpen((o) => !o)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  // Lazily load the selected account's (cached) repos the first time the palette opens,
+  // so "jump to repo" has something to match. Cheap (ETag-cached, ~0 quota).
+  useEffect(() => {
+    if (!paletteOpen || selectedId === null) return
+    let cancelled = false
+    void (async () => {
+      const res = await window.aerie.repos.list(selectedId)
+      if (!cancelled && res.ok) setPaletteRepos(res.value.repos)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [paletteOpen, selectedId])
+
+  const paletteCommands = useMemo<PaletteCommand[]>(() => {
+    const cmds: PaletteCommand[] = []
+    const views: { id: View; title: string }[] = [
+      { id: 'repos', title: 'Repos' },
+      { id: 'history', title: 'History' },
+      { id: 'tools', title: 'Tools' },
+      { id: 'accounts', title: 'Accounts' },
+      { id: 'settings', title: 'Settings' }
+    ]
+    for (const v of views) {
+      if (v.id === 'repos' && !reposReady) continue
+      cmds.push({
+        id: `view:${v.id}`,
+        title: `Go to ${v.title}`,
+        group: 'Views',
+        run: () => (v.id === 'repos' ? goRepos() : setView(v.id))
+      })
+    }
+    for (const a of accounts) {
+      cmds.push({
+        id: `account:${a.id}`,
+        title: `Switch account: ${a.login}`,
+        hint: a.label,
+        group: 'Accounts',
+        run: () => {
+          setSelectedId(a.id)
+          setOpenRepo(null)
+          setView('repos')
+        }
+      })
+    }
+    for (const repo of paletteRepos) {
+      cmds.push({
+        id: `repo:${repo.id}`,
+        title: `Open ${repo.fullName}`,
+        hint: 'repository',
+        group: 'Repos',
+        run: () => {
+          setOpenRepo(repo)
+          setView('repos')
+        }
+      })
+    }
+    return cmds
+  }, [accounts, paletteRepos, reposReady])
 
   return (
     <div className="app">
@@ -151,6 +228,9 @@ function App(): React.JSX.Element {
           <ReposPanel key={selectedId} accountId={selectedId} onOpenRepo={setOpenRepo} />
         )}
       </main>
+      {paletteOpen && (
+        <CommandPalette commands={paletteCommands} onClose={() => setPaletteOpen(false)} />
+      )}
     </div>
   )
 }

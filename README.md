@@ -66,6 +66,8 @@ third-party service.
 - **Presets** — save an agent + model + reasoning bundle and apply it in one click.
 - **Live output, kill, and history** — watch the agent's transcript stream, stop a run,
   and reopen any past run's logs and result.
+- **Command palette (Cmd/Ctrl-K)** — fuzzy-jump to any view, account, or repo without reaching
+  for the mouse.
 - **Post back to GitHub — behind a confirm** — every write (commit comment, PR comment, or
   new issue) requires an explicit in-app confirmation showing the exact body. Optionally
   `@`-mention the commit/PR author.

@@ -66,6 +66,11 @@ same change set.
   how much noise was removed. Pure + unit-tested; built so multi-agent consensus (future parallel
   runs) reuses the same aggregator.
 
+- **Command palette** — press **Cmd/Ctrl-K** for a quick switcher: fuzzy-filter to jump to any view
+  (Repos/History/Tools/Accounts/Settings), switch account, or open any of your repos by name. Arrow
+  keys move the selection, Enter runs it, Esc closes; the overlay is focus-trapped with a listbox for
+  screen readers. The fuzzy ranking is pure + unit-tested.
+
 - **In-app agent editor** — the Tools tab now has a **Your agents** editor: add, clone a built-in,
   edit, and delete your own agents with the full contract (command, args, prompt delivery, output
   capture, timeout, kind, env), with inline validation and a one-click **Approve** for the
