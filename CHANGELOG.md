@@ -47,6 +47,12 @@ same change set.
   the diff's changed lines, and persisted per run (new `findings` table). gitleaks findings never
   carry the matched secret value. Foundation for grounding the LLM review and filtering noise.
 
+- Run output written to disk (and therefore any posted comment) is now **secret-scrubbed**:
+  GitHub tokens always, plus the secret values a `gitleaks` tool run surfaces — so secrets never
+  persist to `runs/*.out`/`*.log` or leak into a GitHub comment.
+- New `{{changedFiles}}` review-prompt variable (the files the change touches), and a "Changed
+  files" line in the machine context Aerie prepends to every prompt.
+
 ### Changed
 
 - Removed the retired `dummy` agent from the documentation (`SPEC.md`, `PROMPT.md`,

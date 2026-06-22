@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   compareSeverity,
+  extractSecrets,
   fingerprintOf,
   inChangedRange,
   parseBiome,
@@ -101,6 +102,20 @@ describe('parseGitleaks', () => {
     expect(parseGitleaks('[]')).toEqual([])
     expect(parseGitleaks('null')).toEqual([])
     expect(parseGitleaks('nope')).toEqual([])
+  })
+})
+
+describe('extractSecrets', () => {
+  const SECRET = '60f41f67-b43b-4552-bb80-f2f29b861ef0'
+  const sample = JSON.stringify([{ RuleID: 'generic-api-key', Secret: SECRET, File: 'data.json' }])
+
+  it('pulls the literal secret values from gitleaks output', () => {
+    expect(extractSecrets('gitleaks', sample)).toEqual([SECRET])
+  })
+  it('returns [] for non-gitleaks tools and malformed input', () => {
+    expect(extractSecrets('eslint', sample)).toEqual([])
+    expect(extractSecrets('gitleaks', 'not json')).toEqual([])
+    expect(extractSecrets('gitleaks', '[]')).toEqual([])
   })
 })
 

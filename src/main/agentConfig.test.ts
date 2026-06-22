@@ -66,6 +66,20 @@ describe('buildPrompt', () => {
     expect(p).toContain('senior software engineer')
     expect(DEFAULT_REVIEW_INSTRUCTIONS).toContain('senior software engineer')
   })
+
+  it('lists changed files in the context and substitutes {{changedFiles}}', () => {
+    const p = buildPrompt(
+      { ...base, refType: 'pr', refId: '7', changedFiles: ['src/a.ts', 'src/b.ts'] },
+      'Review only: {{changedFiles}}'
+    )
+    expect(p).toContain('Changed files (2): src/a.ts, src/b.ts') // machine-context line
+    expect(p).toContain('Review only: src/a.ts\nsrc/b.ts') // {{changedFiles}} substituted
+  })
+
+  it('omits the changed-files line when none are provided', () => {
+    const p = buildPrompt({ ...base, refType: 'commit', refId: 'deadbeef' })
+    expect(p).not.toContain('Changed files')
+  })
 })
 
 describe('SEED_PROMPTS', () => {

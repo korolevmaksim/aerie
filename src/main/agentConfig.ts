@@ -521,16 +521,20 @@ export function buildPrompt(
     sha: string
     repoPath: string
     diffFile: string
+    /** Files the change touches (from the diff); surfaced as {{changedFiles}}. */
+    changedFiles?: string[]
   },
   instructions: string = DEFAULT_REVIEW_INSTRUCTIONS
 ): string {
   const subject = ctx.refType === 'pr' ? `pull request #${ctx.refId}` : `commit ${ctx.sha}`
+  const changed = (ctx.changedFiles ?? []).filter(Boolean)
   const context = [
     `Repository: ${ctx.fullName}`,
     `Reviewing: ${subject}`,
     `Head SHA: ${ctx.sha}`,
     `Checked-out working copy: ${ctx.repoPath}`,
-    `Unified diff of the change: ${ctx.diffFile}`
+    `Unified diff of the change: ${ctx.diffFile}`,
+    ...(changed.length ? [`Changed files (${changed.length}): ${changed.join(', ')}`] : [])
   ].join('\n')
   // Power users may reference these placeholders in a custom prompt; unknown ones
   // are left intact by substitute(). An empty/blank prompt falls back to default.
@@ -540,7 +544,8 @@ export function buildPrompt(
     subject,
     sha: ctx.sha,
     repoPath: ctx.repoPath,
-    diffFile: ctx.diffFile
+    diffFile: ctx.diffFile,
+    changedFiles: changed.join('\n')
   })
   return `${context}\n\n${body}\n`
 }

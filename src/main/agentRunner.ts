@@ -21,11 +21,12 @@ import {
   type Agent
 } from './agentConfig'
 import { decryptToken } from './auth'
-import { parseChangedLineRanges, parseToolOutput, scopeToChanges } from './findings'
+import { extractSecrets, parseChangedLineRanges, parseToolOutput, scopeToChanges } from './findings'
 import { getPullRequestBaseSha } from './github'
 import { cleanupCheckout, prepareCheckout, type PreparedCheckout } from './gitEngine'
 import { log } from './logger'
 import { whichOnPath } from './pathLookup'
+import { redactText } from './redact'
 import { activeCount, noteOutput, noteStatus, registerRun } from './runEvents'
 import { createSemaphore } from './semaphore'
 import { TOOL_CATALOG } from './toolCatalog'
@@ -295,11 +296,17 @@ async function execute(
 
   // Always reach a terminal state: persist output (best-effort) then finish+clean.
   const finalize = (status: RunStatus, exitCode: number | null, output: string): void => {
+    // Scrub secrets before anything is written to disk: GitHub tokens always, plus the
+    // matched secret values a gitleaks tool run surfaced. (Findings below are parsed
+    // from the RAW output; the gitleaks parser already drops secrets.)
+    const extraSecrets = agent.kind === 'tool' ? extractSecrets(agent.id, output) : []
+    const scrub = (text: string): string => redactText(text, extraSecrets)
+
     let outputPath: string | null = null
     try {
       mkdirSync(runsDir, { recursive: true })
       outputPath = join(runsDir, `${runId}.out`)
-      writeFileSync(outputPath, output, 'utf8')
+      writeFileSync(outputPath, scrub(output), 'utf8')
     } catch (e) {
       outputPath = null
       const message = e instanceof Error ? e.message : String(e)
@@ -310,7 +317,8 @@ async function execute(
     // Persist the full console transcript for later viewing (History / re-open).
     try {
       const transcript = liveTranscripts.get(runId)
-      if (transcript !== undefined) writeFileSync(join(runsDir, `${runId}.log`), transcript, 'utf8')
+      if (transcript !== undefined)
+        writeFileSync(join(runsDir, `${runId}.log`), scrub(transcript), 'utf8')
     } catch {
       /* transcript is best-effort */
     }
@@ -381,6 +389,16 @@ async function execute(
       baseSha: prBaseSha
     })
 
+    // Files the change touches (from the diff) — exposed to prompts as {{changedFiles}}.
+    let changedFiles: string[] = []
+    try {
+      if (existsSync(prepared.diffPath)) {
+        changedFiles = [...parseChangedLineRanges(readFileSync(prepared.diffPath, 'utf8')).keys()]
+      }
+    } catch {
+      /* best-effort */
+    }
+
     // A selected prompt supplies the review INSTRUCTIONS; the machine context
     // (repo/sha/paths) is always prepended by buildPrompt. Falls back to the
     // built-in default when no prompt is chosen or the id no longer exists.
@@ -392,7 +410,8 @@ async function execute(
         refId: params.refId,
         sha: params.sha,
         repoPath: prepared.worktreePath,
-        diffFile: prepared.diffPath
+        diffFile: prepared.diffPath,
+        changedFiles
       },
       instructions
     )
@@ -410,6 +429,7 @@ async function execute(
       reasoning: resolveReasoning(agent),
       baseSha: prBaseSha ?? `${params.sha}^`,
       headSha: params.sha,
+      changedFiles: changedFiles.join('\n'),
       prompt: promptText
     }
 

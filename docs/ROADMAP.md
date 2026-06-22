@@ -185,7 +185,7 @@ through the unchanged runner (`kind:'tool'`, no runner-path divergence); catalog
 
 ### Phase 2 — Structured findings & quality grounding *(the differentiator)*
 
-#### M4 — Structured-finding capture (keystone) + provenance + output redaction  *(in progress)*
+#### M4 — Structured-finding capture (keystone) + provenance + output redaction  *(shipped)*
 - **Shipped (M4a/b):** pure `findings.ts` — the common `Finding` shape (tool/ruleId/severity/file/line/
   message/fingerprint), a stable `fingerprintOf` dedup key, **all five parsers** (eslint, gitleaks,
   ruff, biome, tsc) verified against real / schema-checked output (gitleaks deliberately **drops the
@@ -195,8 +195,10 @@ through the unchanged runner (`kind:'tool'`, no runner-path divergence); catalog
   `insertFindings`/`listFindingsForRun`; the runner `finalize` now parses a `kind:'tool'` run's
   output → scopes to the diff → persists structured findings (best-effort, never breaks a run);
   real-SQLite Electron smoke (`smoke:findings`). Path-match anchored on a segment boundary.
-  Code-review APPROVED. **Remaining (M4c-β):** redact secrets in on-disk `runs/*.out|*.log` (gitleaks
-  raw output) + add `{{changedFiles}}` + the focused security review.
+  Code-review APPROVED. **Shipped (M4c-β):** `redactText`/`extractSecrets` scrub GitHub tokens AND
+  gitleaks-surfaced secret values from on-disk `runs/*.out|*.log` before write (so a posted comment
+  can't leak them); new `{{changedFiles}}` prompt var + machine-context line. Code + security review
+  APPROVED. **M4 COMPLETE** (103 unit tests + `smoke:findings`).
 - Normalize tool JSON/SARIF and agent output to a common shape and **persist** it per run
   (new migration appended to `MIGRATIONS`, `store.ts:157`) alongside the existing raw text.
 - **[correction — richer provenance]:** carry `tool id+version`, exact command, exit code,

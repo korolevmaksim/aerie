@@ -13,3 +13,18 @@ export function redact(value: unknown): unknown {
   }
   return value
 }
+
+/**
+ * Scrubs a block of text before it is written to disk or posted: GitHub tokens are
+ * always replaced, plus any provided literal secret strings (e.g. values a gitleaks
+ * scan surfaced in a tool run). Literal secrets are matched verbatim (no regex), and
+ * very short ones (<8 chars) are deliberately ignored to avoid over-redacting
+ * incidental text — a conscious trade-off, so a sub-8-char secret would remain.
+ */
+export function redactText(text: string, extraSecrets: string[] = []): string {
+  let out = text.replace(TOKEN_RE, '[REDACTED]')
+  for (const secret of extraSecrets) {
+    if (secret && secret.length >= 8) out = out.split(secret).join('[REDACTED]')
+  }
+  return out
+}
