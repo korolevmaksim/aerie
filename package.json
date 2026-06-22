@@ -42,6 +42,7 @@
     "rebuild:native": "electron-rebuild -f -w better-sqlite3",
     "smoke": "node scripts/smoke-stage0.mjs",
     "smoke:stage1": "npm run build && electron scripts/smoke-stage1.cjs",
+    "smoke:gitdiff": "node scripts/smoke-gitdiff.cjs",
     "postinstall": "electron-rebuild -f -w better-sqlite3",
     "build:unpack": "npm run build && electron-builder --dir",
     "build:mac": "electron-vite build && electron-builder --mac"
