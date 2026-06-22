@@ -4,8 +4,8 @@
 // electron-bound glue in `pipelineEngine.ts` stays a thin binding to the runner/store/
 // GitHub writers.
 
-import type { Pipeline } from '../shared/types'
-import { isPipelineDraft } from './pipelineModel'
+import type { Pipeline, PipelineAction, PostTarget } from '../shared/types'
+import { assertMayPost, isPipelineDraft } from './pipelineModel'
 import type { GuardrailState } from './pipelinePlan'
 
 // Prototype-pollution guard for the config trust boundary: JSON allows an own key named
@@ -77,4 +77,59 @@ export function assembleGuardrailState(
       .filter((n) => Number.isFinite(n)),
     lastRepoRunStartedAtMs: Number.isFinite(lastRepoMs) ? lastRepoMs : null
   }
+}
+
+/** The three GitHub write APIs the engine's `post` port can reach (injected, so testable). */
+export interface GithubWriters {
+  createCommitComment(
+    accountId: number,
+    repoFullName: string,
+    sha: string,
+    body: string
+  ): Promise<string>
+  createPrComment(
+    accountId: number,
+    repoFullName: string,
+    prNumber: number,
+    body: string
+  ): Promise<string>
+  createIssue(accountId: number, repoFullName: string, title: string, body: string): Promise<string>
+}
+
+/** The slice of `DeltaContext` a write needs (structural, to avoid importing the engine). */
+export interface WriteContext {
+  accountId: number
+  ref: string
+  headSha: string
+}
+
+/**
+ * The SINGLE engine→GitHub write dispatch. Re-asserts `assertMayPost(action)` FIRST
+ * (defense-in-depth — throws for any non-enabled-post action, so even a mis-routed caller
+ * cannot write), resolves the repo's full name, then routes to the writer for the target:
+ * commit-comment / PR-comment (PR number parsed from the ref) / new issue (title split from
+ * the body). Returns the created object's URL. Pure given injected `writers` + `repoFullName`.
+ */
+export async function dispatchGithubWrite(
+  writers: GithubWriters,
+  repoFullName: string | null,
+  action: PipelineAction,
+  target: PostTarget,
+  ctx: WriteContext,
+  body: string
+): Promise<string> {
+  assertMayPost(action)
+  if (!repoFullName) throw new Error('pipeline auto-post: repository not found')
+  if (target === 'commit') {
+    return writers.createCommitComment(ctx.accountId, repoFullName, ctx.headSha, body)
+  }
+  if (target === 'pr') {
+    const prNumber = prNumberFromRef(ctx.ref)
+    if (prNumber === null) {
+      throw new Error(`pipeline auto-post: cannot resolve a PR number from ref "${ctx.ref}"`)
+    }
+    return writers.createPrComment(ctx.accountId, repoFullName, prNumber, body)
+  }
+  const { title, body: issueBody } = splitIssueBody(body)
+  return writers.createIssue(ctx.accountId, repoFullName, title, issueBody)
 }

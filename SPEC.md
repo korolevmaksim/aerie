@@ -228,7 +228,12 @@ settings(key, value)
 > so a corrupt/forged row is rejected — plus PR-number/issue-title/guardrail-state helpers) and
 > `runWaiter.ts` (one `onFinished` subscription = the engine's per-run `await`). The single write port
 > takes the `action` so the adapter re-asserts `assertMayPost` independently (defense-in-depth — the
-> only engine→GitHub write call site stays gated even against a future engine bug).
+> only engine→GitHub write call site stays gated even against a future engine bug). The live adapter
+> `pipelineEngine.ts` (`buildEnginePorts`) binds those ports to the real runner/store/GitHub; its single
+> write path is the pure `dispatchGithubWrite`, which re-asserts `assertMayPost` and routes commit→
+> `createCommitComment` / pr→`createPrComment` / issue→`createIssue`. `loadEnabledPipelines` parses +
+> validates each persisted config (skipping malformed/forged rows and, for now, tool-bearing pipelines).
+> No timer drives the engine until `poller.ts` lands, so the write path is wired but dormant.
 
 > **ETag-cached polling foundation (ROADMAP M8).** The automation engine needs to detect a
 > new commit/PR head cheaply. `listCommits`/`listPullRequests` now mirror `listRepos`' ETag

@@ -20,6 +20,14 @@ same change set.
 
 ### Added
 
+- **Automation pipelines — live engine adapter** (ROADMAP M9a): `pipelineEngine.ts` binds the
+  engine's ports to the real runner (`startRun`), run-event hub (`runWaiter`), M6 aggregator,
+  store, and GitHub writers, plus `loadEnabledPipelines` (parse + validate each config, skip
+  malformed/forged rows and — for now — tool-bearing pipelines). The **single engine→GitHub
+  write call site** is the pure, unit-tested `dispatchGithubWrite`, which re-asserts the auto-post
+  gate FIRST (throws for any non-enabled-post action — proven that a disabled action calls no
+  writer) then routes to the commit-comment / PR-comment / new-issue writer. No timer calls the
+  engine yet (no poller), so nothing posts; the live write path is wired but dormant.
 - **Automation pipelines — live-wiring building blocks** (ROADMAP M9a): the tested units the
   real engine adapter binds next — `pipelineEngineLogic.ts` (parse + `isPipelineDraft`-validate a
   persisted pipeline config on load so a corrupt/forged blob can never reach the engine; resolve a

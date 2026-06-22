@@ -447,6 +447,19 @@ so the adapter re-asserts `assertMayPost` independently (defense-in-depth). Vali
 build smoke. Code review APPROVED. **Still next:** the thin electron `buildEnginePorts` glue (bind
 `startRun`/`runWaiter`/`aggregateRunFindings`/the gated GitHub-writer dispatch/store), then `poller.ts`
 + teardown-on-quit, then IPC.
+**Shipped (M9a live-engine-adapter slice):** `main/pipelineEngine.ts` (electron-bound) — `buildEnginePorts()`
+returns the live `EnginePorts` + a `dispose` (drops the run-event subscription), binding `startStep`→
+`startRun` (agent steps; PR delta→PR number, commit delta→head SHA; tool steps filtered out upstream),
+`waitForRun`→`createRunWaiter().wait`, `aggregate`→`aggregateRunFindings({groupBy:'location'})`, the store
+ops, `guardrailState`→`assembleGuardrailState` over the new guardrail queries, `advanceWatch`→`markWatchSeen`,
+`notify`→log. The **single engine→GitHub write call site** is the pure `dispatchGithubWrite` (in
+`pipelineEngineLogic.ts`): it re-asserts `assertMayPost(action)` FIRST, then routes commit→
+`createCommitComment` / pr→`createPrComment` / issue→`createIssue` via `getRepoById().full_name`.
+`loadEnabledPipelines()` = `listEnabledPipelineRows().map(parsePipelineRow)` filtered to valid, agent-only
+pipelines. Validation: vitest (`dispatchGithubWrite` 6 cases — a disabled action calls NO writer, an
+enabled one routes to exactly the right writer once) + build smoke (the adapter compiles against the real
+runner/store/GitHub signatures). Code + security review APPROVED. **No poller calls the engine yet** — the
+write path is wired but dormant; `poller.ts` + app-lifecycle start/stop + IPC are next.
 **Shipped (cross-agent consensus):** `aggregateFindings` gained `groupBy:'issue'|'location'` + a
 per-finding `agreement` count; `'location'` (file+line) is the robust cross-agent mode (agents
 phrase differently). `runner:consensus({runIds, consensusMin, minSeverity, groupBy})` aggregates a

@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import type { PipelineDraft } from '../shared/types'
+import type { PipelineAction, PipelineDraft } from '../shared/types'
 import {
   assembleGuardrailState,
+  dispatchGithubWrite,
   parsePipelineRow,
   prNumberFromRef,
-  splitIssueBody
+  splitIssueBody,
+  type GithubWriters,
+  type WriteContext
 } from './pipelineEngineLogic'
 
 const draft: PipelineDraft = {
@@ -110,5 +113,91 @@ describe('assembleGuardrailState', () => {
   it('handles a null/unparseable last-repo-start', () => {
     expect(assembleGuardrailState(0, 0, [], null).lastRepoRunStartedAtMs).toBeNull()
     expect(assembleGuardrailState(0, 0, [], 'nope').lastRepoRunStartedAtMs).toBeNull()
+  })
+})
+
+describe('dispatchGithubWrite — the single gated write dispatch', () => {
+  interface Calls {
+    commit: unknown[][]
+    pr: unknown[][]
+    issue: unknown[][]
+  }
+  const fakeWriters = (calls: Calls): GithubWriters => ({
+    createCommitComment: async (...args) => {
+      calls.commit.push(args)
+      return 'url:commit'
+    },
+    createPrComment: async (...args) => {
+      calls.pr.push(args)
+      return 'url:pr'
+    },
+    createIssue: async (...args) => {
+      calls.issue.push(args)
+      return 'url:issue'
+    }
+  })
+  const action = (over: Partial<PipelineAction> = {}): PipelineAction => ({
+    kind: 'post',
+    autoPost: true,
+    ...over
+  })
+  const ctx: WriteContext = { accountId: 3, ref: 'pr:42', headSha: 'abc123' }
+
+  it('refuses (throws) and writes NOTHING for a non-enabled-post action', async () => {
+    for (const a of [
+      action({ kind: 'notify' }),
+      action({ kind: 'stage' }),
+      action({ kind: 'post', autoPost: false })
+    ]) {
+      const calls: Calls = { commit: [], pr: [], issue: [] }
+      await expect(
+        dispatchGithubWrite(fakeWriters(calls), 'o/r', a, 'commit', ctx, 'b')
+      ).rejects.toThrow(/refusing to auto-post/)
+      expect(calls.commit.length + calls.pr.length + calls.issue.length).toBe(0)
+    }
+  })
+
+  it('routes an enabled commit post to createCommitComment exactly once', async () => {
+    const calls: Calls = { commit: [], pr: [], issue: [] }
+    const url = await dispatchGithubWrite(
+      fakeWriters(calls),
+      'o/r',
+      action(),
+      'commit',
+      ctx,
+      'body'
+    )
+    expect(url).toBe('url:commit')
+    expect(calls.commit).toEqual([[3, 'o/r', 'abc123', 'body']])
+    expect(calls.pr).toHaveLength(0)
+    expect(calls.issue).toHaveLength(0)
+  })
+
+  it('routes an enabled pr post to createPrComment with the parsed PR number', async () => {
+    const calls: Calls = { commit: [], pr: [], issue: [] }
+    await dispatchGithubWrite(fakeWriters(calls), 'o/r', action(), 'pr', ctx, 'body')
+    expect(calls.pr).toEqual([[3, 'o/r', 42, 'body']])
+  })
+
+  it('routes an enabled issue post to createIssue with a split title/body', async () => {
+    const calls: Calls = { commit: [], pr: [], issue: [] }
+    await dispatchGithubWrite(fakeWriters(calls), 'o/r', action(), 'issue', ctx, 'Title line\nrest')
+    expect(calls.issue).toEqual([[3, 'o/r', 'Title line', 'Title line\nrest']])
+  })
+
+  it('throws when the repo is unknown (null full name) and writes nothing', async () => {
+    const calls: Calls = { commit: [], pr: [], issue: [] }
+    await expect(
+      dispatchGithubWrite(fakeWriters(calls), null, action(), 'commit', ctx, 'b')
+    ).rejects.toThrow(/repository not found/)
+    expect(calls.commit).toHaveLength(0)
+  })
+
+  it('throws on a pr target whose ref has no PR number', async () => {
+    const calls: Calls = { commit: [], pr: [], issue: [] }
+    await expect(
+      dispatchGithubWrite(fakeWriters(calls), 'o/r', action(), 'pr', { ...ctx, ref: 'main' }, 'b')
+    ).rejects.toThrow(/cannot resolve a PR number/)
+    expect(calls.pr).toHaveLength(0)
   })
 })
