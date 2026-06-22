@@ -420,6 +420,21 @@ global poll budget across many watches. Validation: vitest (`pipelinePlan.test.t
 APPROVED. **Still next:** the electron-bound `poller.ts` + `pipelines.ts` engine wiring (timers,
 `startRun` per step, `runEvents.onFinished` barrier, the `assertMayPost`-gated actioner) +
 teardown-on-quit + IPC — security-reviewed.
+**Shipped (M9a engine-core slice):** `main/pipelines.ts` — the dependency-injected, electron-free
+engine. `runPipelineForDelta(pipeline, delta, ports)` runs one pipeline through scope filter →
+`planWaves`/guardrail/dedupe gates → insert a `pipeline_run` → the step waves (`startStep` +
+await-all per wave = the barrier) → M6 `aggregate` → the actioner; never throws (errors mark the
+run 'error' and return `{ran:false,reason:'error'}`). The **auto-post gate is enforced + unit-proven**:
+the sole write port (`ports.post`) is reachable only inside the `effective==='post'` branch, which
+`effectiveAction` enters only for an enabled post and which calls `assertMayPost` immediately before
+the write — a disabled post degrades to stage (notify, no write). `processDelta` dispatches a delta to
+every matching pipeline then advances the watch ONCE, only when none errored (a scope/guardrail/dedupe
+skip counts as settled). All side effects go through `EnginePorts`, so the security flow is covered by
+deterministic vitest with fakes (`pipelines.test.ts`, 14) — a disabled-post pipeline never reaches the
+write port, an enabled-post writes exactly once, gates skip without running, the wave barrier orders,
+and the watch only advances after clean processing. Code + security review APPROVED. **Still next:**
+the live `poller.ts` timer + the real port adapter (bind `startRun`/`runEvents`/store/GitHub) +
+teardown-on-quit + IPC.
 **Shipped (cross-agent consensus):** `aggregateFindings` gained `groupBy:'issue'|'location'` + a
 per-finding `agreement` count; `'location'` (file+line) is the robust cross-agent mode (agents
 phrase differently). `runner:consensus({runIds, consensusMin, minSeverity, groupBy})` aggregates a

@@ -208,6 +208,22 @@ settings(key, value)
 > step-chaining/barrier, the M6 aggregator, the `assertMayPost`-gated actioner, and the IPC
 > surface — is the next M9a slice.
 
+> **Automation pipelines — engine core (ROADMAP M9a).** `pipelines.ts` is the dependency-injected,
+> electron-free engine. `runPipelineForDelta(pipeline, delta, ports)` drives one pipeline:
+> trigger/scope filter (`matchesScope`) → `planWaves`/`checkGuardrails`/dedupe gates → insert a
+> `pipeline_run` → run the step waves (`ports.startStep` then await-all per wave = the wait-for-all
+> barrier) → M6 `aggregate` → the actioner. It never throws — a failure marks the run `error` and
+> returns `{ran:false,reason:'error'}`. The **auto-post gate** is the structural crux: the sole
+> GitHub-write port (`ports.post`) is reachable ONLY inside the `effective==='post'` branch, which
+> `effectiveAction` enters only for an enabled post and which calls `assertMayPost` immediately
+> before the write — a disabled post degrades to `stage` (notify, no write), and the human
+> `github:post` confirm path is a different code path. `processDelta` dispatches a delta to every
+> matching pipeline, then advances the watch (`advanceWatch` → `markWatchSeen`) ONCE and only when no
+> pipeline ended in an execution error (a scope/guardrail/dedupe skip counts as settled), so an
+> unprocessed delta is never skipped past. Every side effect (runner, store, GitHub writers) arrives
+> through `EnginePorts`, so the security flow is proven by deterministic vitest with fakes; the live
+> `poller.ts` timer and the real port adapter (binding `startRun`/`runEvents`/store/GitHub) are next.
+
 > **ETag-cached polling foundation (ROADMAP M8).** The automation engine needs to detect a
 > new commit/PR head cheaply. `listCommits`/`listPullRequests` now mirror `listRepos`' ETag
 > pattern: each list page is keyed in `http_cache` (`commits:`/`pulls:` namespace) with its

@@ -20,6 +20,17 @@ same change set.
 
 ### Added
 
+- **Automation pipelines — engine core** (ROADMAP M9a): the dependency-injected, electron-free
+  engine (`runPipelineForDelta` / `processDelta`) that drives a detected change through
+  scope-filter → graph/guardrail/dedupe gates → the step waves (wait-for-all barrier) → the M6
+  aggregator → the actioner. The auto-post discipline is enforced and unit-proven here: the
+  single GitHub-write port is reachable ONLY inside the gated `post` branch, entered solely for
+  an explicitly enabled post and guarded by `assertMayPost` immediately before the write — a
+  disabled post degrades to stage and never writes. The watch's last-seen SHA advances only
+  after every pipeline settles without an execution error (so an errored delta is retried, never
+  skipped). All side effects (runner, store, GitHub writers) arrive through injected ports, so
+  the security-critical flow is covered by fast deterministic vitest with fakes; the live
+  poller + the real port adapter (binding `startRun`/`runEvents`/GitHub) are the next slice.
 - **Automation pipelines — orchestration logic** (ROADMAP M9a): the pure, unit-tested "brain"
   the live engine/poller will run — `planWaves` (resolve step `dependsOn` into ordered
   parallel waves, the wait-for-all barrier ordering, with duplicate/unknown-dep/self-dep/cycle
