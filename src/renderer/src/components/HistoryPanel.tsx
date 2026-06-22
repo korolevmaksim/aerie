@@ -216,25 +216,25 @@ function HistoryPanel({
       ) : (
         <ul className="commits">
           {visibleRuns.map((r) => (
-            <li
-              key={r.id}
-              className="commit-row history-row history-row--clickable"
-              onClick={() => setSelected(r)}
-            >
-              <span className={`chip run__status run__status--${r.status}`}>{r.status}</span>
-              <span className="commit-row__msg">{r.repoFullName}</span>
-              <code className="sha">
-                {r.refType === 'pr' ? `PR #${r.refId}` : r.headSha.slice(0, 8)}
-              </code>
-              <span className="muted">{r.agentId}</span>
-              <span className="muted">{formatRelativeTime(r.startedAt)}</span>
+            // The row stays a listitem; the open action is a real <button> (keyboard-operable,
+            // its text content is the accessible name) and the optional "posted" link is a
+            // SIBLING control — never nested inside the button (no interactive-in-interactive).
+            <li key={r.id} className="history-row">
+              <button type="button" className="history-row__open" onClick={() => setSelected(r)}>
+                <span className={`chip run__status run__status--${r.status}`}>{r.status}</span>
+                <span className="commit-row__msg">{r.repoFullName}</span>
+                <code className="sha">
+                  {r.refType === 'pr' ? `PR #${r.refId}` : r.headSha.slice(0, 8)}
+                </code>
+                <span className="muted">{r.agentId}</span>
+                <span className="muted">{formatRelativeTime(r.startedAt)}</span>
+              </button>
               {r.postedUrl && (
                 <a
-                  className="link"
+                  className="link history-row__posted"
                   href={r.postedUrl}
                   target="_blank"
                   rel="noreferrer"
-                  onClick={(e) => e.stopPropagation()}
                 >
                   posted ↗
                 </a>

@@ -623,8 +623,14 @@ console autoscroll-only-near-bottom + "Jump to latest". **Effort:** M. **Depends
   `AccountsPanel` (token scopes + create link + local-encryption reassurance); the top `<nav>` is a
   labelled landmark with `aria-current="page"` on the active tab; the account/branch/token inputs
   have accessible names; the brand wordmark is keyboard-operable. (`<main>`/`<nav>` landmarks were
-  already semantic.) **Still TODO:** History/repo-favorite rows + the `role="button"` `<li>`
-  list-semantics fix (one structural pass); non-color status glyphs; reduced-motion skeletons.
+  already semantic.) **Still TODO:** the `role="button"` `<li>` list-semantics nuance on the
+  RepoView/PrDetailView clickable rows (one structural pass); non-color status glyphs;
+  reduced-motion skeletons.
+- **Shipped (M11 — Run-history keyboard access):** the Run-history rows were mouse-only
+  (clickable `<li onClick>` with no keyboard focus/activation) and nested the "posted" link in the
+  clickable area — a WCAG 2.1.1 failure. The open action is now a native `<button>` (Tab + Enter/
+  Space) with the posted link a separate focusable sibling; the `<li>` keeps list-item semantics
+  and the button shows a `:focus-visible` ring. Frontend-review APPROVED.
 - **Shipped (M11 — shared ConfirmDialog):** an accessible, focus-trapped `role="alertdialog"`
   (`components/ConfirmDialog.tsx`) behind a promise-based `useConfirm()` hook
   (`lib/useConfirm.ts`), mounted once at the app root, replaces blocking/unthemed `window.confirm`

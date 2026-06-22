@@ -65,6 +65,12 @@ same change set.
 
 ### Fixed
 
+- **Run-history rows are now keyboard-operable** (ROADMAP M11, WCAG 2.1.1): each row in Run
+  history was a mouse-only clickable `<li>` (no keyboard focus or activation) and nested the
+  "posted ↗" link inside the clickable area. The open action is now a real `<button>`
+  (Tab-reachable, Enter/Space activate) and the posted link is a separate, independently
+  focusable sibling; the row keeps its list-item semantics and shows a keyboard focus ring.
+
 - PR reviews now diff the **whole PR** (three-dot `base...head`, with the base SHA
   resolved authoritatively from GitHub in the main process), not just the head commit —
   a multi-commit PR was previously reviewed as only its last commit

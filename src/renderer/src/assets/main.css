@@ -353,12 +353,46 @@ select.field {
   cursor: pointer;
 }
 
-.history-row--clickable {
+/* Run-history row: a bordered listitem holding the keyboard-operable open <button> plus an
+   optional "posted" link sibling. The button carries the row layout; the <li> is the frame. */
+.history-row {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--panel);
+  padding-right: 0.7rem;
+}
+
+.history-row:hover,
+.history-row:focus-within {
+  border-color: var(--accent);
+}
+
+.history-row__open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.5rem 0.7rem;
+  background: none;
+  border: none;
+  border-radius: 7px;
+  font: inherit;
+  color: inherit;
+  text-align: left;
   cursor: pointer;
 }
 
-.history-row--clickable:hover {
-  border-color: var(--accent);
+/* Match the focus ring's corners to the button (the global :focus-visible uses 4px). */
+.history-row__open:focus-visible {
+  border-radius: 7px;
+}
+
+.history-row__posted {
+  flex: none;
 }
 
 /* shared run view */
