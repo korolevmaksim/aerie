@@ -221,7 +221,7 @@ function App(): React.JSX.Element {
         {view === 'tools' ? (
           <ToolsPanel />
         ) : view === 'automate' ? (
-          <AutomatePanel onCreate={() => undefined} />
+          <AutomatePanel accountId={selectedId} />
         ) : view === 'accounts' || !reposReady ? (
           <AccountsPanel onAccountsChanged={reloadAccounts} />
         ) : view === 'history' ? (

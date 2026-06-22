@@ -663,6 +663,19 @@ vitest (10). The `pipelines:list` DTO gained `repoFullName` (resolved in the han
 React view is build-smoke verified — **HUMAN visual + screen-reader sign-off pending**. No new
 privileged surface (all calls go through the gated IPC) → code-review only. Code review APPROVED.
 **Still next:** the editor modal (slice 3) + the run-history/dry-run panel (slice 4).
+**Shipped (M13 slice 3 — pipeline editor modal):** `PipelineEditor.tsx`, a focus-trapped modal
+(`useFocusTrap` + `.modal-overlay`/`.modal` + Esc, mirroring `PostConfirmModal`) driven by
+`pipelineForm.ts`. Fields: name; repo `<select>` (the selected account's repos, passed from
+`AutomatePanel`); trigger; a repeatable agent-step list (agent `<select>` from `runner.listAgents`,
+optional model + dependsOn, add/remove, auto-assigned `s<n>` ids); scope inputs; the action radio —
+**Post** reveals a target + an explicit **auto-post** toggle gated behind a distinct danger
+`window.confirm`; collapsible guardrails. Save → `formToDraft(form, editing)` (inline error) →
+`aerie.pipelines.save({id, draft})` → refresh. Tool-bearing pipelines are refused for edit.
+`AutomatePanel` now owns the editor (Create opens blank; per-row Edit opens it) and fetches the
+repos+agents picklists; `App` passes `accountId`. **No new privileged surface** — the danger confirm
+is UX; the engine's `assertMayPost` is the guard. Pure logic already covered by `pipelineForm.test.ts`;
+the React modal is build-smoke verified — **HUMAN visual + screen-reader sign-off pending**. Code
+review APPROVED. **Still next:** slice 4 — run history + dry-run result panel.
 
 #### M14 — Command palette, structured launcher, console, IA polish & onboarding
 Command palette (Cmd+K) + keyboard model; structured 2-column run launcher (labeled fields replacing the

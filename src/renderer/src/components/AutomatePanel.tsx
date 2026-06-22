@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
-import type { PipelineRunChange, PipelineWithRuns } from '@shared/types'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import type { AgentInfo, Pipeline, PipelineRunChange, PipelineWithRuns } from '@shared/types'
 import {
   applyLiveChange,
   describeOutcome,
@@ -7,12 +7,13 @@ import {
   statusLabel,
   statusTone
 } from '../lib/automate'
+import PipelineEditor, { type RepoOption } from './PipelineEditor'
 
 /**
  * The Automate view (ROADMAP M13): lists the configured pipelines with their current run
- * status (live via `pipelines.onStatus`), an enable toggle, and Run-now / Dry-run actions.
- * Pipeline config is created/edited through the editor (next slice). All mutations go through
- * the already-gated `aerie.pipelines.*` IPC — this view holds no privileged logic.
+ * status (live via `pipelines.onStatus`), an enable toggle, Run-now / Dry-run actions, and
+ * a create/edit editor. All mutations go through the already-gated `aerie.pipelines.*` IPC —
+ * this view holds no privileged logic.
  */
 function PipelineRow({
   item,
@@ -20,7 +21,8 @@ function PipelineRow({
   busy,
   message,
   onToggle,
-  onRun
+  onRun,
+  onEdit
 }: {
   item: PipelineWithRuns
   live: PipelineRunChange | undefined
@@ -28,6 +30,7 @@ function PipelineRow({
   message: string | undefined
   onToggle: (id: number, enabled: boolean) => void
   onRun: (id: number, dryRun: boolean) => void
+  onEdit: (item: PipelineWithRuns) => void
 }): React.JSX.Element {
   const { pipeline, repoFullName } = item
   const view = displayRunStatus(item, live)
@@ -56,6 +59,9 @@ function PipelineRow({
         <button className="btn btn--ghost" disabled={busy} onClick={() => onRun(pipeline.id, true)}>
           Dry run
         </button>
+        <button className="btn btn--ghost" onClick={() => onEdit(item)}>
+          Edit
+        </button>
       </div>
       {message && (
         <p className="pipeline__msg muted" aria-live="polite">
@@ -66,12 +72,16 @@ function PipelineRow({
   )
 }
 
-function AutomatePanel({ onCreate }: { onCreate: () => void }): React.JSX.Element {
+function AutomatePanel({ accountId }: { accountId: number | null }): React.JSX.Element {
   const [items, setItems] = useState<PipelineWithRuns[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [live, setLive] = useState<Record<number, PipelineRunChange>>({})
   const [busyId, setBusyId] = useState<number | null>(null)
   const [messages, setMessages] = useState<Record<number, string>>({})
+  // Picker data for the editor + the editor's open state (`undefined` = closed).
+  const [repos, setRepos] = useState<RepoOption[]>([])
+  const [agents, setAgents] = useState<AgentInfo[]>([])
+  const [editing, setEditing] = useState<Pipeline | null | undefined>(undefined)
 
   const load = useCallback(async (): Promise<void> => {
     const res = await window.aerie.pipelines.list()
@@ -91,6 +101,25 @@ function AutomatePanel({ onCreate }: { onCreate: () => void }): React.JSX.Elemen
       cancelled = true
     }
   }, [])
+
+  // Picker data for the editor: the selected account's repos + the installed agents.
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      const [repoRes, agentRes] = await Promise.all([
+        accountId !== null ? window.aerie.repos.list(accountId) : Promise.resolve(null),
+        window.aerie.runner.listAgents()
+      ])
+      if (cancelled) return
+      if (repoRes && repoRes.ok) {
+        setRepos(repoRes.value.repos.map((r) => ({ id: r.id, fullName: r.fullName })))
+      }
+      if (agentRes.ok) setAgents(agentRes.value)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [accountId])
 
   // Live status pushes (insert / status / posted) — merge into the per-pipeline map.
   useEffect(() => {
@@ -123,11 +152,41 @@ function AutomatePanel({ onCreate }: { onCreate: () => void }): React.JSX.Elemen
     [load]
   )
 
+  // The repo picker shows the selected account's repos; when editing a pipeline whose repo
+  // belongs to another account (or an unselected one), include it so the saved repo isn't
+  // silently dropped on re-save (its name comes from the listed item).
+  const editorRepos = useMemo<RepoOption[]>(() => {
+    if (editing && !repos.some((r) => r.id === editing.repoId)) {
+      const it = items?.find((i) => i.pipeline.id === editing.id)
+      return [
+        ...repos,
+        { id: editing.repoId, fullName: it?.repoFullName ?? `repo #${editing.repoId}` }
+      ]
+    }
+    return repos
+  }, [editing, repos, items])
+
+  const onEdit = useCallback((item: PipelineWithRuns): void => {
+    // The editor only handles agent steps; tool-bearing pipelines aren't editable here yet.
+    if (item.pipeline.steps.some((s) => s.kind !== 'agent')) {
+      setError("This pipeline has tool steps and can't be edited here yet.")
+      return
+    }
+    setError(null)
+    setEditing(item.pipeline)
+  }, [])
+
   return (
     <section className="panel" aria-labelledby="automate-heading">
       <div className="panel__head">
         <h2 id="automate-heading">Automate</h2>
-        <button className="btn" onClick={onCreate}>
+        <button
+          className="btn"
+          onClick={() => {
+            setError(null)
+            setEditing(null)
+          }}
+        >
           New pipeline
         </button>
       </div>
@@ -147,7 +206,13 @@ function AutomatePanel({ onCreate }: { onCreate: () => void }): React.JSX.Elemen
       ) : items.length === 0 ? (
         <div className="empty">
           <p>No pipelines yet.</p>
-          <button className="btn" onClick={onCreate}>
+          <button
+            className="btn"
+            onClick={() => {
+              setError(null)
+              setEditing(null)
+            }}
+          >
             Create your first pipeline
           </button>
         </div>
@@ -162,9 +227,20 @@ function AutomatePanel({ onCreate }: { onCreate: () => void }): React.JSX.Elemen
               message={messages[item.pipeline.id]}
               onToggle={toggle}
               onRun={run}
+              onEdit={onEdit}
             />
           ))}
         </ul>
+      )}
+
+      {editing !== undefined && (
+        <PipelineEditor
+          editing={editing}
+          repos={editorRepos}
+          agents={agents}
+          onClose={() => setEditing(undefined)}
+          onSaved={() => void load()}
+        />
       )}
     </section>
   )

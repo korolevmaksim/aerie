@@ -20,6 +20,14 @@ same change set.
 
 ### Added
 
+- **Pipeline editor** (ROADMAP M13): a focus-trapped create/edit modal (`PipelineEditor.tsx`) over
+  the pure `pipelineForm` mapping — name, repo picker (the selected account's repos), trigger, a
+  repeatable agent-step list (agent picker from the installed agents + optional model/dependsOn),
+  scope filters, and the action radio. Choosing **Post** reveals an explicit auto-post toggle gated
+  behind a distinct danger confirm; tool-bearing pipelines are refused for edit (agent steps only,
+  for now). Save goes through the gated `aerie.pipelines.save` and refreshes the list. No new
+  privileged surface — the danger confirm is deliberate-friction UX; the engine's `assertMayPost` is
+  the real guard. Build-smoke verified (visual + screen-reader sign-off pending).
 - **Automate view + pipeline list** (ROADMAP M13): a new **Automate** view (nav tab + command
   palette) listing each pipeline with its repo, trigger, an enable/disable toggle, **live run status**
   (via the `pipeline:status` push), and **Run now** / **Dry run** buttons with an inline result. An
