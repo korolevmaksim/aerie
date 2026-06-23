@@ -665,6 +665,13 @@ select.field {
   display: flex;
   align-items: center;
   gap: 0.6rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* Transient "Copied N runs…" confirmation next to the export buttons. */
+.history-copied {
+  font-size: 0.8rem;
 }
 
 /* Repo filter in the History header. Inherits the custom chevron + right padding

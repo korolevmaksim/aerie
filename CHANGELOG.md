@@ -13,6 +13,13 @@ same change set.
 
 ### Added
 
+- **Run-history export** (ROADMAP M14): "Copy MD" / "Copy JSON" buttons copy the
+  currently-visible runs (respecting the active search + repo filter) to the clipboard — a GFM
+  table or a JSON array. Purely client-side; the export carries only safe metadata (repo, agent,
+  ref, SHA, status, exit code, timestamps, author, posted URL) and **never** the local run-log
+  path, internal ids, or any token. A brief aria-live confirmation reports how many runs were
+  copied. Pure formatters are unit-tested (incl. assertions that no local path leaks).
+
 - **Run-history search** (ROADMAP M14): a search box in the Run-history header filters the loaded
   runs by free text — repo, agent, commit SHA, PR number (`42` or `pr #42`), status, or author —
   composing with the existing per-repo dropdown. Whitespace-separated tokens must all match

@@ -762,8 +762,12 @@ did/didn't fire) + **notification-fatigue controls** (batching, quiet hours, don
   (`lib/runFilter.ts`, pure + unit-tested) filters the loaded runs by repo/agent/SHA/PR/status/
   author — whitespace-tokenized, token-AND, case-insensitive — composing with the existing
   per-repo dropdown; query-aware empty state. Client-side only (no IPC). Frontend-review APPROVED.
-  **Still TODO (M14):** structured 2-column launcher, console toolbar, Runs **export**, left-rail
-  IA, value-first onboarding, poller observability.
+- **Shipped (M14 — Run-history export):** "Copy MD" / "Copy JSON" buttons copy the visible
+  (filtered) runs to the clipboard (`lib/runExport.ts`, pure + unit-tested) — a GFM table or a
+  JSON array of a SAFE field subset that excludes the local run-log path, internal ids, and any
+  token; aria-live "Copied N runs" confirmation. Client-side only. Frontend-review APPROVED.
+  **Still TODO (M14):** structured 2-column launcher, console toolbar, left-rail IA, value-first
+  onboarding, poller observability.
 
 ---
 

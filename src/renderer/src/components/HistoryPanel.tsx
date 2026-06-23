@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { RunHistoryItem } from '@shared/types'
 import { formatRelativeTime } from '../lib/format'
 import { filterRuns } from '../lib/runFilter'
+import { runsToJson, runsToMarkdown } from '../lib/runExport'
 import RunView from './RunView'
 
 function HistoryPanel({
@@ -25,6 +26,8 @@ function HistoryPanel({
   const [repoFilter, setRepoFilter] = useState<number | 'all'>('all')
   // Free-text search over the already-loaded runs (repo/agent/sha/PR/status/author).
   const [query, setQuery] = useState('')
+  // Transient "Copied N runs…" confirmation for the export buttons (aria-live).
+  const [copied, setCopied] = useState<string | null>(null)
   // Remember which external id we've already acted on, so a not-yet-loaded (or
   // pruned) run never drives an endless reload loop.
   const handledRunIdRef = useRef<number | null>(null)
@@ -140,6 +143,29 @@ function HistoryPanel({
   )
   const visibleRuns = useMemo(() => filterRuns(repoFiltered, query), [repoFiltered, query])
 
+  // Export the CURRENTLY-VISIBLE (account + repo + search filtered) runs to the clipboard.
+  // Pure client-side — the formatter carries only safe metadata (no local paths, no token).
+  const copyAs = useCallback(
+    async (fmt: 'md' | 'json'): Promise<void> => {
+      const text = fmt === 'md' ? runsToMarkdown(visibleRuns) : runsToJson(visibleRuns)
+      try {
+        await navigator.clipboard.writeText(text)
+        const n = visibleRuns.length
+        setCopied(`Copied ${n} run${n === 1 ? '' : 's'} as ${fmt === 'md' ? 'Markdown' : 'JSON'}`)
+      } catch {
+        setCopied('Copy failed — clipboard unavailable.')
+      }
+    },
+    [visibleRuns]
+  )
+
+  // Auto-clear the copy confirmation; re-clicking resets the timer.
+  useEffect(() => {
+    if (!copied) return
+    const t = setTimeout(() => setCopied(null), 2500)
+    return () => clearTimeout(t)
+  }, [copied])
+
   // Safety net: while any run for THIS account is still active, re-poll the list
   // so a status that settled before this panel mounted (or any missed event)
   // still converges.
@@ -212,12 +238,31 @@ function HistoryPanel({
           )}
           <button
             className="btn btn--ghost"
+            onClick={() => void copyAs('md')}
+            disabled={visibleRuns.length === 0}
+            title="Copy the visible runs as a Markdown table"
+          >
+            Copy MD
+          </button>
+          <button
+            className="btn btn--ghost"
+            onClick={() => void copyAs('json')}
+            disabled={visibleRuns.length === 0}
+            title="Copy the visible runs as JSON"
+          >
+            Copy JSON
+          </button>
+          <button
+            className="btn btn--ghost"
             onClick={() => void refresh()}
             disabled={refreshing}
             title="Refresh run statuses"
           >
             {refreshing ? 'Refreshing…' : hasActive ? 'Refresh · live' : 'Refresh'}
           </button>
+          <span className="muted history-copied" role="status" aria-live="polite">
+            {copied ?? ''}
+          </span>
         </div>
       </div>
       {!loaded ? (
