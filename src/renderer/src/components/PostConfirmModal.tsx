@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { PostKind } from '@shared/types'
 import { useFocusTrap } from '../lib/useFocusTrap'
+import { useConfirm } from '../lib/useConfirm'
 
 /**
  * The mandatory in-app confirmation before any GitHub write (SPEC §4). Shows the
@@ -32,10 +33,13 @@ function PostConfirmModal({
   const [body, setBody] = useState(initialBody)
   const [title, setTitle] = useState(initialTitle ?? '')
   const [tagged, setTagged] = useState(false)
+  const [confirming, setConfirming] = useState(false)
   const modalRef = useRef<HTMLDivElement>(null)
   // Trap Tab focus within the dialog and restore focus to the opener on close.
   useFocusTrap(modalRef)
+  const confirm = useConfirm()
   const canPost = body.trim().length > 0 && (kind !== 'issue' || title.trim().length > 0)
+  const dirty = body !== initialBody || title !== (initialTitle ?? '') || tagged
 
   // Toggling the tag inserts/removes a leading "@login " so the user always sees
   // (and can still edit) the exact body that will be posted.
@@ -48,17 +52,36 @@ function PostConfirmModal({
     })
   }
 
-  // Escape cancels (unless a post is in flight).
+  const requestCancel = useCallback(async (): Promise<void> => {
+    if (busy || confirming) return
+    if (dirty) {
+      setConfirming(true)
+      const ok = await confirm({
+        title: 'Discard post draft?',
+        message: 'You have edited this post draft. Closing now will discard those unsaved changes.',
+        confirmLabel: 'Discard draft',
+        danger: true
+      })
+      setConfirming(false)
+      if (!ok) return
+    }
+    onCancel()
+  }, [busy, confirming, confirm, dirty, onCancel])
+
+  // Escape cancels through the same discard guard (unless a post is in flight).
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape' && !busy) onCancel()
+      if (e.key === 'Escape' && !busy && !confirming) {
+        e.preventDefault()
+        void requestCancel()
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [busy, onCancel])
+  }, [busy, confirming, requestCancel])
 
   return (
-    <div className="modal-overlay" onClick={busy ? undefined : onCancel}>
+    <div className="modal-overlay">
       <div
         className="modal"
         role="dialog"
@@ -103,7 +126,7 @@ function PostConfirmModal({
         />
         {error && <p className="alert">{error}</p>}
         <div className="modal__actions">
-          <button className="btn btn--ghost" onClick={onCancel} disabled={busy}>
+          <button className="btn btn--ghost" onClick={() => void requestCancel()} disabled={busy}>
             Cancel
           </button>
           <button

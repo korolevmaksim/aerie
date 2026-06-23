@@ -44,7 +44,8 @@ third-party service.
   click) instead of hand-typing raw flags — and tucks the full contract (args, env, output
   capture, …) behind an **Advanced** section with a token legend. A user-added agent must be
   **explicitly approved** before Aerie will run its command — editing the command re-requires
-  approval — and a custom agent can never shadow a built-in.
+  approval — and a custom agent can never shadow a built-in. Cancelling an edited agent draft asks
+  before discarding unsaved changes.
 - **Spots coding CLIs you haven't wired** — the Tools tab also flags coding-agent CLIs found on your
   PATH that Aerie has no agent for yet (a **"Detected, not configured"** list) with an **Add as
   agent** shortcut that opens the editor prefilled — so a newly-installed CLI surfaces even before a
@@ -62,7 +63,7 @@ third-party service.
   cases, Performance, Architecture & maintainability, and Quick triage. Edit them or add
   your own in Settings, then pick one per run. Aerie always prepends the machine context
   (repo, SHA, working-copy + diff paths) so a custom prompt can never leave the agent
-  without something to review.
+  without something to review. Prompt edits ask before discarding an unsaved draft.
 - **Structured findings** — each review also extracts the agent's concrete findings (file, line,
   severity, message) into a compact list under the review; the raw block is kept out of the posted
   comment. Sets up cross-agent consensus across a panel.
@@ -86,14 +87,16 @@ third-party service.
   minutes / hours / days) and reviews the latest commit when it changes — lighter on API budget for
   a periodic check (it also runs once right after you enable it). **Create/edit pipelines** in-app
   (repo, trigger + schedule cadence, agent steps, scope filters, and the action) — choosing **Post**
-  reveals an explicit auto-post toggle gated behind a distinct danger confirm. The list shows each pipeline's live run status, an enable toggle,
+  reveals an explicit auto-post toggle gated behind a distinct danger confirm. The editor ignores
+  backdrop clicks, and **Cancel** / **Esc** asks before discarding unsaved pipeline changes. The list shows each pipeline's live run status, an enable toggle,
   **Run now** / **Dry run** buttons, and an expandable **run history**; a dry run never writes to
   GitHub regardless of the opt-in. A liveness line shows the poller's state — when it last checked,
   when it'll next check, and the remaining GitHub API budget.
   Auto-post is off by default and enforced in the main process.
 - **Post back to GitHub — behind a confirm** — every write (commit comment, PR comment, or
-  new issue) requires an explicit in-app confirmation showing the exact body. Optionally
-  `@`-mention the commit/PR author.
+  new issue) requires an explicit in-app confirmation showing the exact body. If you edit that
+  body, **Cancel** / **Esc** asks before discarding it, and backdrop clicks do not close the
+  dialog. Optionally `@`-mention the commit/PR author.
 
 ## Security model
 

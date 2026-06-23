@@ -93,6 +93,13 @@ export function blankForm(): PipelineFormState {
   }
 }
 
+export function isPipelineFormDirty(
+  current: PipelineFormState,
+  initial: PipelineFormState
+): boolean {
+  return JSON.stringify(current) !== JSON.stringify(initial)
+}
+
 /** Comma-separated → trimmed non-empty items. */
 export function splitCsv(text: string): string[] {
   return text

@@ -61,6 +61,10 @@ If any fixed choice blocks you, STOP and flag it. Do not swap it on your own.
   verbatim while the run is mid-flight).
 - Any GitHub **write** (post comment, create issue) requires an explicit in-app
   confirmation step before it fires.
+- Data-entry dialogs never discard typed work through backdrop clicks. Pipeline creation/editing
+  and editable GitHub-post confirmations close only through explicit Cancel/Escape/Post/Save
+  controls; Cancel/Escape prompts before discarding dirty drafts. Inline long-form editors
+  (custom agents, review prompts) follow the same dirty-discard confirmation rule.
 - Agent runs operate on **app-owned clones** (see §6), never on the user's
   personal working copies — unless he explicitly opts a repo into read-only
   worktree mode.

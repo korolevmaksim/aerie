@@ -4,6 +4,7 @@ import {
   blankForm,
   draftToForm,
   formToDraft,
+  isPipelineFormDirty,
   joinCsv,
   splitCsv,
   type PipelineFormState
@@ -25,6 +26,19 @@ describe('splitCsv / joinCsv', () => {
   it('joins with ", "', () => {
     expect(joinCsv(['a', 'b'])).toBe('a, b')
     expect(joinCsv(undefined)).toBe('')
+  })
+})
+
+describe('isPipelineFormDirty', () => {
+  it('detects nested edits against the original form state', () => {
+    const initial = validForm()
+    expect(isPipelineFormDirty({ ...initial }, initial)).toBe(false)
+    expect(
+      isPipelineFormDirty(
+        { ...initial, steps: [{ ...initial.steps[0], ref: 'claude-code' }] },
+        initial
+      )
+    ).toBe(true)
   })
 })
 

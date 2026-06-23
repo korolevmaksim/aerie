@@ -149,6 +149,12 @@ same change set.
 
 ### Fixed
 
+- **Data-entry dialogs no longer discard typed work on accidental outside clicks**: the Automate
+  pipeline editor and editable GitHub-post confirmation ignore backdrop clicks, and their **Cancel**
+  / **Esc** paths ask before discarding dirty drafts. The same dirty-discard guard now protects the
+  custom-agent editor and review-prompt editor, and review-prompt deletes use the shared confirm
+  dialog.
+
 - **Pipeline editor step row no longer overflows horizontally**: each step's row (agent · model ·
   depends-on · Remove) was a fixed CSS grid whose `fr` columns couldn't shrink below their content,
   so the **Remove** button was pushed off the right edge behind a non-obvious horizontal scroll.

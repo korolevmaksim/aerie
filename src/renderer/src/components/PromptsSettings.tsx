@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Prompt } from '@shared/types'
+import { useConfirm } from '../lib/useConfirm'
 
 /**
  * Manage editable review prompts — the INSTRUCTION half of the prompt fed to the
@@ -12,8 +13,14 @@ function PromptsSettings(): React.JSX.Element {
   const [editingId, setEditingId] = useState<number | null>(null)
   const [name, setName] = useState('')
   const [body, setBody] = useState('')
+  const [baseline, setBaseline] = useState<{ id: number | null; name: string; body: string }>({
+    id: null,
+    name: '',
+    body: ''
+  })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const confirm = useConfirm()
 
   useEffect(() => {
     let cancelled = false
@@ -26,17 +33,39 @@ function PromptsSettings(): React.JSX.Element {
     }
   }, [])
 
-  const resetForm = (): void => {
+  const formIsDirty = (): boolean =>
+    name !== baseline.name || body !== baseline.body || editingId !== baseline.id
+
+  const clearForm = (): void => {
     setEditingId(null)
     setName('')
     setBody('')
+    setBaseline({ id: null, name: '', body: '' })
     setError(null)
   }
 
-  const onEdit = (p: Prompt): void => {
+  const confirmDiscardForm = async (): Promise<boolean> => {
+    if (!formIsDirty()) return true
+    return confirm({
+      title: 'Discard prompt draft?',
+      message:
+        'You have unsaved review-prompt changes. Closing now will discard the draft you entered.',
+      confirmLabel: 'Discard draft',
+      danger: true
+    })
+  }
+
+  const requestResetForm = async (): Promise<void> => {
+    if (!(await confirmDiscardForm())) return
+    clearForm()
+  }
+
+  const onEdit = async (p: Prompt): Promise<void> => {
+    if (!(await confirmDiscardForm())) return
     setEditingId(p.id)
     setName(p.name)
     setBody(p.body)
+    setBaseline({ id: p.id, name: p.name, body: p.body })
     setError(null)
   }
 
@@ -52,7 +81,7 @@ function PromptsSettings(): React.JSX.Element {
       })
       if (res.ok) {
         setPrompts(res.value)
-        resetForm()
+        clearForm()
       } else {
         setError(res.error)
       }
@@ -62,10 +91,17 @@ function PromptsSettings(): React.JSX.Element {
   }
 
   const onDelete = async (id: number): Promise<void> => {
+    const ok = await confirm({
+      title: 'Delete prompt',
+      message: 'Delete this review prompt? This cannot be undone from Aerie.',
+      confirmLabel: 'Delete',
+      danger: true
+    })
+    if (!ok) return
     const res = await window.aerie.prompts.delete(id)
     if (res.ok) {
       setPrompts(res.value)
-      if (editingId === id) resetForm()
+      if (editingId === id) clearForm()
     } else {
       setError(res.error)
     }
@@ -104,8 +140,13 @@ function PromptsSettings(): React.JSX.Element {
           >
             {editingId ? 'Save changes' : 'Add prompt'}
           </button>
-          {editingId && (
-            <button className="btn btn--ghost" type="button" onClick={resetForm} disabled={busy}>
+          {(editingId !== null || formIsDirty()) && (
+            <button
+              className="btn btn--ghost"
+              type="button"
+              onClick={() => void requestResetForm()}
+              disabled={busy}
+            >
               Cancel
             </button>
           )}
@@ -124,10 +165,10 @@ function PromptsSettings(): React.JSX.Element {
                   {p.name}
                 </span>
                 <div className="prompt-item__actions">
-                  <button className="btn btn--ghost" onClick={() => onEdit(p)}>
+                  <button className="btn btn--ghost" onClick={() => void onEdit(p)}>
                     Edit
                   </button>
-                  <button className="btn btn--danger" onClick={() => onDelete(p.id)}>
+                  <button className="btn btn--danger" onClick={() => void onDelete(p.id)}>
                     Delete
                   </button>
                 </div>

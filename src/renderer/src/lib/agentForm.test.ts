@@ -5,6 +5,7 @@ import {
   blankForm,
   envRowsToRecord,
   formToAgent,
+  isAgentFormDirty,
   parseArgs,
   recordToEnvRows
 } from './agentForm'
@@ -24,6 +25,14 @@ describe('env rows', () => {
       ])
     ).toEqual({ A: '1' })
     expect(recordToEnvRows({ A: '1' })).toEqual([{ key: 'A', value: '1' }])
+  })
+})
+
+describe('isAgentFormDirty', () => {
+  it('detects nested edits against the original form state', () => {
+    const initial = { ...blankForm(), id: 'x', label: 'X', command: 'codex' }
+    expect(isAgentFormDirty({ ...initial }, initial)).toBe(false)
+    expect(isAgentFormDirty({ ...initial, env: [{ key: 'A', value: '1' }] }, initial)).toBe(true)
   })
 })
 

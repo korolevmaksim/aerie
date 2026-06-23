@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
   AgentInfo,
   Pipeline,
@@ -13,6 +13,7 @@ import {
   blankStep,
   draftToForm,
   formToDraft,
+  isPipelineFormDirty,
   type PipelineFormState,
   type PipelineStepForm
 } from '../lib/pipelineForm'
@@ -55,9 +56,10 @@ function PipelineEditor({
   onClose: () => void
   onSaved: () => void
 }): React.JSX.Element {
-  const [form, setForm] = useState<PipelineFormState>(() =>
+  const [initialForm] = useState<PipelineFormState>(() =>
     editing ? draftToForm(editing) : blankForm()
   )
+  const [form, setForm] = useState<PipelineFormState>(() => initialForm)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   // True while the auto-post confirm (which renders OVER this modal) is open. Both dialogs have
@@ -68,13 +70,33 @@ function PipelineEditor({
   useFocusTrap(modalRef)
   const confirm = useConfirm()
 
+  const requestClose = useCallback(async (): Promise<void> => {
+    if (busy || confirming) return
+    if (isPipelineFormDirty(form, initialForm)) {
+      setConfirming(true)
+      const ok = await confirm({
+        title: 'Discard pipeline draft?',
+        message:
+          'You have unsaved pipeline changes. Closing now will discard the draft you entered.',
+        confirmLabel: 'Discard draft',
+        danger: true
+      })
+      setConfirming(false)
+      if (!ok) return
+    }
+    onClose()
+  }, [busy, confirming, confirm, form, initialForm, onClose])
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape' && !busy && !confirming) onClose()
+      if (e.key === 'Escape' && !busy && !confirming) {
+        e.preventDefault()
+        void requestClose()
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [busy, confirming, onClose])
+  }, [busy, confirming, requestClose])
 
   const set = (patch: Partial<PipelineFormState>): void => setForm((f) => ({ ...f, ...patch }))
   const setStep = (i: number, patch: Partial<PipelineStepForm>): void =>
@@ -132,7 +154,7 @@ function PipelineEditor({
   }
 
   return (
-    <div className="modal-overlay" onClick={busy ? undefined : onClose}>
+    <div className="modal-overlay">
       <div
         className="modal pipeline-editor"
         role="dialog"
@@ -424,7 +446,7 @@ function PipelineEditor({
         </div>
 
         <div className="modal__actions">
-          <button className="btn btn--ghost" onClick={onClose} disabled={busy}>
+          <button className="btn btn--ghost" onClick={() => void requestClose()} disabled={busy}>
             Cancel
           </button>
           <button className="btn btn--primary" onClick={onSave} disabled={busy}>

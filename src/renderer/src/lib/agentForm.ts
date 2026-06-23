@@ -55,6 +55,10 @@ export function blankForm(): AgentFormState {
   }
 }
 
+export function isAgentFormDirty(current: AgentFormState, initial: AgentFormState): boolean {
+  return JSON.stringify(current) !== JSON.stringify(initial)
+}
+
 /** One non-empty arg per line. (Empty-string args aren't representable — no shipped
  *  agent uses one; a deliberately-empty arg would need a different editor affordance.) */
 export function parseArgs(text: string): string[] {

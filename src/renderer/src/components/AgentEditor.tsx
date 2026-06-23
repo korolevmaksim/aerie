@@ -1,9 +1,10 @@
-import { forwardRef, useImperativeHandle, useRef, useState } from 'react'
+import { forwardRef, useCallback, useImperativeHandle, useRef, useState } from 'react'
 import type { Agent, AgentInfo } from '@shared/types'
 import {
   agentToForm,
   blankForm,
   formToAgent,
+  isAgentFormDirty,
   type AgentFormState,
   type EnvRow
 } from '../lib/agentForm'
@@ -35,6 +36,7 @@ const AgentEditor = forwardRef<
   { agents: AgentInfo[]; onChange: (agents: AgentInfo[]) => void }
 >(function AgentEditor({ agents, onChange }, ref): React.JSX.Element {
   const [form, setForm] = useState<AgentFormState | null>(null)
+  const [initialForm, setInitialForm] = useState<AgentFormState | null>(null)
   const [base, setBase] = useState<Agent | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -52,6 +54,50 @@ const AgentEditor = forwardRef<
 
   const userAgents = agents.filter((a) => a.editable)
 
+  const confirmDiscardForm = useCallback(
+    async (message: string): Promise<boolean> => {
+      if (form === null || initialForm === null || !isAgentFormDirty(form, initialForm)) return true
+      return confirm({
+        title: 'Discard agent draft?',
+        message,
+        confirmLabel: 'Discard draft',
+        danger: true
+      })
+    },
+    [confirm, form, initialForm]
+  )
+
+  const openForm = useCallback(
+    (
+      nextForm: AgentFormState,
+      nextBase: Agent | null,
+      nextEditingId: string | null,
+      reasoningOpen: boolean
+    ): void => {
+      setForm(nextForm)
+      setInitialForm(nextForm)
+      setBase(nextBase)
+      setEditingId(nextEditingId)
+      setError(null)
+      setShowReasoningAdd(reasoningOpen)
+      setSavedNeedsApproval(null)
+    },
+    []
+  )
+
+  const closeForm = useCallback(async (): Promise<void> => {
+    const ok = await confirmDiscardForm(
+      'You have unsaved agent changes. Closing now will discard the draft you entered.'
+    )
+    if (!ok) return
+    setForm(null)
+    setInitialForm(null)
+    setBase(null)
+    setEditingId(null)
+    setError(null)
+    setShowReasoningAdd(false)
+  }, [confirmDiscardForm])
+
   // Open a NEW-agent form prefilled from a candidate's "Add as agent" (M2). Imperative (not a
   // prop/effect) so it can confirm before discarding an in-progress edit and move focus into the
   // form. The saved agent still needs exec-consent before it can run — prefilling is pure
@@ -60,41 +106,32 @@ const AgentEditor = forwardRef<
     ref,
     () => ({
       openFromCandidate: async (candidate): Promise<void> => {
-        if (
-          form !== null &&
-          !(await confirm({
-            title: 'Discard changes?',
-            message: 'Discard the agent form you have open and start from this CLI instead?',
-            confirmLabel: 'Discard',
-            danger: true
-          }))
-        ) {
+        const ok = await confirmDiscardForm(
+          'Discard the agent form you have open and start from this CLI instead?'
+        )
+        if (!ok) {
           return
         }
-        setForm({
-          ...blankForm(),
-          id: candidate.command,
-          label: candidate.label,
-          command: candidate.command
-        })
-        setBase(null)
-        setEditingId(null)
-        setError(null)
-        setShowReasoningAdd(false)
+        openForm(
+          {
+            ...blankForm(),
+            id: candidate.command,
+            label: candidate.label,
+            command: candidate.command
+          },
+          null,
+          null,
+          false
+        )
         // Focus the first field once the form has mounted (focus also scrolls it into view).
         requestAnimationFrame(() => idInputRef.current?.focus())
       }
     }),
-    [form, confirm]
+    [confirmDiscardForm, openForm]
   )
 
   const openNew = (): void => {
-    setForm(blankForm())
-    setBase(null)
-    setEditingId(null)
-    setError(null)
-    setShowReasoningAdd(false)
-    setSavedNeedsApproval(null)
+    openForm(blankForm(), null, null, false)
   }
 
   const openFrom = async (id: string, asClone: boolean): Promise<void> => {
@@ -110,10 +147,7 @@ const AgentEditor = forwardRef<
       f.id = ''
       f.label = `${res.value.label} (copy)`
     }
-    setForm(f)
-    setBase(res.value)
-    setEditingId(asClone ? null : id)
-    setShowReasoningAdd(f.reasoningLevels.length > 0)
+    openForm(f, res.value, asClone ? null : id, f.reasoningLevels.length > 0)
   }
 
   const onSave = async (): Promise<void> => {
@@ -135,6 +169,7 @@ const AgentEditor = forwardRef<
           saved && saved.needsConsent ? { id: saved.id, label: saved.label } : null
         )
         setForm(null)
+        setInitialForm(null)
         setBase(null)
         setEditingId(null)
       } else {
@@ -543,7 +578,7 @@ const AgentEditor = forwardRef<
           </details>
 
           <div className="agent-editor__form-actions">
-            <button className="btn btn--ghost" onClick={() => setForm(null)} disabled={busy}>
+            <button className="btn btn--ghost" onClick={() => void closeForm()} disabled={busy}>
               Cancel
             </button>
             <button className="btn btn--primary" onClick={() => void onSave()} disabled={busy}>
