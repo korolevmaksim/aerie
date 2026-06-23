@@ -69,8 +69,9 @@ third-party service.
   location) — a second opinion, and a way to see what's worth trusting, in one click.
 - **Presets** — save an agent + model + reasoning bundle and apply it in one click.
 - **Live output, kill, and history** — watch the agent's transcript stream, stop a run,
-  and reopen any past run's logs and result. Search history by repo, agent, SHA, PR, status, or
-  author, narrow it to one repository, and copy the filtered list as Markdown or JSON.
+  reopen any past run's logs and result, and **copy a review** (plain or Markdown) to paste into a
+  PR or notes. Search history by repo, agent, SHA, PR, status, or author, narrow it to one
+  repository, and copy the filtered list as Markdown or JSON.
 - **Command palette (Cmd/Ctrl-K)** — fuzzy-jump to any view, account, or repo without reaching
   for the mouse.
 - **Automate (pipelines)** — an **Automate** view that watches a repo's default branch on a local

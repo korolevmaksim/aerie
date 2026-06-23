@@ -13,6 +13,13 @@ same change set.
 
 ### Added
 
+- **Copy a run's review** (ROADMAP M14): the run output view now has **Copy** / **Copy MD**
+  buttons that put the agent's review on the clipboard — plain text, or wrapped in a small
+  Markdown header (target · agent · status) ready to paste into a PR, issue, or notes. It copies
+  the clean captured review when finished, else the live transcript. Client-side only (no token);
+  a brief "Copied" status confirms. The Markdown wrapper is pure + unit-tested (asserts it injects
+  no token or local path).
+
 - **Automation poller liveness** (ROADMAP M14): the Automate view now shows a compact status line
   — e.g. "● Watching · next check in ~2m · last checked 30s ago · API 4800/5000" — so you can
   trust the background poller is alive and see when it'll next check (and why it might be backing

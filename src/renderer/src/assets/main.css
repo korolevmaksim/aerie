@@ -406,6 +406,19 @@ select.field {
   display: flex;
   align-items: center;
   gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+/* Copy controls sit at the right of the run toolbar. */
+.runview__bar-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.runview__copied {
+  font-size: 0.8rem;
 }
 
 .hint {

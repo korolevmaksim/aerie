@@ -774,8 +774,13 @@ did/didn't fire) + **notification-fatigue controls** (batching, quiet hours, don
   poller's `{ running, lastPolledAt, nextPollAt, rate:{remaining,limit} }` (no token; no behavior
   change — pure bookkeeping in `poller.ts`); the Automate view renders a liveness line via the pure
   `lib/pollerStatus.ts` formatter (unit-tested), refreshed every 15s. Code + security review
-  APPROVED. **Still TODO (M14):** structured 2-column launcher, console toolbar, left-rail IA,
-  value-first onboarding.
+  APPROVED.
+- **Shipped (M14 — run console toolbar):** RunView gained **Copy** / **Copy MD** buttons that put
+  the run's review on the clipboard (the clean captured review when finished, else the live
+  transcript); the Markdown variant wraps it in a target/agent/status header via the pure,
+  unit-tested `lib/runConsole.ts` (asserts no token/path injected). Client-side; frontend-review
+  APPROVED. **Still TODO (M14):** structured 2-column launcher, RunView re-run action, left-rail
+  IA, value-first onboarding.
 
 ---
 

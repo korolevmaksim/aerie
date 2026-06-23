@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { PostKind, RunFinding, RunRecord, RunStatus } from '@shared/types'
+import { runOutputToMarkdown, runRefLabel } from '../lib/runConsole'
 import PostConfirmModal from './PostConfirmModal'
 
 const MAX_DISPLAY = 256 * 1024
@@ -30,6 +31,7 @@ function RunView({
   const [posting, setPosting] = useState(false)
   const [postedUrl, setPostedUrl] = useState<string | null>(run.postedUrl)
   const [postError, setPostError] = useState<string | null>(null)
+  const [copied, setCopied] = useState<string | null>(null)
   const runIdRef = useRef(run.id)
   const consoleRef = useRef<HTMLPreElement | null>(null)
   const pendingRef = useRef('')
@@ -102,6 +104,34 @@ function RunView({
     await window.aerie.runner.kill(run.id)
   }
 
+  // Copy the run's review (the clean captured output when present, else the live transcript) to
+  // the clipboard. Client-side over text already on screen; the Markdown wrapper adds only a
+  // target/agent/status header — never a token or local path.
+  const copyText = cleanOutput.trim() || output.trim()
+  const copy = useCallback(
+    async (fmt: 'plain' | 'md'): Promise<void> => {
+      const base = cleanOutput.trim() || output
+      if (!base.trim()) return
+      const text =
+        fmt === 'md'
+          ? runOutputToMarkdown({ agentId: run.agentId, refLabel: runRefLabel(run), status }, base)
+          : base
+      try {
+        await navigator.clipboard.writeText(text)
+        setCopied(fmt === 'md' ? 'Copied as Markdown' : 'Copied')
+      } catch {
+        setCopied('Copy failed — clipboard unavailable.')
+      }
+    },
+    [cleanOutput, output, status, run]
+  )
+
+  useEffect(() => {
+    if (!copied) return
+    const t = setTimeout(() => setCopied(null), 2000)
+    return () => clearTimeout(t)
+  }, [copied])
+
   const capped =
     cleanOutput.length > MAX_BODY
       ? `${cleanOutput.slice(0, MAX_BODY)}\n\n[aerie] output truncated for posting]`
@@ -163,6 +193,27 @@ function RunView({
           <button className="btn btn--danger" onClick={onKill}>
             Kill
           </button>
+        )}
+        {copyText.length > 0 && (
+          <span className="runview__bar-actions">
+            <span className="muted runview__copied" role="status">
+              {copied ?? ''}
+            </span>
+            <button
+              className="btn btn--ghost"
+              onClick={() => void copy('plain')}
+              title="Copy the review to the clipboard"
+            >
+              Copy
+            </button>
+            <button
+              className="btn btn--ghost"
+              onClick={() => void copy('md')}
+              title="Copy the review as Markdown (with a target/agent/status header)"
+            >
+              Copy MD
+            </button>
+          </span>
         )}
       </div>
 
