@@ -838,8 +838,12 @@ did/didn't fire) + **notification-fatigue controls** (batching, quiet hours, don
 - **Shipped (M14 — re-run):** a finished run in the history view has a **Re-run** button that
   re-launches the same agent on the same target via the already-gated `runner.start` (HistoryPanel
   owns the params + new-run selection; RunView just renders the button when a parent passes
-  `onRerun`); a failed re-launch is surfaced. Frontend-review APPROVED. **Still TODO (M14):**
-  structured 2-column launcher, left-rail IA, value-first onboarding.
+  `onRerun`); a failed re-launch is surfaced. Frontend-review APPROVED.
+- **Shipped (M14 — value-first onboarding):** the zero-accounts welcome now leads with Aerie's
+  core value (runs local AI agents on a commit/PR, posts the review back) + an explicit 3-step path
+  to a first review + the agent-autodetect/Tools pointer (`AccountsPanel`). Frontend-review APPROVED.
+  **Still TODO (M14):** structured 2-column launcher + left-rail IA (subjective UI restructuring —
+  deferred as not clearly net-positive without owner direction).
 
 ---
 

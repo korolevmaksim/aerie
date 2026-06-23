@@ -200,12 +200,26 @@ function AccountsPanel({
       {accounts.length === 0 ? (
         <div className="empty onboarding">
           <p>
-            Welcome to Aerie. Add a GitHub <strong>Personal Access Token</strong> above to get
-            started — a classic token with the <code>repo</code> scope (and <code>read:org</code>{' '}
-            for org repos) lets Aerie browse your repos, commits, and PRs.
+            <strong>Welcome to Aerie.</strong> It runs your local AI coding agents (Codex, Claude
+            Code, Gemini, and more) on a commit or PR and posts the review back to GitHub — entirely
+            on your machine.
           </p>
+          <ol className="onboarding__steps">
+            <li>
+              <strong>Add a GitHub token</strong> above — a classic token with the <code>repo</code>{' '}
+              scope (and <code>read:org</code> for org repos) lets Aerie browse your repos, commits,
+              and PRs.
+            </li>
+            <li>
+              <strong>Open a repo</strong> and pick a commit or PR to review.
+            </li>
+            <li>
+              <strong>Review it with an agent</strong> — Aerie auto-detects the agent CLIs installed
+              on your PATH (see the <strong>Tools</strong> tab).
+            </li>
+          </ol>
           <p className="hint">
-            Create one at{' '}
+            Create a token at{' '}
             <a
               className="link"
               href="https://github.com/settings/tokens"

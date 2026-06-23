@@ -316,6 +316,13 @@ select.field {
 .onboarding p {
   margin: 0.4rem 0;
 }
+.onboarding__steps {
+  margin: 0.6rem 0;
+  padding-left: 1.4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
 
 .empty {
   color: var(--muted);

@@ -75,6 +75,12 @@ same change set.
 
 ### Changed
 
+- **Value-first first-run onboarding** (ROADMAP M14): the zero-accounts welcome screen now leads
+  with what Aerie actually does (runs your local AI coding agents on a commit or PR and posts the
+  review back to GitHub, on your machine) and shows an explicit **3-step path** to a first review
+  (add a token → open a repo & pick a commit/PR → review it with an agent), noting that agents are
+  auto-detected on your PATH (Tools tab). Previously it only explained the token step.
+
 - **Commit / PR lists keep proper list semantics** (ROADMAP M11): the clickable commit and
   pull-request rows in the repo and PR views previously put `role="button"` on the `<li>` itself,
   which overrode its list-item role (a screen reader announced "N buttons" instead of "list, N
