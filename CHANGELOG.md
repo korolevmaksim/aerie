@@ -13,6 +13,13 @@ same change set.
 
 ### Added
 
+- **Run-history search** (ROADMAP M14): a search box in the Run-history header filters the loaded
+  runs by free text — repo, agent, commit SHA, PR number (`42` or `pr #42`), status, or author —
+  composing with the existing per-repo dropdown. Whitespace-separated tokens must all match
+  (case-insensitive substring), so e.g. `codex error` finds error runs by the codex agent. Purely
+  client-side over already-loaded runs (no IPC); the empty state names the query when nothing
+  matches. Pure filter is unit-tested; the UI is build-smoke verified.
+
 - **Unknown coding-CLI detection** (ROADMAP M2): the Tools view now has a **"Detected, not
   configured"** section listing coding-agent CLIs found on your PATH that Aerie has no agent for,
   each with an **"Add as agent"** shortcut that opens the editor prefilled with that CLI's command

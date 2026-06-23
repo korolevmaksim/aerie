@@ -758,8 +758,12 @@ did/didn't fire) + **notification-fatigue controls** (batching, quiet hours, don
   `CommandPalette` overlay (role=dialog/listbox, arrow-key nav, Enter to run, Esc/overlay-click to
   close) + a global **Cmd/Ctrl-K** handler in `App` wiring view-switch, account-switch, and
   jump-to-repo (repos loaded lazily from the ETag cache on first open). Code review done.
-  **Still TODO (M14):** structured 2-column launcher, console toolbar, Runs search/filter/export,
-  left-rail IA, value-first onboarding, poller observability.
+- **Shipped (M14 — Run-history search):** a free-text search box in the Run-history header
+  (`lib/runFilter.ts`, pure + unit-tested) filters the loaded runs by repo/agent/SHA/PR/status/
+  author — whitespace-tokenized, token-AND, case-insensitive — composing with the existing
+  per-repo dropdown; query-aware empty state. Client-side only (no IPC). Frontend-review APPROVED.
+  **Still TODO (M14):** structured 2-column launcher, console toolbar, Runs **export**, left-rail
+  IA, value-first onboarding, poller observability.
 
 ---
 

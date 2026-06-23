@@ -676,6 +676,13 @@ select.field {
   max-width: 280px;
 }
 
+/* Free-text run search in the History header — compact, sized to match the repo filter. */
+.history-search {
+  font-size: 0.85rem;
+  padding: 0.4rem 0.6rem;
+  width: 200px;
+}
+
 .chip {
   font-size: 0.65rem;
   text-transform: uppercase;

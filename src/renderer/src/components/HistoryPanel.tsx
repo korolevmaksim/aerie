@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { RunHistoryItem } from '@shared/types'
 import { formatRelativeTime } from '../lib/format'
+import { filterRuns } from '../lib/runFilter'
 import RunView from './RunView'
 
 function HistoryPanel({
@@ -22,6 +23,8 @@ function HistoryPanel({
   // Repo sub-filter: a repo id, or 'all'. Options are built from the runs that
   // actually exist for this account (never the full repo list).
   const [repoFilter, setRepoFilter] = useState<number | 'all'>('all')
+  // Free-text search over the already-loaded runs (repo/agent/sha/PR/status/author).
+  const [query, setQuery] = useState('')
   // Remember which external id we've already acted on, so a not-yet-loaded (or
   // pruned) run never drives an endless reload loop.
   const handledRunIdRef = useRef<number | null>(null)
@@ -127,13 +130,15 @@ function HistoryPanel({
   const effectiveRepoFilter =
     repoFilter !== 'all' && repoOptions.some((o) => o.repoId === repoFilter) ? repoFilter : 'all'
 
-  const visibleRuns = useMemo(
+  // account → repo dropdown → free-text query. Both filters are pure + client-side.
+  const repoFiltered = useMemo(
     () =>
       effectiveRepoFilter === 'all'
         ? accountRuns
         : accountRuns.filter((r) => r.repoId === effectiveRepoFilter),
     [accountRuns, effectiveRepoFilter]
   )
+  const visibleRuns = useMemo(() => filterRuns(repoFiltered, query), [repoFiltered, query])
 
   // Safety net: while any run for THIS account is still active, re-poll the list
   // so a status that settled before this panel mounted (or any missed event)
@@ -176,6 +181,16 @@ function HistoryPanel({
       <div className="panel__head">
         <h2 className="panel__title">Run history</h2>
         <div className="panel__head-actions">
+          {accountRuns.length > 0 && (
+            <input
+              type="search"
+              className="field history-search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search runs…"
+              aria-label="Search run history by repo, agent, SHA, PR, status, or author"
+            />
+          )}
           {repoOptions.length > 0 && (
             <select
               className="field history-repo-filter"
@@ -212,7 +227,11 @@ function HistoryPanel({
           No runs yet for this account. Use “Review with agent” on a commit or PR.
         </p>
       ) : visibleRuns.length === 0 ? (
-        <p className="empty">No runs for the selected repository.</p>
+        <p className="empty">
+          {query.trim()
+            ? `No runs match “${query.trim()}”.`
+            : 'No runs for the selected repository.'}
+        </p>
       ) : (
         <ul className="commits">
           {visibleRuns.map((r) => (
