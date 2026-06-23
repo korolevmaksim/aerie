@@ -1579,7 +1579,7 @@ select.field {
 
 /* Pipeline editor modal */
 .pipeline-editor {
-  width: min(640px, 92vw);
+  width: min(720px, 94vw);
 }
 .pipeline-editor__body {
   max-height: 68vh;
@@ -1613,9 +1613,14 @@ select.field {
 }
 .pe-step {
   display: grid;
-  grid-template-columns: 2.2rem 1.6fr 1fr 1fr auto;
+  grid-template-columns: 2.2rem minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1fr) auto;
   align-items: center;
   gap: 0.4rem;
+}
+/* `fr` tracks default to a min-content floor; let the controls shrink so all five columns
+   (id, agent, model, depends-on, Remove) fit the modal width with no horizontal overflow. */
+.pe-step > .field {
+  min-width: 0;
 }
 .pe-step__id {
   font-family: ui-monospace, monospace;

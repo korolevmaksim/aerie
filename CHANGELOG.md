@@ -138,6 +138,12 @@ same change set.
 
 ### Fixed
 
+- **Pipeline editor step row no longer overflows horizontally**: each step's row (agent · model ·
+  depends-on · Remove) was a fixed CSS grid whose `fr` columns couldn't shrink below their content,
+  so the **Remove** button was pushed off the right edge behind a non-obvious horizontal scroll.
+  The field columns now use `minmax(0, …)` + `min-width: 0` so all five controls fit on one row
+  (and the modal is a touch wider) — Remove is always visible, no scrolling.
+
 - **A failed file-output agent now tells you why, instead of "declared output file not found"**: an
   agent that writes its review to a file (e.g. the bundled `codex`, run with `-o {{outFile}}`) could
   crash at startup — a bad CLI config, missing auth, a wrong flag — and exit without producing that
