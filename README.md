@@ -30,6 +30,9 @@ third-party service.
 
 - **Multi-account GitHub** — add one or more Personal Access Tokens; tokens are encrypted
   at rest with the OS keychain (`safeStorage`) and never cross into the UI.
+- **Review cockpit** — after adding an account, Aerie opens on an account-scoped cockpit
+  with active runs, attention-worthy reviews, ready-to-post results, favorite/recent repo
+  targets, agent readiness, automation liveness, and the local trust boundary in one place.
 - **Browse repos, commits, and PRs** — cached with conditional requests (ETags), so
   re-listing costs ~0 rate limit.
 - **Local checkout** — Aerie clones into an app-owned working copy (or, opt-in, a
@@ -186,11 +189,13 @@ xattr -dr com.apple.quarantine /Applications/Aerie.app
 
 1. **Add an account** — paste a GitHub PAT (classic or fine-grained). It's validated and
    encrypted locally.
-2. **Pick a repo**, then a **commit or PR**.
-3. (Optional) **Prepare a local checkout** to pre-clone.
-4. Choose an **agent**, **model**, **reasoning level**, and a **review prompt** (or apply a
+2. Start from the **Review cockpit** — clear any active/ready-to-post runs, or jump into a
+   favorite/recent repository.
+3. **Pick a repo**, then a **commit, PR, or working-tree diff**.
+4. (Optional) **Prepare a local checkout** to pre-clone.
+5. Choose an **agent**, **model**, **reasoning level**, and a **review prompt** (or apply a
    preset), then **Review with agent**.
-5. Watch the live transcript. When it finishes, **Post as commit/PR comment** or **Create
+6. Watch the live transcript. When it finishes, **Post as commit/PR comment** or **Create
    issue** — confirm the exact body (optionally tag the author) and it's posted.
 
 ### Configuring agents & prompts

@@ -13,6 +13,17 @@ same change set.
 
 ### Added
 
+- **Review cockpit UI shell**: authenticated sessions now open on a workflow-first cockpit
+  instead of a repository-list tab. It shows account-scoped metrics for running,
+  attention-worthy, ready-to-post, completed, and posted runs; an attention queue; live
+  in-progress runs; favorite/recent repo shortcuts; agent readiness; automation liveness;
+  and the local trust boundary. The old top-level feature tabs became a persistent
+  task-based sidebar, with Cmd/Ctrl-K retained as an accelerator. Renderer-only: it reuses
+  existing safe IPC reads and adds no GitHub write, token, git, or agent execution surface.
+
+- **UI/UX research note**: `docs/UI_UX_RESEARCH.md` records the reference products,
+  current Aerie audit, and design principles behind the cockpit redesign.
+
 - **Scheduled pipelines actually run now** (ROADMAP M9a): the `schedule` trigger was a non-functional
   stub — the editor had no cadence field and the poller only fired `commit` triggers. You can now set
   **Run every N minutes / hours / days** in the pipeline editor, and a scheduled pipeline polls its
@@ -148,6 +159,16 @@ same change set.
   19 redaction unit tests, including no-false-positive cases. code-review + security-review APPROVED.
 
 ### Fixed
+
+- **Review checkout no longer fails when the app inherits `PAGER`**: Aerie's git preparation path
+  now strips inherited pager/editor/git-control environment variables before giving an env to
+  `simple-git`, instead of forwarding `PAGER=...` and hitting
+  `Use of "PAGER" is not permitted without enabling allowUnsafePager`. Git still receives the
+  Aerie-owned non-interactive settings and token header config only.
+
+- **Review cockpit row density and overlap**: run rows now use a stable four-column layout
+  with agent/ref metadata grouped under the target, fixed status/time tracks, and ellipsis on
+  every shrinking text region so dense histories no longer overlap in the cockpit.
 
 - **Data-entry dialogs no longer discard typed work on accidental outside clicks**: the Automate
   pipeline editor and editable GitHub-post confirmation ignore backdrop clicks, and their **Cancel**

@@ -10,8 +10,9 @@ import HistoryPanel from './components/HistoryPanel'
 import SettingsPanel from './components/SettingsPanel'
 import ToolsPanel from './components/ToolsPanel'
 import AutomatePanel from './components/AutomatePanel'
+import MissionControlPanel from './components/MissionControlPanel'
 
-type View = 'repos' | 'accounts' | 'history' | 'tools' | 'automate' | 'settings'
+type View = 'cockpit' | 'repos' | 'accounts' | 'history' | 'tools' | 'automate' | 'settings'
 
 function App(): React.JSX.Element {
   const [accounts, setAccounts] = useState<AccountSummary[]>([])
@@ -39,7 +40,7 @@ function App(): React.JSX.Element {
       if (cancelled) return
       setAccounts(list)
       setSelectedId(list[0]?.id ?? null)
-      setView(list.length === 0 ? 'accounts' : 'repos')
+      setView(list.length === 0 ? 'accounts' : 'cockpit')
     })()
     return () => {
       cancelled = true
@@ -55,6 +56,11 @@ function App(): React.JSX.Element {
       setPendingRunId(payload.runId)
     })
   }, [])
+
+  const goHome = (): void => {
+    setView(reposReady ? 'cockpit' : 'accounts')
+    setOpenRepo(null)
+  }
 
   const goRepos = (): void => {
     setView('repos')
@@ -92,6 +98,7 @@ function App(): React.JSX.Element {
   const paletteCommands = useMemo<PaletteCommand[]>(() => {
     const cmds: PaletteCommand[] = []
     const views: { id: View; title: string }[] = [
+      { id: 'cockpit', title: 'Review cockpit' },
       { id: 'repos', title: 'Repos' },
       { id: 'history', title: 'History' },
       { id: 'tools', title: 'Tools' },
@@ -100,12 +107,17 @@ function App(): React.JSX.Element {
       { id: 'settings', title: 'Settings' }
     ]
     for (const v of views) {
+      if (v.id === 'cockpit' && !reposReady) continue
       if (v.id === 'repos' && !reposReady) continue
       cmds.push({
         id: `view:${v.id}`,
         title: `Go to ${v.title}`,
         group: 'Views',
-        run: () => (v.id === 'repos' ? goRepos() : setView(v.id))
+        run: () => {
+          setOpenRepo(null)
+          if (v.id === 'repos') goRepos()
+          else setView(v.id)
+        }
       })
     }
     for (const a of accounts) {
@@ -136,21 +148,58 @@ function App(): React.JSX.Element {
     return cmds
   }, [accounts, paletteRepos, reposReady])
 
+  const openHistoryRun = (runId: number): void => {
+    setOpenRepo(null)
+    setView('history')
+    setPendingRunId(runId)
+  }
+
+  const openRepoFromCockpit = (repo: RepoSummary): void => {
+    setOpenRepo(repo)
+    setView('repos')
+  }
+
+  const navigate = (target: Exclude<View, 'cockpit'>): void => {
+    setOpenRepo(null)
+    setView(target)
+  }
+
+  const navItems: { id: View; label: string; hint: string; disabled?: boolean }[] = [
+    {
+      id: 'cockpit',
+      label: 'Cockpit',
+      hint: 'Active reviews and next actions',
+      disabled: !reposReady
+    },
+    {
+      id: 'repos',
+      label: 'Repositories',
+      hint: 'Pick a commit, PR, or working tree',
+      disabled: !reposReady
+    },
+    { id: 'history', label: 'Run history', hint: 'Logs, findings, copies, and re-runs' },
+    { id: 'automate', label: 'Automate', hint: 'Local polling pipelines' },
+    { id: 'tools', label: 'Agents & tools', hint: 'Installed CLIs and approval' },
+    { id: 'accounts', label: 'Accounts', hint: 'GitHub tokens and rate limits' },
+    { id: 'settings', label: 'Settings', hint: 'Prompts, presets, and safety' }
+  ]
+
   return (
-    <div className="app">
-      <header className="topbar">
+    <div className="app app-shell">
+      <aside className="sidebar" aria-label="Aerie workspace navigation">
         <div className="brand">
           <span
             className="wordmark"
-            aria-label="Aerie — go to repositories"
-            {...clickableRow(goRepos)}
+            aria-label="Aerie — go to review cockpit"
+            {...clickableRow(goHome)}
           >
             Aerie
           </span>
-          <span className="tagline">GitHub mission control</span>
+          <span className="tagline">Local agent mission control</span>
         </div>
-        <div className="topbar__right">
-          {accounts.length > 0 && (
+        {accounts.length > 0 && (
+          <div className="sidebar__account">
+            <span className="sidebar__label">Account</span>
             <select
               className="field account-select"
               aria-label="Account"
@@ -158,9 +207,9 @@ function App(): React.JSX.Element {
               onChange={(e) => {
                 setSelectedId(Number(e.target.value))
                 setOpenRepo(null)
-                // Switching account is the way to re-scope History, so stay on it
-                // when it's open; otherwise fall back to the account's repo list.
-                setView((v) => (v === 'history' ? 'history' : 'repos'))
+                setView((v) =>
+                  v === 'history' || v === 'repos' || v === 'automate' ? v : 'cockpit'
+                )
               }}
             >
               {accounts.map((a) => (
@@ -169,56 +218,40 @@ function App(): React.JSX.Element {
                 </option>
               ))}
             </select>
-          )}
-          <nav className="tabs" aria-label="Views">
+          </div>
+        )}
+        <nav className="sidebar-nav" aria-label="Views">
+          {navItems.map((item) => (
             <button
-              className={`tab ${view === 'repos' ? 'tab--active' : ''}`}
-              onClick={goRepos}
-              disabled={!reposReady}
-              aria-current={view === 'repos' ? 'page' : undefined}
+              key={item.id}
+              className={`sidebar-nav__item ${view === item.id ? 'sidebar-nav__item--active' : ''}`}
+              onClick={() => {
+                setOpenRepo(null)
+                if (item.id === 'repos') goRepos()
+                else setView(item.id)
+              }}
+              disabled={item.disabled}
+              aria-current={view === item.id ? 'page' : undefined}
             >
-              Repos
+              <span>{item.label}</span>
+              <small>{item.hint}</small>
             </button>
-            <button
-              className={`tab ${view === 'history' ? 'tab--active' : ''}`}
-              onClick={() => setView('history')}
-              aria-current={view === 'history' ? 'page' : undefined}
-            >
-              History
-            </button>
-            <button
-              className={`tab ${view === 'tools' ? 'tab--active' : ''}`}
-              onClick={() => setView('tools')}
-              aria-current={view === 'tools' ? 'page' : undefined}
-            >
-              Tools
-            </button>
-            <button
-              className={`tab ${view === 'automate' ? 'tab--active' : ''}`}
-              onClick={() => setView('automate')}
-              aria-current={view === 'automate' ? 'page' : undefined}
-            >
-              Automate
-            </button>
-            <button
-              className={`tab ${view === 'accounts' ? 'tab--active' : ''}`}
-              onClick={() => setView('accounts')}
-              aria-current={view === 'accounts' ? 'page' : undefined}
-            >
-              Accounts
-            </button>
-            <button
-              className={`tab ${view === 'settings' ? 'tab--active' : ''}`}
-              onClick={() => setView('settings')}
-              aria-current={view === 'settings' ? 'page' : undefined}
-            >
-              Settings
-            </button>
-          </nav>
-        </div>
-      </header>
-      <main className="content">
-        {view === 'tools' ? (
+          ))}
+        </nav>
+        <button className="sidebar-command" onClick={() => setPaletteOpen(true)}>
+          <span>Command palette</span>
+          <kbd>Cmd K</kbd>
+        </button>
+      </aside>
+      <main className="content workspace">
+        {view === 'cockpit' && reposReady ? (
+          <MissionControlPanel
+            accountId={selectedId}
+            onNavigate={navigate}
+            onOpenRepo={openRepoFromCockpit}
+            onOpenRun={openHistoryRun}
+          />
+        ) : view === 'tools' ? (
           <ToolsPanel />
         ) : view === 'automate' ? (
           <AutomatePanel accountId={selectedId} />

@@ -103,6 +103,14 @@ preload/      contextBridge: exposes a typed window.api surface only
 renderer/     React UI — calls window.api.*, never touches Node/tokens
 ```
 
+The renderer's default authenticated surface is the **Review cockpit**: an account-scoped
+operator view over existing safe IPC data (`repos:list`, `runner:listAllRuns`,
+`runner:listAgents`, `pipelines:list`, `pipelines:pollerStatus`). It promotes the core
+review loop instead of module tabs: active runs, failed/stopped/ready-to-post reviews,
+favorite/recent repo targets, agent readiness, automation liveness, and the local trust
+boundary. It is a renderer-only composition layer: it adds no privileged IPC, GitHub write,
+token, git, or agent execution surface.
+
 ## 6. Repo mapping & local execution
 
 Each repo carries: `remote_url` (from GitHub), optional `user_local_path` (his
@@ -116,6 +124,12 @@ existing clone), and `app_clone_path` (app-managed, default).
 - **Opt-in mode:** if `user_local_path` is set and the user enables it, run via
   `git worktree add` off that clone (read-only intent), so the agent sees his
   exact local state. **Default OFF.**
+- **Git process environment.** Git runs receive a sanitized environment: inherited
+  pager/editor/git-control variables (`PAGER`, `EDITOR`, `GIT_*`, etc.) are stripped
+  before calling `simple-git`; Aerie then sets only its own non-interactive prompt
+  guard and, for authenticated network calls, the transient `http.extraHeader`
+  config-env token. This prevents local shell pager/config settings from changing
+  checkout behavior or tripping `simple-git` unsafe-env guards.
 - **Concurrency safety (per-clone serialization).** Every ref-mutating operation
   on an app-owned clone — the `--prune --tags` fetch, the PR-head `origin <sha>`
   fetch, and the worktree add/remove (including `cleanupCheckout`'s removal) — runs

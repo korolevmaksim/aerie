@@ -59,14 +59,21 @@ function worktreePathFor(fullName: string, sha: string, runTag: string): string 
   return dataDir('worktrees', owner, name, `${sha.slice(0, 12)}-${runTag}`)
 }
 
+const UNSAFE_INHERITED_GIT_ENV = new Set(['EDITOR', 'PAGER', 'PREFIX', 'SSH_ASKPASS'])
+
+function isUnsafeInheritedGitEnv(key: string): boolean {
+  const upper = key.toUpperCase()
+  return upper.startsWith('GIT_') || UNSAFE_INHERITED_GIT_ENV.has(upper)
+}
+
 /** Builds a git child-process env that authenticates without persisting the token. */
-function authEnv(token?: string): NodeJS.ProcessEnv {
-  // Strip inherited GIT_* vars (e.g. GIT_EDITOR, which simple-git refuses to
-  // forward, and any ambient config that could change git's behavior); then set
-  // exactly the vars we need. Keeps PATH/HOME/proxy settings intact.
+export function authEnv(token?: string): NodeJS.ProcessEnv {
+  // Strip inherited git process controls (PAGER, GIT_EDITOR, config paths, etc.) that
+  // simple-git blocks or that could change checkout behavior; then set only the git
+  // vars Aerie owns. Keeps PATH/HOME/proxy settings intact.
   const env: NodeJS.ProcessEnv = {}
   for (const [key, value] of Object.entries(process.env)) {
-    if (!key.startsWith('GIT_')) env[key] = value
+    if (!isUnsafeInheritedGitEnv(key)) env[key] = value
   }
   env.GIT_TERMINAL_PROMPT = '0'
   if (token) {
@@ -96,7 +103,7 @@ function authedGit(baseDir: string | undefined, token?: string): SimpleGit {
 
 /** A local (no-auth) git instance with the same hung-process timeout — for pack-refs / worktree. */
 function localGit(baseDir: string): SimpleGit {
-  return simpleGit(baseDir, { timeout: { block: GIT_BLOCK_TIMEOUT_MS } })
+  return simpleGit(baseDir, { timeout: { block: GIT_BLOCK_TIMEOUT_MS } }).env(authEnv())
 }
 
 /**
@@ -219,7 +226,7 @@ export async function writeCommitDiff(
   runTag: string,
   baseSha?: string | null
 ): Promise<string> {
-  const git = simpleGit(baseDir)
+  const git = localGit(baseDir)
   let diff: string
   if (baseSha) {
     diff = await git.raw(reviewDiffArgs(sha, baseSha)).catch(() => diffAgainstFirstParent(git, sha))
@@ -244,7 +251,7 @@ export async function headShaOf(localPath: string): Promise<string> {
   if (!existsSync(join(localPath, '.git'))) {
     throw new Error('Mapped local path is not a git repository.')
   }
-  const sha = (await simpleGit(localPath).revparse(['HEAD'])).trim()
+  const sha = (await localGit(localPath).revparse(['HEAD'])).trim()
   if (!/^[0-9a-f]{40}$/i.test(sha)) {
     throw new Error('Could not resolve the local clone HEAD (no commits yet?).')
   }
@@ -268,7 +275,7 @@ export async function prepareWorkingTree(args: {
   if (!existsSync(join(args.userLocalPath, '.git'))) {
     throw new Error('Mapped local path is not a git repository.')
   }
-  const git = simpleGit(args.userLocalPath)
+  const git = localGit(args.userLocalPath)
   const diff = await git.raw(args.staged ? ['diff', '--staged'] : ['diff', 'HEAD'])
   const { owner, name } = splitFullName(args.fullName)
   const diffDir = dataDir('diffs')
