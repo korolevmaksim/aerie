@@ -55,6 +55,7 @@ import { gatherGroundTruth } from './grounding'
 import { log } from './logger'
 import { whichOnPath } from './pathLookup'
 import { redactText } from './redact'
+import { formatMissingOutputError, keepTail } from './runOutput'
 import { activeCount, noteOutput, noteStatus, registerRun } from './runEvents'
 import { createSemaphore } from './semaphore'
 import { TOOL_CATALOG } from './toolCatalog'
@@ -870,13 +871,22 @@ async function execute(
         captured += d
       }
     }
+    // For a file-capture agent, retain a bounded tail of BOTH streams so that if it exits without
+    // writing its declared output file (e.g. its CLI fails to start), the finalized error carries
+    // the agent's real message instead of a bare "file not found". Off for stdout/none agents.
+    const wantsDiag = agent.outputCapture === 'file'
+    let diagTail = ''
     child.stdout?.setEncoding('utf8')
     child.stderr?.setEncoding('utf8')
     child.stdout?.on('data', (d: string) => {
       if (agent.outputCapture === 'stdout') append(d)
+      else if (wantsDiag) diagTail = keepTail(diagTail, d)
       emit('stdout', d)
     })
-    child.stderr?.on('data', (d: string) => emit('stderr', d))
+    child.stderr?.on('data', (d: string) => {
+      if (wantsDiag) diagTail = keepTail(diagTail, d)
+      emit('stderr', d)
+    })
 
     // An agent that exits before reading stdin would make write()/end() emit EPIPE.
     child.stdin?.on('error', (e) => emit('system', `[aerie] stdin write failed: ${e.message}\n`))
@@ -918,8 +928,10 @@ async function execute(
           if (!existsSync(file)) throw new Error('declared output file not found')
           output = readFileSync(file, 'utf8')
         } catch (e) {
-          emit('system', `\n[aerie] could not read output file: ${(e as Error).message}\n`)
-          finalize('error', code ?? null, `[aerie] ${(e as Error).message}`)
+          const reason = (e as Error).message
+          emit('system', `\n[aerie] could not read output file: ${reason}\n`)
+          // Surface what the agent actually printed (its real failure), not just "file not found".
+          finalize('error', code ?? null, formatMissingOutputError(code ?? null, reason, diagTail))
           return
         }
       }

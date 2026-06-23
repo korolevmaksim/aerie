@@ -111,6 +111,17 @@ same change set.
 
 ### Fixed
 
+- **A failed file-output agent now tells you why, instead of "declared output file not found"**: an
+  agent that writes its review to a file (e.g. the bundled `codex`, run with `-o {{outFile}}`) could
+  crash at startup — a bad CLI config, missing auth, a wrong flag — and exit without producing that
+  file. Aerie reported only a bare `[aerie] declared output file not found` and **discarded the
+  agent's own error message** (it was streamed live but lost from the saved result). The run output
+  now folds in a bounded tail of what the agent actually printed — e.g. *"agent exited (code 1)
+  without producing its declared output file … Error loading config.toml: unknown variant `default`,
+  expected `fast` or `flex` in `service_tier`"* — so the real cause is visible. The diagnostic tail
+  is secret-scrubbed before it is written or shown (same redaction as all run output). Pure helpers
+  are unit-tested (`src/main/runOutput.ts`); code-review + security-review APPROVED.
+
 - **Concurrent reviews on the same repo no longer corrupt its clone** (`git` ref-store race): two
   reviews launched on the same repository at once — common when the remote had just **force-updated**
   refs (a force-push or a dependabot rebase) — could interleave their `git fetch`/`clone`/worktree

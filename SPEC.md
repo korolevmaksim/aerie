@@ -129,6 +129,10 @@ Contract:
 3. The app runs the configured command in `cwd`, passing the prompt via the
    declared channel.
 4. The agent writes its review to stdout (default) or to a declared output file.
+   If a `file`-capture agent exits **without** producing that file (it crashed at
+   startup, bad config, etc.), the run is an error and the finalized output carries
+   a bounded, secret-scrubbed tail of what the agent printed (its real error), not a
+   bare "output file not found".
 5. Exit code `0` = success. The app enforces a timeout and can kill the process.
 
 `agents.json` entry shape:
