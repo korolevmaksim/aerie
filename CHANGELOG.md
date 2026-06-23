@@ -111,6 +111,19 @@ same change set.
 
 ### Fixed
 
+- **Concurrent reviews on the same repo no longer corrupt its clone** (`git` ref-store race): two
+  reviews launched on the same repository at once — common when the remote had just **force-updated**
+  refs (a force-push or a dependabot rebase) — could interleave their `git fetch`/`clone`/worktree
+  writes on the shared app-owned clone and make git reject the ref transaction with *"incorrect old
+  value provided"*, failing the checkout. Aerie now **serializes every ref-mutating operation per
+  clone** (the prune/tags fetch, the PR-head `origin <sha>` fetch, and the worktree add/remove) — a
+  second review on the same repo waits instead of racing, while different repos still run in
+  parallel. On a fetch failure it self-heals the ref store with `git pack-refs --all` and retries
+  once (a loose-vs-packed inconsistency left by an interrupted/concurrent fetch is what makes git
+  reject the update). A 120s no-output watchdog kills a stuck git child so a hung network fetch can
+  never block all future reviews of that repo. The per-clone mutex is pure + unit-tested; the
+  git-bound serialization is covered by the build smoke (`src/main/keyedMutex.ts`, `gitEngine.ts`).
+
 - **Agent autodiscovery now sees tools in version-managed / custom dirs**: a GUI-launched app on
   macOS inherits a truncated `PATH`, so CLIs installed under e.g. nvm's versioned node bin,
   `~/.kimi-code/bin`, or `~/.mimocode/bin` showed as **"Not installed"** in Tools even though they

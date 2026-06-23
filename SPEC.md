@@ -103,6 +103,19 @@ existing clone), and `app_clone_path` (app-managed, default).
 - **Opt-in mode:** if `user_local_path` is set and the user enables it, run via
   `git worktree add` off that clone (read-only intent), so the agent sees his
   exact local state. **Default OFF.**
+- **Concurrency safety (per-clone serialization).** Every ref-mutating operation
+  on an app-owned clone — the `--prune --tags` fetch, the PR-head `origin <sha>`
+  fetch, and the worktree add/remove (including `cleanupCheckout`'s removal) — runs
+  under a per-clone async mutex keyed by the clone path. Two reviews on the **same**
+  repo are serialized; different repos still run in parallel. Without this, a
+  concurrent fetch racing a remote **force-update** (force-push / dependabot rebase)
+  leaves a loose-vs-packed ref inconsistency and git rejects the transaction with
+  *"incorrect old value provided"*. On any fetch failure the engine self-heals with
+  `git pack-refs --all` and retries the fetch once. A 120s no-output watchdog
+  (`timeout.block`) kills a stuck git child so a hung network operation cannot hold a
+  clone's mutex (and its run slot) forever. Invariant: `cleanupCheckout` keys its
+  worktree-remove off `baseDir`, which **equals** the clone path in app-clone mode —
+  that equality is what makes cleanup serialize against concurrent worktree adds.
 
 ## 7. Agent contract (this is what makes it agnostic)
 

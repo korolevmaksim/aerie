@@ -4,6 +4,17 @@ import { app } from 'electron'
 import simpleGit, { type SimpleGit } from 'simple-git'
 import type { PrepareMode, PrepareResult } from '../shared/types'
 import { reviewDiffArgs } from './gitDiff'
+import { createKeyedMutex } from './keyedMutex'
+
+// Serializes ALL writes to an app-owned clone (fetch / clone / PR-head fetch / worktree add+remove)
+// per clone, so concurrent reviews on the SAME repo never race on its ref store (different repos
+// run in parallel). NOTE: cleanupCheckout's worktree-remove keys off baseDir, which equals the
+// clonePath in app-clone mode — keep that equality so cleanup serializes against worktree adds.
+const cloneMutex = createKeyedMutex()
+
+// Kill a git child that produces NO output for this long — a stuck network fetch/clone must not
+// hold a clone's mutex (and its run slot) forever, blocking every future review of that repo.
+const GIT_BLOCK_TIMEOUT_MS = 120_000
 
 /**
  * Git engine (SPEC §5/§6). Drives the system `git` through simple-git. App-owned
@@ -75,28 +86,55 @@ function authEnv(token?: string): NodeJS.ProcessEnv {
  * is not a command-execution vector.
  */
 function authedGit(baseDir: string | undefined, token?: string): SimpleGit {
-  const options = { unsafe: { allowUnsafeConfigEnvCount: true } }
+  const options = {
+    unsafe: { allowUnsafeConfigEnvCount: true },
+    timeout: { block: GIT_BLOCK_TIMEOUT_MS }
+  }
   const git = baseDir ? simpleGit(baseDir, options) : simpleGit(options)
   return git.env(authEnv(token))
+}
+
+/** A local (no-auth) git instance with the same hung-process timeout — for pack-refs / worktree. */
+function localGit(baseDir: string): SimpleGit {
+  return simpleGit(baseDir, { timeout: { block: GIT_BLOCK_TIMEOUT_MS } })
 }
 
 /**
  * Ensures an app-owned clone exists at the target SHA's repo and is up to date.
  * Clones if absent, otherwise fetches. Returns the clone path.
  */
-export async function ensureClone(
-  fullName: string,
-  remoteUrl: string,
-  token?: string
-): Promise<string> {
+// NOTE: must be called INSIDE `cloneMutex.run(clonePath, …)` (it mutates the shared clone's refs).
+async function ensureClone(fullName: string, remoteUrl: string, token?: string): Promise<string> {
   const clonePath = clonePathFor(fullName)
   if (existsSync(join(clonePath, '.git'))) {
-    await authedGit(clonePath, token).fetch(['--prune', '--tags', 'origin'])
+    await fetchWithRefRecovery(clonePath, ['--prune', '--tags', 'origin'], token)
   } else {
     mkdirSync(clonePath, { recursive: true })
     await authedGit(undefined, token).clone(remoteUrl, clonePath)
   }
   return clonePath
+}
+
+/**
+ * Run a git fetch, healing a stale ref store on failure. A loose-vs-packed ref inconsistency (left
+ * by a past interrupted/killed or concurrent fetch, especially when the remote force-updated refs)
+ * makes git reject the ref transaction with "incorrect old value provided". `pack-refs --all`
+ * reconciles the loose and packed stores (the live ref value wins); retry the fetch once before
+ * propagating. Caller serializes per clone (see `cloneMutex`).
+ */
+async function fetchWithRefRecovery(
+  clonePath: string,
+  fetchArgs: string[],
+  token?: string
+): Promise<void> {
+  try {
+    await authedGit(clonePath, token).fetch(fetchArgs)
+  } catch {
+    await localGit(clonePath)
+      .raw(['pack-refs', '--all'])
+      .catch(() => undefined)
+    await authedGit(clonePath, token).fetch(fetchArgs)
+  }
 }
 
 async function addDetachedWorktree(
@@ -133,21 +171,29 @@ export async function checkoutWorktree(args: {
     if (!existsSync(join(args.userLocalPath, '.git'))) {
       throw new Error('Mapped local path is not a git repository.')
     }
-    const git = simpleGit(args.userLocalPath)
+    const git = localGit(args.userLocalPath)
     await addDetachedWorktree(git, worktreePath, args.sha)
     return { mode: 'user-worktree', baseDir: args.userLocalPath, worktreePath }
   }
 
-  const clonePath = await ensureClone(args.fullName, args.remoteUrl, args.token)
-  const git = authedGit(clonePath, args.token)
-  try {
-    await addDetachedWorktree(git, worktreePath, args.sha)
-  } catch {
-    // The SHA may not be on a fetched branch (e.g. a PR head) — fetch it directly.
-    await git.fetch(['origin', args.sha]).catch(() => undefined)
-    await addDetachedWorktree(git, worktreePath, args.sha)
-  }
-  return { mode: 'app-clone', baseDir: clonePath, worktreePath }
+  const clonePath = clonePathFor(args.fullName)
+  // Serialize the WHOLE app-clone path per clone: ensureClone's fetch, the PR-head fetch, and the
+  // worktree add/remove all mutate the shared clone's ref store — a second concurrent review on
+  // the same repo must wait, not race (the "incorrect old value provided" race). Different repos
+  // (different clonePath) still run in parallel.
+  return cloneMutex.run(clonePath, async () => {
+    await ensureClone(args.fullName, args.remoteUrl, args.token)
+    const git = authedGit(clonePath, args.token)
+    try {
+      await addDetachedWorktree(git, worktreePath, args.sha)
+    } catch {
+      // The SHA may not be on a fetched branch (e.g. a PR head) — fetch it directly (best-effort,
+      // with the same ref-store recovery), then retry the worktree add.
+      await fetchWithRefRecovery(clonePath, ['origin', args.sha], args.token).catch(() => undefined)
+      await addDetachedWorktree(git, worktreePath, args.sha)
+    }
+    return { mode: 'app-clone' as const, baseDir: clonePath, worktreePath }
+  })
 }
 
 /** Diffs a commit against its first parent; full patch for a root commit. */
@@ -273,9 +319,12 @@ export async function cleanupCheckout(prepared: PreparedCheckout): Promise<void>
     // remove and `worktreePath` IS their clone, so never run `worktree remove` on it.
     // Only drop the generated diff file.
     if (prepared.mode !== 'working-tree') {
-      await simpleGit(prepared.baseDir)
-        .raw(['worktree', 'remove', '--force', prepared.worktreePath])
-        .catch(() => undefined)
+      // Serialize the worktree remove with concurrent worktree adds on the same clone (same key).
+      await cloneMutex.run(prepared.baseDir, () =>
+        localGit(prepared.baseDir)
+          .raw(['worktree', 'remove', '--force', prepared.worktreePath])
+          .catch(() => undefined)
+      )
     }
     rmSync(prepared.diffPath, { force: true })
   } catch {
