@@ -632,6 +632,18 @@ not only SQLite rows. A `.aerie/` directory (pipeline defs, tool policy, severit
 posting policy) with local overrides, loaded into the engine, makes automation shareable across clones
 and reviewable in PRs. **Effort:** M. **Depends on:** M9a.
 
+> **Design note (autonomous-loop, 2026-06-23): a TRUST decision precedes the build.** `.aerie/`
+> is repo content that *travels with the reviewed SHA*, so on a PR review the file at the PR HEAD is
+> **attacker-controlled**. The parser must be allow-list/declarative-only (never an exec/command/
+> path-to-run, parsed like `catalogSchema.toAgentTemplate`) AND each field needs a "can't be abused"
+> ruling: a config may only ever **restrict, never widen** what runs/posts (e.g. a repo may force
+> auto-post OFF, never ON). The headline `ignore`-globs consumer (git pathspec excludes on the review
+> diff) has a real **review-evasion** edge — a malicious PR could ship `.aerie` with `ignore:['**']`
+> to hide its own changes from the AI review — so it must be **surfaced, not silent** ("review scoped
+> per .aerie: ignoring …"), and likely honored from the **base branch**, not the PR head. Settle the
+> base-vs-head trust model + the restrict-only rule before building; the pure parser + the consumer
+> are then a clean two-slice vertical (parser+path-match = vitest; diff wiring = smoke + security-review).
+
 ---
 
 ### Phase 5 — UI/UX gap closure *(before promotion)*
@@ -811,8 +823,12 @@ did/didn't fire) + **notification-fatigue controls** (batching, quiet hours, don
   the run's review on the clipboard (the clean captured review when finished, else the live
   transcript); the Markdown variant wraps it in a target/agent/status header via the pure,
   unit-tested `lib/runConsole.ts` (asserts no token/path injected). Client-side; frontend-review
-  APPROVED. **Still TODO (M14):** structured 2-column launcher, RunView re-run action, left-rail
-  IA, value-first onboarding.
+  APPROVED.
+- **Shipped (M14 — re-run):** a finished run in the history view has a **Re-run** button that
+  re-launches the same agent on the same target via the already-gated `runner.start` (HistoryPanel
+  owns the params + new-run selection; RunView just renders the button when a parent passes
+  `onRerun`); a failed re-launch is surfaced. Frontend-review APPROVED. **Still TODO (M14):**
+  structured 2-column launcher, left-rail IA, value-first onboarding.
 
 ---
 

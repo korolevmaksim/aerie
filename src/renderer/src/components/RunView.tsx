@@ -18,10 +18,13 @@ function isTerminal(s: RunStatus): boolean {
  */
 function RunView({
   run,
-  onStatusChange
+  onStatusChange,
+  onRerun
 }: {
   run: RunRecord
   onStatusChange?: (status: RunStatus) => void
+  /** When provided, a finished run shows a "Re-run" action (re-launch same agent + target). */
+  onRerun?: () => void
 }): React.JSX.Element {
   const [output, setOutput] = useState('')
   const [status, setStatus] = useState<RunStatus>(run.status)
@@ -192,6 +195,15 @@ function RunView({
         {active && (
           <button className="btn btn--danger" onClick={onKill}>
             Kill
+          </button>
+        )}
+        {onRerun && isTerminal(status) && (
+          <button
+            className="btn btn--ghost"
+            onClick={onRerun}
+            title="Run the same agent on the same target again"
+          >
+            Re-run
           </button>
         )}
         {copyText.length > 0 && (

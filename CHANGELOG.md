@@ -13,6 +13,12 @@ same change set.
 
 ### Added
 
+- **Re-run a review** (ROADMAP M14): a finished run in the history view now has a **Re-run**
+  button that re-launches the same agent on the same commit/PR (useful for a second opinion, since
+  agents are non-deterministic, or after tweaking the agent's model). It goes through the existing
+  gated `runner.start` — no new surface — and a failure (e.g. a run already in flight) is now
+  surfaced instead of a silent dead click.
+
 - **Copy a run's review** (ROADMAP M14): the run output view now has **Copy** / **Copy MD**
   buttons that put the agent's review on the clipboard — plain text, or wrapped in a small
   Markdown header (target · agent · status) ready to paste into a PR, issue, or notes. It copies

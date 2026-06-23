@@ -28,6 +28,8 @@ function HistoryPanel({
   const [query, setQuery] = useState('')
   // Transient "Copied N runs…" confirmation for the export buttons (aria-live).
   const [copied, setCopied] = useState<string | null>(null)
+  // Surfaces a failed re-run (dedupe of an in-flight run, a stale ref, a consent refusal).
+  const [error, setError] = useState<string | null>(null)
   // Remember which external id we've already acted on, so a not-yet-loaded (or
   // pruned) run never drives an endless reload loop.
   const handledRunIdRef = useRef<number | null>(null)
@@ -166,6 +168,27 @@ function HistoryPanel({
     return () => clearTimeout(t)
   }, [copied])
 
+  // Re-run the selected run: re-launch the SAME agent on the SAME target via the already-gated
+  // runner.start, then switch the view to the new run. The new RunRecord is wrapped back into a
+  // RunHistoryItem with the known account/repo so the view stays consistent.
+  const rerunSelected = useCallback(async (item: RunHistoryItem): Promise<void> => {
+    setError(null)
+    const res = await window.aerie.runner.start({
+      accountId: item.accountId,
+      repoId: item.repoId,
+      sha: item.headSha,
+      refType: item.refType,
+      refId: item.refId,
+      agentId: item.agentId,
+      authorLogin: item.authorLogin
+    })
+    if (res.ok) {
+      setSelected({ ...res.value, repoFullName: item.repoFullName, accountId: item.accountId })
+    } else {
+      setError(res.error)
+    }
+  }, [])
+
   // Safety net: while any run for THIS account is still active, re-poll the list
   // so a status that settled before this panel mounted (or any missed event)
   // still converges.
@@ -185,6 +208,7 @@ function HistoryPanel({
               className="btn btn--ghost back"
               onClick={() => {
                 setSelected(null)
+                setError(null)
                 void reload()
               }}
             >
@@ -197,7 +221,12 @@ function HistoryPanel({
             </span>
           </h2>
         </div>
-        <RunView key={selected.id} run={selected} />
+        {error && (
+          <p className="alert" role="alert">
+            {error}
+          </p>
+        )}
+        <RunView key={selected.id} run={selected} onRerun={() => void rerunSelected(selected)} />
       </section>
     )
   }
