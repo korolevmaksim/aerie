@@ -109,6 +109,18 @@ same change set.
   unit-tested, including a regression guard that the shipped JSON parses to exactly its two
   entries.
 
+### Security
+
+- **Run output is scrubbed for third-party secrets, not just GitHub tokens, and the live view is
+  scrubbed too**: Aerie runs external coding agents that authenticate with their own provider keys,
+  so an agent's auth error or verbose output could print a secret. Redaction now covers common
+  shapes — OpenAI/Anthropic `sk-…`, AWS `AKIA…`, Google `AIza…`, Slack `xox…`, and PEM private-key
+  blocks — in addition to GitHub tokens, everywhere run output is persisted (`.out`/`.log`),
+  **streamed to the live RunView**, or posted to GitHub. Previously only the persisted artifacts
+  were scrubbed and only for GitHub token shapes; the in-flight stream showed raw output. Patterns
+  are prefix-anchored and length-bounded (e.g. `task-`/`risk-` can't masquerade as an `sk-` key);
+  19 redaction unit tests, including no-false-positive cases. code-review + security-review APPROVED.
+
 ### Fixed
 
 - **A failed file-output agent now tells you why, instead of "declared output file not found"**: an

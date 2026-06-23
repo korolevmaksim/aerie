@@ -75,3 +75,70 @@ describe('redactText', () => {
     expect(scrubbed).not.toContain('ghp_')
   })
 })
+
+describe('redactText — third-party provider secrets (agents authenticate with their own keys)', () => {
+  // Aerie shells out to coding agents whose auth errors / verbose output can print a non-GitHub
+  // secret. Each is a realistic shape; the value must not survive into a .out / .log / posted body.
+  const cases: Array<[string, string]> = [
+    ['OpenAI sk-', 'error: invalid api key sk-ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcd done'],
+    ['OpenAI sk-proj-', 'OPENAI_API_KEY=sk-proj-ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 set'],
+    [
+      'Anthropic sk-ant-',
+      'auth failed: sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZ012345-_AA reported'
+    ],
+    ['AWS AKIA', 'using AKIAIOSFODNN7EXAMPLE as the access key'],
+    ['Google AIza', 'key AIzaSyA1234567890abcdefghijklmnopqrstuv rejected'],
+    ['Slack xoxb-', 'SLACK_TOKEN=xoxb-123456789012-abcdefABCDEF here']
+  ]
+  for (const [name, line] of cases) {
+    it(`redacts a ${name} key`, () => {
+      const out = redactText(line)
+      expect(out).toContain('[REDACTED]')
+      // the distinctive prefix+body should be gone (the bare prefix may remain harmlessly)
+      expect(out).not.toMatch(/sk-(?:ant-|proj-)?[A-Za-z0-9_-]{20,}/)
+      expect(out).not.toMatch(/AKIA[0-9A-Z]{16}/)
+      expect(out).not.toMatch(/AIza[0-9A-Za-z_-]{35}/)
+      expect(out).not.toMatch(/xox[baprs]-[A-Za-z0-9-]{10,}/)
+    })
+  }
+
+  it('redacts a Google AIza key whose 35-char body ends in a dash (no trailing-\\b leak)', () => {
+    const out = redactText('GOOGLE_API_KEY=AIzaSyA1234567890abcdefghijklmnopqrstu- next')
+    expect(out).not.toMatch(/AIza[0-9A-Za-z_-]{35}/)
+    expect(out).toContain('[REDACTED]')
+  })
+
+  it('redacts credentials embedded in a URL authority (e.g. a git remote with a PAT)', () => {
+    const out = redactText(
+      'fatal: unable to access https://x-access-token:ghp_SECRETPLACEHOLDER@github.com/o/r'
+    )
+    expect(out).not.toContain('ghp_SECRETPLACEHOLDER')
+    expect(out).toContain('https://[REDACTED]@github.com/o/r')
+  })
+
+  it('does NOT touch a normal URL with no credentials or a host:port', () => {
+    expect(redactText('cloning https://github.com/owner/repo and http://localhost:8080/x')).toBe(
+      'cloning https://github.com/owner/repo and http://localhost:8080/x'
+    )
+  })
+
+  it('redacts a whole PEM private-key block', () => {
+    const pem =
+      '-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAABG5vbmU=\nAAAAC3NzaC1l\n-----END OPENSSH PRIVATE KEY-----'
+    const out = redactText(`before\n${pem}\nafter`)
+    expect(out).toBe('before\n[REDACTED]\nafter')
+  })
+
+  it('does NOT false-match ordinary hyphenated words that merely contain "sk-"', () => {
+    const prose =
+      'task-management-dashboard and risk-assessment-workflow and disk-usage-report-tool'
+    expect(redactText(prose)).toBe(prose)
+  })
+
+  it('does NOT redact ordinary uppercase or base64-ish prose', () => {
+    expect(redactText('THE QUICK BROWN FOX AKIA jumps')).toBe('THE QUICK BROWN FOX AKIA jumps')
+    expect(redactText('a normal review: looks good, ship it')).toBe(
+      'a normal review: looks good, ship it'
+    )
+  })
+})

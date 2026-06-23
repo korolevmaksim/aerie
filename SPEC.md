@@ -50,6 +50,15 @@ If any fixed choice blocks you, STOP and flag it. Do not swap it on your own.
   renderer reaches them only through a typed `contextBridge` API in preload.
 - Tokens: encrypt at rest with `safeStorage`; never pass a raw token to the
   renderer; never write a token to a log.
+- **Secret scrubbing of run output.** Agent runs can print secrets (an agent's own
+  provider key in an auth error, a `gitleaks` finding). All run output is scrubbed
+  by `redactText` before it is persisted (`.out`/`.log`), streamed to the renderer,
+  or posted to GitHub — covering GitHub tokens *and* common third-party shapes
+  (OpenAI/Anthropic `sk-…`, AWS `AKIA…`, Google `AIza…`, Slack `xox…`, PEM private-key
+  blocks), plus any literal secret a tool run surfaced. Persisted artifacts are scrubbed
+  as a whole (authoritative, catches a secret split across chunk boundaries); the live
+  in-flight stream is scrubbed per-chunk (best-effort, so the RunView doesn't show a key
+  verbatim while the run is mid-flight).
 - Any GitHub **write** (post comment, create issue) requires an explicit in-app
   confirmation step before it fires.
 - Agent runs operate on **app-owned clones** (see §6), never on the user's
