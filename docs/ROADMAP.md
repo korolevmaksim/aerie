@@ -594,6 +594,38 @@ inline security-review. **Effort:** M–L. **Depends on:** M9a, M7.
 **Accept:** the git-hook bridge is loopback-only and unreachable from the renderer / not a TCP port;
 a `gate=true` pre-push pipeline blocks the push on a critical finding and passes otherwise.
 
+> **⛔ HUMAN-GATED — design ready, build BLOCKED pending owner green-light (autonomous-loop note,
+> 2026-06-23).** M9b is the one remaining feature that crosses *new trust boundaries the current
+> SPEC §4 does not sanction*, so the autonomous loop is deliberately NOT building it without an
+> explicit human decision. The mechanism is settled; the **product/security decisions are not**:
+>
+> - **(D1) Write into the user's REAL repo `.git`.** SPEC §4 today says agent runs use *app-owned
+>   clones, never the user's working copies* (worktree mode is read-only, default OFF). A git-hook
+>   trigger requires Aerie to **install a hook into the user's actual `.git/hooks`** — a write into
+>   the user's repo that §4 currently forbids. Decision needed: extend §4 to permit a
+>   hook install **behind explicit per-repo consent**, never silent, never clobbering an existing
+>   hook (append a fenced `# >>> aerie >>> … # <<< aerie <<<` block, fully removable), and surfaced
+>   in the repo's mapping UI with an obvious "uninstall hook" affordance.
+> - **(D2) Run a local loopback listener.** A **unix-domain socket / named pipe** (chmod 0600,
+>   in `userData`, **never a TCP port**), main-process only, unreachable from the renderer. The hook
+>   shim presents a **per-install secret** (stored in `safeStorage`, written into the hook file with
+>   0700 perms) so only Aerie's own hook can signal it; a bad/missing secret is ignored. Decision
+>   needed: approve standing up this listener at all (it is new attack surface, even if loopback +
+>   authed), and its lifecycle (start with the poller, stop on quit).
+> - **(D3) The `gate=true` blocking semantics.** A `pre-push` shim can BLOCK the push on a critical
+>   finding. Decision needed: confirm Aerie may gate a developer's push (UX: timeout/bypass escape
+>   hatch so a hung review can't trap the user), and that a hook trigger still runs in the app-owned
+>   clone through the SAME engine gates (`assertMayPost` etc.) — a hook MUST NOT bypass auto-post
+>   consent or post on its own.
+>
+> **Once D1–D3 are granted**, the build slices are: **(1)** PURE, side-effect-free
+> `hookScript()`/`parseHookSignal()`/`planHookInstall|Uninstall()` (generate the fenced shim,
+> parse a signal → a `working-tree`/commit delta the engine understands, idempotent
+> append/remove that never clobbers a foreign hook) — vitest; **(2)** the electron-bound socket
+> listener + secret + fs hook-install + per-repo consent UI — smoke + build smoke + **mandatory
+> security-review**. Until then M9b stays parked; the poller (M9a) already delivers automation,
+> just on a poll delay rather than instantly.
+
 #### M-Cfg — Repo-level `.aerie/` config *(missed item — on-goal)*
 **[missed item]:** "flexible, shareable" configuration implies version-controlled, reviewable config,
 not only SQLite rows. A `.aerie/` directory (pipeline defs, tool policy, severity thresholds, ignores,
