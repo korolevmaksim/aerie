@@ -270,6 +270,20 @@ export async function listCommits(
   return { ...result, page }
 }
 
+/** Resolves the current head SHA for a branch/ref. Used by project-wide reviews. */
+export async function getBranchHeadSha(
+  accountId: number,
+  repoFullName: string,
+  branch: string
+): Promise<string> {
+  const page = await listCommits(accountId, repoFullName, { branch, page: 1, force: true })
+  const sha = page.items[0]?.sha
+  if (!sha || !/^[0-9a-f]{40}$/i.test(sha)) {
+    throw new Error(`Could not resolve the current head for "${branch || 'default branch'}".`)
+  }
+  return sha
+}
+
 export async function getCommit(
   accountId: number,
   repoFullName: string,

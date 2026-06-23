@@ -3,8 +3,9 @@ import { defineConfig } from 'vitest/config'
 
 // Tests cover the pure, electron-free logic (validation, redaction, agent
 // templating, security URL checks, formatting). Native/electron-bound code
-// (better-sqlite3 store, safeStorage, the full runner) stays in the Electron
-// smoke scripts, since better-sqlite3 is built for the Electron ABI.
+// (safeStorage, the full runner) stays in the Electron smoke scripts. The
+// better-sqlite3 store is covered by smoke:store because the native module is
+// rebuilt for the Electron ABI and cannot be loaded by Node/Vitest directly.
 export default defineConfig({
   test: {
     environment: 'node',

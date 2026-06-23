@@ -130,18 +130,20 @@ existing clone), and `app_clone_path` (app-managed, default).
   guard and, for authenticated network calls, the transient `http.extraHeader`
   config-env token. This prevents local shell pager/config settings from changing
   checkout behavior or tripping `simple-git` unsafe-env guards.
-- **Concurrency safety (per-clone serialization).** Every ref-mutating operation
+- **Concurrency safety (per-clone serialization).** Every git-metadata-mutating operation
   on an app-owned clone — the `--prune --tags` fetch, the PR-head `origin <sha>`
-  fetch, and the worktree add/remove (including `cleanupCheckout`'s removal) — runs
-  under a per-clone async mutex keyed by the clone path. Two reviews on the **same**
-  repo are serialized; different repos still run in parallel. Without this, a
-  concurrent fetch racing a remote **force-update** (force-push / dependabot rebase)
-  leaves a loose-vs-packed ref inconsistency and git rejects the transaction with
-  *"incorrect old value provided"*. On any fetch failure the engine self-heals with
-  `git pack-refs --all` and retries the fetch once. A 120s no-output watchdog
-  (`timeout.block`) kills a stuck git child so a hung network operation cannot hold a
-  clone's mutex (and its run slot) forever. Invariant: `cleanupCheckout` keys its
-  worktree-remove off `baseDir`, which **equals** the clone path in app-clone mode —
+  fetch, and the worktree add/remove — runs under a per-clone async mutex keyed by
+  the clone path. Opt-in `user_local_path` worktree add/remove uses the same mutex
+  keyed by the mapped clone path, because linked worktrees still mutate that clone's
+  `.git/worktrees` registry. Two reviews on the **same** repo are serialized; different
+  repos still run in parallel. Without this, a concurrent fetch racing a remote
+  **force-update** (force-push / dependabot rebase) leaves a loose-vs-packed ref
+  inconsistency and git rejects the transaction with *"incorrect old value provided"*.
+  On any fetch failure the engine self-heals with `git pack-refs --all` and retries the
+  fetch once. A 120s no-output watchdog (`timeout.block`) kills a stuck git child so a
+  hung network operation cannot hold a clone's mutex (and its run slot) forever.
+  Invariant: `cleanupCheckout` and prepare-time failure cleanup key worktree-remove off
+  `baseDir`, which **equals** the clone path in both app-clone and user-worktree mode —
   that equality is what makes cleanup serialize against concurrent worktree adds.
 
 ## 7. Agent contract (this is what makes it agnostic)
@@ -151,8 +153,8 @@ An agent is an external CLI described in an editable config file `agents.json`
 
 Contract:
 1. The app checks the repo out at the target SHA into a working dir (`cwd`).
-2. The app writes a **prompt file** (review instructions + commit/PR metadata)
-   and a **diff file** into a temp dir.
+2. The app writes a **prompt file** (review instructions + review-target metadata)
+   and a **diff/project-context file** into a temp dir.
 3. The app runs the configured command in `cwd`, passing the prompt via the
    declared channel.
 4. The agent writes its review to stdout (default) or to a declared output file.
@@ -243,7 +245,7 @@ candidate's command — the user then saves + approves (§4) it like any other u
 accounts(id, label, kind['user'|'org'], login, token_blob, created_at)
 repos(id, account_id, full_name, default_branch, remote_url,
       user_local_path, app_clone_path, last_synced_at)
-runs(id, repo_id, ref_type['commit'|'pr'|'working-tree'], ref_id, head_sha, agent_id,
+runs(id, repo_id, ref_type['commit'|'pr'|'working-tree'|'project'], ref_id, head_sha, agent_id,
      status['queued'|'running'|'done'|'error'|'killed'],
      exit_code, started_at, finished_at, output_path, posted_url)
 http_cache(key, etag, payload, updated_at)   -- conditional-request (ETag) cache; payload
@@ -267,6 +269,15 @@ settings(key, value)
 > a deliberate, gated extension of §4 (a mapped clone + an explicit working-tree review is
 > the consent), narrower than the `use_local_worktree` checkout mode. Grounding still
 > honours the `ui.groundReviews` opt-out. Findings noise-filtering (M6) applies identically.
+
+> **Project reviews.** A `ref_type` of `'project'` reviews a whole repository snapshot:
+> `ref_id` is the audited branch/ref name, `head_sha` is resolved in the main process from
+> GitHub immediately before launch, and the runner checks that SHA out into the normal
+> app-owned isolated worktree. Instead of generating a unified diff, Aerie writes a bounded
+> project audit brief (`diffPath`/`{{reviewFile}}`) with repo metadata, top-level inventory,
+> landmarks, and a capped tracked-file list; the agent is expected to inspect the checked-out
+> source directly. Project reviews do not post to a single commit/PR thread; finished output
+> can be turned into a GitHub issue through the existing explicit confirm flow.
 
 > **Automation pipelines — foundation (ROADMAP M9a).** A pipeline is a configurable
 > `trigger → scope filter → steps → aggregate → action` automation, persisted per repo. The
@@ -473,7 +484,7 @@ modified; diff file is produced.
 
 ### Stage 5 — Agent runner (THE WEDGE)
 Build: load `agents.json`; "Review with agent" button on the commit and PR
-views; runner = prepare context (checkout SHA + prompt file + diff file) →
+views; runner = prepare context (checkout SHA + prompt file + diff/project file) →
 spawn agent in `cwd` → stream stdout/stderr live to the UI → capture result →
 persist a `runs` row. Ship the real agent config entries (`codex`, `claude-code`, …).
 **Accept:** configure an installed agent and run it on a commit → live output

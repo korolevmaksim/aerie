@@ -1,13 +1,48 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { execFileSync } from 'child_process'
-import { mkdtempSync, rmSync } from 'fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import simpleGit from 'simple-git'
-import { authEnv } from './gitEngine'
+
+afterEach(() => {
+  vi.doUnmock('electron')
+  vi.resetModules()
+})
+
+async function loadGitEngine(userData?: string): Promise<typeof import('./gitEngine')> {
+  if (userData) {
+    vi.doMock('electron', () => ({
+      app: {
+        getPath: (name: string) => {
+          if (name !== 'userData') throw new Error(`unexpected app.getPath(${name})`)
+          return userData
+        }
+      }
+    }))
+  }
+  return import('./gitEngine')
+}
+
+function git(dir: string, args: string[]): string {
+  return execFileSync('git', args, { cwd: dir, encoding: 'utf8' })
+}
+
+function createCommittedRepo(root: string): { repoDir: string; sha: string } {
+  const repoDir = join(root, 'repo')
+  mkdirSync(repoDir, { recursive: true })
+  git(repoDir, ['init', '-b', 'main'])
+  git(repoDir, ['config', 'user.email', 'aerie@example.test'])
+  git(repoDir, ['config', 'user.name', 'Aerie Test'])
+  writeFileSync(join(repoDir, 'README.md'), 'hello\n', 'utf8')
+  git(repoDir, ['add', 'README.md'])
+  git(repoDir, ['commit', '-m', 'initial'])
+  return { repoDir, sha: git(repoDir, ['rev-parse', 'HEAD']).trim() }
+}
 
 describe('authEnv', () => {
-  it('keeps normal process env but strips unsafe git process controls', () => {
+  it('keeps normal process env but strips unsafe git process controls', async () => {
+    const { authEnv } = await loadGitEngine()
     const original = {
       PATH: process.env.PATH,
       HOME: process.env.HOME,
@@ -40,6 +75,7 @@ describe('authEnv', () => {
   })
 
   it('can be passed to simple-git when PAGER is set in the shell', async () => {
+    const { authEnv } = await loadGitEngine()
     const dir = mkdtempSync(join(tmpdir(), 'aerie-git-env-'))
     const originalPager = process.env.PAGER
 
@@ -52,6 +88,97 @@ describe('authEnv', () => {
       if (originalPager === undefined) delete process.env.PAGER
       else process.env.PAGER = originalPager
       rmSync(dir, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('buildProjectReviewContext', () => {
+  it('builds a bounded project-audit brief with landmarks and omitted file count', async () => {
+    const { buildProjectReviewContext } = await loadGitEngine()
+    const files = [
+      'src/main.ts',
+      'src/ui/App.tsx',
+      'package.json',
+      'README.md',
+      ...Array.from({ length: 805 }, (_, i) => `generated/file-${i}.txt`)
+    ]
+
+    const context = buildProjectReviewContext({
+      fullName: 'octo/repo',
+      sha: 'a'.repeat(40),
+      refName: 'main',
+      files
+    })
+
+    expect(context).toContain('Repository: octo/repo')
+    expect(context).toContain('Reviewing: whole repository snapshot')
+    expect(context).toContain('Ref: main')
+    expect(context).toContain('- package.json')
+    expect(context).toContain('- README.md')
+    expect(context).toContain('first 800')
+    expect(context).toContain('omitted')
+    const listedGenerated = context
+      .split('\n')
+      .filter((line) => line.startsWith('- generated/file-'))
+    expect(listedGenerated.length).toBeLessThanOrEqual(800)
+  })
+})
+
+describe('prepare cleanup', () => {
+  it('removes a user-local linked worktree when commit diff generation fails', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'aerie-git-engine-'))
+    try {
+      const userData = join(root, 'userData')
+      mkdirSync(userData, { recursive: true })
+      writeFileSync(join(userData, 'diffs'), 'not a directory', 'utf8')
+      const { repoDir, sha } = createCommittedRepo(root)
+      const { prepareCheckout } = await loadGitEngine(userData)
+      const expectedWorktree = join(userData, 'worktrees', 'octo', 'repo', `${sha.slice(0, 12)}-t1`)
+
+      await expect(
+        prepareCheckout({
+          fullName: 'octo/repo',
+          sha,
+          remoteUrl: 'file:///unused',
+          runTag: 't1',
+          userLocalPath: repoDir,
+          useLocalWorktree: true
+        })
+      ).rejects.toThrow()
+
+      expect(existsSync(expectedWorktree)).toBe(false)
+      expect(git(repoDir, ['worktree', 'list', '--porcelain'])).not.toContain(expectedWorktree)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('removes a project-review linked worktree when context writing fails', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'aerie-git-engine-'))
+    try {
+      const userData = join(root, 'userData')
+      mkdirSync(userData, { recursive: true })
+      writeFileSync(join(userData, 'diffs'), 'not a directory', 'utf8')
+      const { repoDir, sha } = createCommittedRepo(root)
+      const { prepareProjectReview } = await loadGitEngine(userData)
+      const expectedWorktree = join(userData, 'worktrees', 'octo', 'repo', `${sha.slice(0, 12)}-t2`)
+
+      await expect(
+        prepareProjectReview({
+          fullName: 'octo/repo',
+          sha,
+          refName: 'main',
+          remoteUrl: 'file:///unused',
+          runTag: 't2',
+          userLocalPath: repoDir,
+          useLocalWorktree: true
+        })
+      ).rejects.toThrow()
+
+      expect(existsSync(expectedWorktree)).toBe(false)
+      expect(git(repoDir, ['worktree', 'list', '--porcelain'])).not.toContain(expectedWorktree)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
     }
   })
 })

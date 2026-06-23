@@ -41,6 +41,12 @@ describe('matchesRunQuery', () => {
     expect(matchesRunQuery(pr, 'pr #42')).toBe(true)
   })
 
+  it('matches a project review by project label and branch', () => {
+    const project = run({ refType: 'project', refId: 'main' })
+    expect(matchesRunQuery(project, 'project')).toBe(true)
+    expect(matchesRunQuery(project, 'main')).toBe(true)
+  })
+
   it('requires ALL tokens to match (AND)', () => {
     expect(matchesRunQuery(run({ agentId: 'codex', status: 'error' }), 'codex error')).toBe(true)
     expect(matchesRunQuery(run({ agentId: 'codex', status: 'done' }), 'codex error')).toBe(false)

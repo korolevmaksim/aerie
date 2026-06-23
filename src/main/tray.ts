@@ -47,6 +47,7 @@ function statusGlyph(status: ActiveRun['status']): string {
 }
 
 function refLabel(run: ActiveRun): string {
+  if (run.refType === 'project') return `project ${run.refId}`
   return run.refType === 'pr' ? `PR #${run.refId}` : run.shortSha
 }
 

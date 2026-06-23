@@ -44,6 +44,12 @@ describe('buildPrompt', () => {
       'commit deadbeef'
     )
     expect(buildPrompt({ ...base, refType: 'pr', refId: '42' })).toContain('pull request #42')
+    expect(buildPrompt({ ...base, refType: 'project', refId: 'main' })).toContain(
+      'project snapshot main at deadbeef'
+    )
+    expect(buildPrompt({ ...base, refType: 'project', refId: 'main' })).toContain(
+      'Project audit brief: /d.diff'
+    )
   })
   it('uses the default instructions when none are given', () => {
     const p = buildPrompt({ ...base, refType: 'commit', refId: 'deadbeef' })
@@ -115,6 +121,7 @@ describe('SEED_PROMPTS', () => {
     expect(names).toEqual(
       expect.arrayContaining([
         'Security audit',
+        'Project audit',
         'Tests & edge cases',
         'Performance',
         'Architecture & maintainability',

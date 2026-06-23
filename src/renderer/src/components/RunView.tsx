@@ -140,13 +140,7 @@ function RunView({
       ? `${cleanOutput.slice(0, MAX_BODY)}\n\n[aerie] output truncated for posting]`
       : cleanOutput
   const reviewBody = `${capped.trim()}\n\n---\n_Posted via Aerie · agent \`${run.agentId}\`_`
-  const issueTitle = `Aerie review: ${
-    run.refType === 'pr'
-      ? `PR #${run.refId}`
-      : run.refType === 'working-tree'
-        ? `working tree (${run.headSha.slice(0, 8)})`
-        : `commit ${run.headSha.slice(0, 8)}`
-  }`
+  const issueTitle = `Aerie review: ${runRefLabel(run)}`
   const canPost = isTerminal(status) && cleanOutput.trim().length > 0
   // The runner (M-Q) flags an empty/truncated/transcript-leaked LLM review in the
   // transcript; surface that verdict here so the user reviews before posting. Reading
@@ -261,8 +255,7 @@ function RunView({
 
       {canPost && (
         <div className="run__post">
-          {/* A working-tree review is of uncommitted LOCAL changes — there is no commit
-              or PR on GitHub to comment on, so only "Create issue" applies. */}
+          {/* Working-tree and project reviews have no single GitHub commit/PR thread target. */}
           {run.refType === 'commit' && (
             <button
               className="btn btn--ghost"

@@ -13,6 +13,25 @@ same change set.
 
 ### Added
 
+- **Project-wide reviews**: repo detail now opens on a **Project** target that runs the same
+  local-agent review loop against the current default-branch snapshot. Main resolves the branch
+  head at launch, checks it out through the existing isolated worktree path, writes a bounded
+  project audit brief instead of a unified diff, and records the run with `ref_type: 'project'`
+  (DB migration v15 relaxes the `runs.ref_type` CHECK and seeds the **Project audit** prompt for
+  existing installs). Project reviews use the existing explicit confirm flow and can be posted as
+  issues, not commit/PR comments.
+
+- **Review launcher redesign**: commit, PR, working-tree, and project reviews now share a
+  target-first launcher with scope metadata, labelled controls, single-agent vs panel segmented
+  mode, ready-agent counts, and panel auto-selection of up to three approved installed agents.
+  The launcher clears stale run views when switching targets and defaults project reviews to the
+  **Project audit** lens.
+
+- **Review memory plan**: `docs/REVIEW_MEMORY_PLAN.md` captures the next repo-memory layer:
+  optional local memory paths in prompts, atomic finding annotations (`false-positive`,
+  `accepted-risk`, `architecture-decision`, etc.), compact rollups, and guardrails against hidden
+  prompt state or leaking local memory to GitHub.
+
 - **Review cockpit UI shell**: authenticated sessions now open on a workflow-first cockpit
   instead of a repository-list tab. It shows account-scoped metrics for running,
   attention-worthy, ready-to-post, completed, and posted runs; an attention queue; live
@@ -160,6 +179,24 @@ same change set.
 
 ### Fixed
 
+- **Windows-only esbuild dev-server path traversal advisory remediated**: Vite's transitive
+  `esbuild` is overridden to the patched `0.28.1` release for GHSA-g7r4-m6w7-qqqr, avoiding the
+  vulnerable `0.27.3`–`0.28.0` range while keeping the current Vite 7 / electron-vite 5 stack.
+
+- **Concurrent opt-in local-worktree checkouts are serialized**: `use_local_worktree` reviews now
+  take the same per-clone mutex as app-owned clone worktree adds/removes, keyed by the mapped local
+  clone path. This prevents simultaneous reviews or pipeline waves for the same repo from racing on
+  the user's `.git/worktrees` metadata while still leaving unrelated repos parallel.
+
+- **Failed prepare steps no longer leak linked worktrees**: if checkout succeeds but diff generation
+  or project-audit brief writing fails, Aerie now removes the just-created worktree before surfacing
+  the error. The normal runner cleanup still handles successful prepare paths.
+
+- **Store coverage now exercises real migrations and helpers under Electron**: `npm run smoke:store`
+  opens an in-memory database through the actual `src/main/store.ts` exports and verifies the full
+  migration chain plus representative account/repo/run/settings CRUD. This stays out of Vitest
+  because `better-sqlite3` is rebuilt for Electron's native ABI.
+
 - **Review cockpit refreshes no longer apply stale account data**: in-flight cockpit loads from a
   previous account, polling tick, or manual refresh are ignored after an account switch or unmount;
   rejected IPC calls now surface as a cockpit alert instead of leaving the screen in an endless
@@ -193,17 +230,17 @@ same change set.
   crash at startup — a bad CLI config, missing auth, a wrong flag — and exit without producing that
   file. Aerie reported only a bare `[aerie] declared output file not found` and **discarded the
   agent's own error message** (it was streamed live but lost from the saved result). The run output
-  now folds in a bounded tail of what the agent actually printed — e.g. *"agent exited (code 1)
+  now folds in a bounded tail of what the agent actually printed — e.g. _"agent exited (code 1)
   without producing its declared output file … Error loading config.toml: unknown variant `default`,
-  expected `fast` or `flex` in `service_tier`"* — so the real cause is visible. The diagnostic tail
+  expected `fast` or `flex` in `service_tier`"_ — so the real cause is visible. The diagnostic tail
   is secret-scrubbed before it is written or shown (same redaction as all run output). Pure helpers
   are unit-tested (`src/main/runOutput.ts`); code-review + security-review APPROVED.
 
 - **Concurrent reviews on the same repo no longer corrupt its clone** (`git` ref-store race): two
   reviews launched on the same repository at once — common when the remote had just **force-updated**
   refs (a force-push or a dependabot rebase) — could interleave their `git fetch`/`clone`/worktree
-  writes on the shared app-owned clone and make git reject the ref transaction with *"incorrect old
-  value provided"*, failing the checkout. Aerie now **serializes every ref-mutating operation per
+  writes on the shared app-owned clone and make git reject the ref transaction with _"incorrect old
+  value provided"_, failing the checkout. Aerie now **serializes every ref-mutating operation per
   clone** (the prune/tags fetch, the PR-head `origin <sha>` fetch, and the worktree add/remove) — a
   second review on the same repo waits instead of racing, while different repos still run in
   parallel. On a fetch failure it self-heals the ref store with `git pack-refs --all` and retries
@@ -349,7 +386,7 @@ same change set.
   a conditional request, so an unchanged re-list returns from cache on a 304 (`fromCache`) at
   ~0 rate cost (mirrors the repo-list cache). A new `watches` table tracks the last-seen head
   SHA per repo ref, and `pollCommitHead` does a cheap 1-item conditional probe reporting whether
-  the head moved since it was last *processed* — never advancing the last-seen SHA on a bare
+  the head moved since it was last _processed_ — never advancing the last-seen SHA on a bare
   poll, so no commit is skipped. A pure, unit-tested rate-limit backoff (`rateLimit.ts`) widens
   the poll cadence as the GitHub budget shrinks and parks until reset when exhausted. Main-only
   plumbing — no GitHub writes, no renderer surface (migration v13; `smoke:watches`).
@@ -372,7 +409,7 @@ same change set.
 - Local **code-quality tools as deterministic agents** (`toolCatalog.ts`, `kind:'tool'`):
   `gitleaks`, `ruff`, `eslint`, `biome`, and `tsc` are auto-detected on PATH and run 100%
   locally (no network), emitting machine-readable findings. The agent contract gains
-  `successExitCodes` so a linter that exits non-zero *with findings* is recorded `done`, not
+  `successExitCodes` so a linter that exits non-zero _with findings_ is recorded `done`, not
   `error`. (Foundation for grounding the LLM review on deterministic findings.)
 
 - Tool runs now produce **structured findings**: a `kind:'tool'` run's output is normalized into a
@@ -417,7 +454,7 @@ same change set.
 - **Exec-consent for user-added agents (security)** — Aerie now refuses to spawn a user-authored
   or user-edited agent (one whose id isn't a shipped template/catalog entry) until you explicitly
   **approve its command**. Approval records a signature over the agent's `command + args + env +
-  model-discovery argv`; editing any of those re-requires approval, so a changed command can never
+model-discovery argv`; editing any of those re-requires approval, so a changed command can never
   run on stale consent. The check is enforced in the main process at the spawn boundary (never the
   renderer); shipped agents stay implicitly trusted. The Tools tab shows "⚠ needs approval" with an
   **Approve to run** button, and an unapproved agent can't be launched from the run screen.
@@ -469,7 +506,7 @@ same change set.
 
 - **Live model discovery** — the Tools tab gained a **Discover models** button that runs each
   installed agent's model-list probe (currently `opencode models`, offline + no-auth) and overlays
-  the discovered model ids on the static seed, so the picker shows what you can *actually* select
+  the discovered model ids on the static seed, so the picker shows what you can _actually_ select
   (tagged "live"). Discovery is async and spawn-based; the synchronous agent list never spawns.
   Only **author-shipped** probes run — a model-discovery command on a user-added agent is never
   executed (that needs explicit exec-consent, a later milestone). A failed/empty probe keeps the
@@ -481,11 +518,11 @@ same change set.
   documentation-researched and flag-checked for a clean headless tree-scan with machine-readable
   output and stable exit codes; schema-verified parsers normalize them into the common finding
   shape. The grounding tool cap rose above the catalog size and any cap-skip is now reported in the
-  run transcript, so a relevant tool is never *silently* dropped (even on a polyglot diff).
+  run transcript, so a relevant tool is never _silently_ dropped (even on a polyglot diff).
   (Deferred with reasons: shellcheck/hadolint — no tree scan; golangci-lint — needs the toolchain +
   network; mypy/pylint — unusable unconfigured; stylelint — mandatory config; semgrep — network.)
 
-- **Agent-output reliability gate** — a finished LLM review is now checked for being a *real*
+- **Agent-output reliability gate** — a finished LLM review is now checked for being a _real_
   review, not just a zero exit code: empty output, output truncated mid-stream, a leaked
   reasoning/tool-call transcript, a too-short body, or a bare Aerie error sentinel are flagged
   **low-quality** with an amber caution in the run view (so you check before posting). Pure +

@@ -1,13 +1,14 @@
 #!/usr/bin/env node
-// Stage smoke for the M7 v12 migration: runs INSIDE Electron (real better-sqlite3
-// ABI) and proves the runs-table rebuild that relaxes the ref_type CHECK is safe:
+// Stage smoke for the runs.ref_type rebuild migrations: runs INSIDE Electron
+// (real better-sqlite3 ABI) and proves the runs-table CHECK relaxations are safe:
 //   1. existing 'commit'/'pr' runs survive the rebuild (rows + values preserved);
 //   2. a pre-existing finding survives — dropping `runs` with FK enforcement OFF does
 //      NOT cascade-delete `findings` (the data-loss trap this migration must avoid);
 //   3. after the rebuild, a 'working-tree' run INSERTs successfully;
-//   4. an invalid ref_type is still rejected by the new CHECK;
-//   5. ON DELETE CASCADE still works post-rebuild (delete a run → its findings go);
-//   6. foreign_key_check reports no violations.
+//   4. after the project-review rebuild, a 'project' run INSERTs successfully;
+//   5. an invalid ref_type is still rejected by the new CHECK;
+//   6. ON DELETE CASCADE still works post-rebuild (delete a run → its findings go);
+//   7. foreign_key_check reports no violations.
 // Mirrors the exact v11 schema + v12 rebuild SQL in src/main/store.ts.
 // Run: `npm run smoke:migration`
 
@@ -142,16 +143,70 @@ app.whenReady().then(() => {
     ).lastInsertRowid
     assert(typeof wtRunId === 'number' || typeof wtRunId === 'bigint', 'working-tree insert failed')
 
-    // (4) an invalid ref_type is still rejected.
+    // --- v15 rebuild: relax the same CHECK again to add project-wide reviews. ---
+    db.pragma('foreign_keys = OFF')
+    db.exec(`
+      CREATE TABLE runs_new (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        repo_id     INTEGER NOT NULL REFERENCES repos(id) ON DELETE CASCADE,
+        ref_type    TEXT    NOT NULL CHECK (ref_type IN ('commit', 'pr', 'working-tree', 'project')),
+        ref_id      TEXT    NOT NULL,
+        head_sha    TEXT    NOT NULL,
+        agent_id    TEXT    NOT NULL,
+        status      TEXT    NOT NULL CHECK (status IN ('queued','running','done','error','killed')),
+        exit_code   INTEGER,
+        started_at  TEXT    NOT NULL,
+        finished_at TEXT,
+        output_path TEXT,
+        posted_url  TEXT,
+        author_login TEXT
+      );
+      INSERT INTO runs_new (id, repo_id, ref_type, ref_id, head_sha, agent_id, status,
+                            exit_code, started_at, finished_at, output_path, posted_url, author_login)
+        SELECT id, repo_id, ref_type, ref_id, head_sha, agent_id, status,
+               exit_code, started_at, finished_at, output_path, posted_url, author_login
+        FROM runs;
+      DROP TABLE runs;
+      ALTER TABLE runs_new RENAME TO runs;
+      CREATE INDEX idx_runs_repo ON runs (repo_id);
+    `)
+    const projectViolations = db.pragma('foreign_key_check')
+    assert(
+      Array.isArray(projectViolations) && projectViolations.length === 0,
+      `v15 foreign_key_check reported violations: ${JSON.stringify(projectViolations)}`
+    )
+    db.pragma('foreign_keys = ON')
+
+    // (4) a project run now inserts.
+    const insRunV15 = db.prepare(
+      `INSERT INTO runs (repo_id, ref_type, ref_id, head_sha, agent_id, status, started_at, author_login)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    const projectRunId = insRunV15.run(
+      repoId,
+      'project',
+      'main',
+      'e'.repeat(40),
+      'codex',
+      'done',
+      '2026-06-23T00:00:00Z',
+      null
+    ).lastInsertRowid
+    assert(
+      typeof projectRunId === 'number' || typeof projectRunId === 'bigint',
+      'project insert failed'
+    )
+
+    // (5) an invalid ref_type is still rejected.
     let rejected = false
     try {
-      insRun.run(repoId, 'nonsense', 'x', 'd'.repeat(40), 'codex', 'done', 'now', null)
+      insRunV15.run(repoId, 'nonsense', 'x', 'd'.repeat(40), 'codex', 'done', 'now', null)
     } catch {
       rejected = true
     }
     assert(rejected, 'invalid ref_type was accepted — CHECK constraint not enforced')
 
-    // (5) cascade still works after the rebuild: delete the commit run → its finding goes.
+    // (6) cascade still works after the rebuild: delete the commit run → its finding goes.
     db.prepare(`DELETE FROM runs WHERE id = ?`).run(commitRunId)
     const orphans = db
       .prepare(`SELECT COUNT(*) c FROM findings WHERE run_id = ?`)
@@ -159,11 +214,11 @@ app.whenReady().then(() => {
     assert(orphans === 0, `ON DELETE CASCADE broken after rebuild: ${orphans} orphan findings`)
 
     db.close()
-    console.log('\n✅ M7 v12 migration smoke PASSED — runs rebuilt with the relaxed CHECK,')
-    console.log('   findings preserved (no cascade-wipe), working-tree accepted, cascade intact.')
+    console.log('\n✅ runs ref_type migration smoke PASSED — rebuilds kept findings,')
+    console.log('   working-tree and project accepted, invalid refs rejected, cascade intact.')
     app.exit(0)
   } catch (err) {
-    console.error('\n❌ M7 v12 migration smoke FAILED:', err.message)
+    console.error('\n❌ runs ref_type migration smoke FAILED:', err.message)
     app.exit(1)
   }
 })

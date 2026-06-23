@@ -436,6 +436,14 @@ For every finding give: the severity, the file path and the specific changed lin
 
 Output GitHub-flavored markdown: a one-sentence summary, then the findings. Be concise and concrete. No preamble, and do not restate the diff.`
 
+export const DEFAULT_PROJECT_REVIEW_INSTRUCTIONS = `You are a senior staff engineer performing a whole-project review. The repository is checked out locally. There is no unified diff; the provided review file is a bounded project inventory to help you choose where to inspect first.
+
+Audit for: architecture and module boundaries, correctness risks in core flows, security and trust boundaries, data persistence and migrations, error handling, concurrency and resource management, dependency/tooling health, test coverage gaps, release/packaging readiness, and documentation drift. Read the actual source files before raising an issue.
+
+Prioritize findings that would materially affect users, maintainability, or the ability to ship safely. For every finding give: severity, file/symbol, what is wrong, why it matters, and the concrete fix. Include confidence and name exactly what evidence you read. Do not pad with generic advice or style preferences. If the repository looks healthy, say so and list the strongest remaining risks to monitor.
+
+Output GitHub-flavored markdown: executive summary first, then prioritized findings, then a short "Next review slice" section. Be concise and concrete. No preamble.`
+
 /**
  * Curated review prompts seeded into a fresh database so a first clone ships with
  * high-quality, scenario-specific defaults out of the box. The first entry is the
@@ -445,6 +453,7 @@ Output GitHub-flavored markdown: a one-sentence summary, then the findings. Be c
  */
 export const SEED_PROMPTS: ReadonlyArray<{ name: string; body: string }> = [
   { name: 'Default review', body: DEFAULT_REVIEW_INSTRUCTIONS },
+  { name: 'Project audit', body: DEFAULT_PROJECT_REVIEW_INSTRUCTIONS },
   {
     name: 'Security audit',
     body: `You are an application security engineer auditing a code change. The repository is checked out locally and the unified diff is provided as a file — read the diff and trace the data and trust boundaries it touches. Focus on vulnerabilities introduced or newly exposed by this change; report a pre-existing weakness only when the change reaches, worsens, or exposes it, and say which.
@@ -523,14 +532,18 @@ export function buildPrompt(
       ? `pull request #${ctx.refId}`
       : ctx.refType === 'working-tree'
         ? `uncommitted working-tree changes${ctx.refId === 'staged' ? ' (staged)' : ''} on ${ctx.sha}`
-        : `commit ${ctx.sha}`
+        : ctx.refType === 'project'
+          ? `project snapshot ${ctx.refId} at ${ctx.sha}`
+          : `commit ${ctx.sha}`
   const changed = (ctx.changedFiles ?? []).filter(Boolean)
   const context = [
     `Repository: ${ctx.fullName}`,
     `Reviewing: ${subject}`,
     `Head SHA: ${ctx.sha}`,
     `Checked-out working copy: ${ctx.repoPath}`,
-    `Unified diff of the change: ${ctx.diffFile}`,
+    ctx.refType === 'project'
+      ? `Project audit brief: ${ctx.diffFile}`
+      : `Unified diff of the change: ${ctx.diffFile}`,
     ...(changed.length ? [`Changed files (${changed.length}): ${changed.join(', ')}`] : [])
   ].join('\n')
   // Power users may reference these placeholders in a custom prompt; unknown ones
@@ -543,6 +556,7 @@ export function buildPrompt(
     sha: ctx.sha,
     repoPath: ctx.repoPath,
     diffFile: ctx.diffFile,
+    reviewFile: ctx.diffFile,
     changedFiles: changed.join('\n'),
     groundTruth: gt
   })

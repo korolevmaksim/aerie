@@ -2,13 +2,16 @@ import { describe, expect, it } from 'vitest'
 import { runOutputToMarkdown, runRefLabel } from './runConsole'
 
 describe('runRefLabel', () => {
-  it('labels a PR / commit / working-tree target', () => {
+  it('labels a PR / commit / working-tree / project target', () => {
     expect(runRefLabel({ refType: 'pr', refId: '42', headSha: 'abcdef1234' })).toBe('PR #42')
     expect(runRefLabel({ refType: 'commit', refId: 'main', headSha: 'abcdef1234567' })).toBe(
       'commit abcdef12'
     )
     expect(runRefLabel({ refType: 'working-tree', refId: 'wt', headSha: 'abcdef1234567' })).toBe(
       'working tree abcdef12'
+    )
+    expect(runRefLabel({ refType: 'project', refId: 'main', headSha: 'abcdef1234567' })).toBe(
+      'project main'
     )
   })
 })

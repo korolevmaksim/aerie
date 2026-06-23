@@ -27,6 +27,8 @@ import { cloneToUserAgent, deleteUserAgent, upsertUserAgent } from './userAgents
 import {
   buildPrompt,
   DEFAULT_AGENTS,
+  DEFAULT_PROJECT_REVIEW_INSTRUCTIONS,
+  DEFAULT_REVIEW_INSTRUCTIONS,
   isAgent,
   mergeAgents,
   RETIRED_AGENT_IDS,
@@ -48,6 +50,7 @@ import { getPullRequestBaseSha } from './github'
 import {
   cleanupCheckout,
   prepareCheckout,
+  prepareProjectReview,
   prepareWorkingTree,
   type PreparedCheckout
 } from './gitEngine'
@@ -480,14 +483,7 @@ export function startBatch(params: StartBatchParams): StartBatchResult {
   for (const agentId of plan.run) {
     // Skip an agent already running for this exact ref (mirrors the single-run guard) —
     // and report it, so the UI explains why no RunView appeared for that agent.
-    if (
-      hasActiveRun(
-        params.repoId,
-        params.sha,
-        agentId,
-        params.refType === 'working-tree' ? params.refId : undefined
-      )
-    ) {
+    if (hasActiveRun(params.repoId, params.refType, params.refId, params.sha, agentId)) {
       skipped.push({ id: agentId, reason: 'already-running' })
       continue
     }
@@ -729,6 +725,18 @@ async function execute(
         runTag: String(runId),
         staged: params.refId === 'staged'
       })
+    } else if (params.refType === 'project') {
+      emit('system', '[aerie] preparing project checkout and audit brief…\n')
+      prepared = await prepareProjectReview({
+        fullName: repo.full_name,
+        sha: params.sha,
+        refName: params.refId,
+        remoteUrl: repo.remote_url!,
+        runTag: String(runId),
+        token: decryptToken(tokenBlob),
+        userLocalPath: repo.user_local_path,
+        useLocalWorktree: repo.use_local_worktree === 1
+      })
     } else {
       emit('system', '[aerie] preparing local checkout…\n')
       if (params.refType === 'pr') {
@@ -766,7 +774,8 @@ async function execute(
     } catch {
       /* best-effort */
     }
-    const changedFiles = [...parseChangedLineRanges(diffContent).keys()]
+    const changedFiles =
+      params.refType === 'project' ? [] : [...parseChangedLineRanges(diffContent).keys()]
 
     // A working-tree review with a clean tree has nothing to review — don't burn an
     // agent invocation on an empty diff. (Commit/PR refs always have a non-empty diff.)
@@ -784,7 +793,11 @@ async function execute(
     // Opt-out (default ON): a user reviewing untrusted PRs can disable pre-run tool
     // execution without disabling the LLM review (Settings → "Ground reviews…").
     let groundTruth = ''
-    if (agent.kind !== 'tool' && getSetting('ui.groundReviews') !== '0') {
+    if (
+      agent.kind !== 'tool' &&
+      params.refType !== 'project' &&
+      getSetting('ui.groundReviews') !== '0'
+    ) {
       try {
         emit('system', '[aerie] grounding: running local quality tools…\n')
         const g = await gatherGroundTruth({
@@ -812,7 +825,14 @@ async function execute(
     // A selected prompt supplies the review INSTRUCTIONS; the machine context
     // (repo/sha/paths) is always prepended by buildPrompt. Falls back to the
     // built-in default when no prompt is chosen or the id no longer exists.
-    const instructions = params.promptId != null ? getPrompt(params.promptId)?.body : undefined
+    const selectedPrompt = params.promptId != null ? getPrompt(params.promptId) : undefined
+    const instructions =
+      params.refType === 'project' &&
+      (!selectedPrompt ||
+        (selectedPrompt.name === 'Default review' &&
+          selectedPrompt.body === DEFAULT_REVIEW_INSTRUCTIONS))
+        ? DEFAULT_PROJECT_REVIEW_INSTRUCTIONS
+        : selectedPrompt?.body
     const promptText = buildPrompt(
       {
         fullName: repo.full_name,
@@ -841,9 +861,12 @@ async function execute(
       outFile: join(runsDir, `${runId}.agentout`),
       model: resolveModel(agent),
       reasoning: resolveReasoning(agent),
-      // Working-tree changes are measured against HEAD (params.sha); commit/PR runs
-      // use the PR base or the commit's first parent.
-      baseSha: params.refType === 'working-tree' ? params.sha : (prBaseSha ?? `${params.sha}^`),
+      // Working-tree/project reviews are measured at HEAD; commit/PR runs use the PR base
+      // or the commit's first parent.
+      baseSha:
+        params.refType === 'working-tree' || params.refType === 'project'
+          ? params.sha
+          : (prBaseSha ?? `${params.sha}^`),
       headSha: params.sha,
       changedFiles: changedFiles.join('\n'),
       prompt: promptText

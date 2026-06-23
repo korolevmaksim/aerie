@@ -18,6 +18,7 @@ function release(key: string): void {
 }
 
 function refLabel(run: FinishedRun): string {
+  if (run.refType === 'project') return `project ${run.refId}`
   return run.refType === 'pr' ? `PR #${run.refId}` : run.shortSha
 }
 

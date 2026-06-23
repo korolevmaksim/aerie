@@ -10,6 +10,7 @@ import type {
   RefType
 } from '../shared/types'
 import {
+  DEFAULT_PROJECT_REVIEW_INSTRUCTIONS,
   DEFAULT_REVIEW_INSTRUCTIONS,
   LEGACY_DEFAULT_REVIEW_INSTRUCTIONS,
   SEED_PROMPTS
@@ -283,6 +284,49 @@ const MIGRATIONS: ReadonlyArray<(db: Database.Database) => void> = [
       CREATE INDEX idx_pipeline_runs_pipeline ON pipeline_runs (pipeline_id);
       CREATE INDEX idx_pipeline_runs_dedupe ON pipeline_runs (dedupe_key);
     `)
+  },
+  // v15 — allow project-wide runs. These are normal run records but their ref_id is
+  // the audited branch/ref name, and the run artifact is a bounded project audit brief
+  // instead of a unified diff. Rebuild only `runs`; automation pipeline runs remain
+  // commit/PR/working-tree scoped.
+  (db) => {
+    db.exec(`
+      CREATE TABLE runs_new (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        repo_id     INTEGER NOT NULL REFERENCES repos(id) ON DELETE CASCADE,
+        ref_type    TEXT    NOT NULL CHECK (ref_type IN ('commit', 'pr', 'working-tree', 'project')),
+        ref_id      TEXT    NOT NULL,
+        head_sha    TEXT    NOT NULL,
+        agent_id    TEXT    NOT NULL,
+        status      TEXT    NOT NULL CHECK (status IN ('queued','running','done','error','killed')),
+        exit_code   INTEGER,
+        started_at  TEXT    NOT NULL,
+        finished_at TEXT,
+        output_path TEXT,
+        posted_url  TEXT,
+        author_login TEXT
+      );
+      INSERT INTO runs_new (id, repo_id, ref_type, ref_id, head_sha, agent_id, status,
+                            exit_code, started_at, finished_at, output_path, posted_url, author_login)
+        SELECT id, repo_id, ref_type, ref_id, head_sha, agent_id, status,
+               exit_code, started_at, finished_at, output_path, posted_url, author_login
+        FROM runs;
+      DROP TABLE runs;
+      ALTER TABLE runs_new RENAME TO runs;
+      CREATE INDEX idx_runs_repo ON runs (repo_id);
+    `)
+    const violations = db.pragma('foreign_key_check') as unknown[]
+    if (Array.isArray(violations) && violations.length > 0) {
+      throw new Error('v15 migration left dangling foreign keys')
+    }
+    const exists = db.prepare(`SELECT 1 FROM prompts WHERE name = ?`)
+    if (!exists.get('Project audit')) {
+      db.prepare(`INSERT INTO prompts (name, body, created_at) VALUES (?, ?, ?)`).run(
+        'Project audit',
+        DEFAULT_PROJECT_REVIEW_INSTRUCTIONS,
+        new Date().toISOString()
+      )
+    }
   }
 ]
 
@@ -714,27 +758,25 @@ export interface RunRowWithRepo extends RunRow {
   account_id: number
 }
 
-/** True if a run for this repo/sha/agent is already queued or running. */
 /**
  * True if an equivalent run is already queued/running. Keyed on (repo, head SHA,
- * agent); when `refId` is given it is also matched, so two working-tree runs on the
- * same HEAD but different modes ('working-tree' vs 'staged') — which share a head
- * SHA — are NOT treated as duplicates of each other (or of a commit run on that SHA).
+ * ref type, ref id, agent), so a project audit and a commit review on the same SHA
+ * are not treated as duplicates.
  */
 export function hasActiveRun(
   repoId: number,
+  refType: RefType,
+  refId: string,
   sha: string,
-  agentId: string,
-  refId?: string
+  agentId: string
 ): boolean {
-  const refClause = refId !== undefined ? 'AND ref_id = ?' : ''
-  const params = refId !== undefined ? [repoId, sha, agentId, refId] : [repoId, sha, agentId]
   return !!requireDb()
     .prepare(
-      `SELECT 1 FROM runs WHERE repo_id = ? AND head_sha = ? AND agent_id = ? ${refClause}
+      `SELECT 1 FROM runs
+       WHERE repo_id = ? AND ref_type = ? AND ref_id = ? AND head_sha = ? AND agent_id = ?
        AND status IN ('queued','running') LIMIT 1`
     )
-    .get(...params)
+    .get(repoId, refType, refId, sha, agentId)
 }
 
 /**

@@ -1,16 +1,16 @@
 # Aerie
 
-**A desktop app that runs your local AI coding agents on a GitHub commit or PR, then posts the review back to GitHub — under your explicit confirmation.**
+**A desktop app that runs your local AI coding agents on a GitHub commit, PR, working tree, or whole project, then posts the review back to GitHub — under your explicit confirmation.**
 
 [![CI](https://github.com/korolevmaksim/aerie/actions/workflows/ci.yml/badge.svg)](https://github.com/korolevmaksim/aerie/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Aerie is GitHub mission-control for developers who already run AI coding-agent CLIs
 (Codex, Claude Code, Cursor, Gemini, and more). Instead of copy-pasting diffs into a
-terminal, you browse your repos, pick a commit or PR, choose an agent + a review prompt,
-and Aerie checks the change out locally, runs the agent against it, streams the output
-live, and — only when you confirm — posts the result as a commit comment, PR comment, or
-issue.
+terminal, you browse your repos, pick a project, commit, PR, or working-tree diff, choose
+an agent + a review prompt, and Aerie checks the target out locally, runs the agent against
+it, streams the output live, and — only when you confirm — posts the result as a commit
+comment, PR comment, or issue.
 
 The agents run **locally, on your machine, against an app-owned clone**. Your GitHub token
 never leaves the main process and is never handed to an agent.
@@ -41,6 +41,11 @@ third-party service.
   changes in your mapped local clone (all changes via `git diff HEAD`, or just what's
   staged) for a pre-PR pass. Zero GitHub calls, no checkout, never touches your working
   copy — read-only `git diff` only.
+- **Review the whole project** — start from a repo's **Project** tab to run an agent on
+  the current default-branch snapshot. Aerie uses an app-owned checkout and writes a
+  bounded project inventory/audit brief instead of dumping the repository into the prompt;
+  the agent reads the checked-out source directly. Project reviews can be posted as a new
+  issue after confirmation.
 - **Edit your own agents** — the Tools tab has an in-app editor to add, clone, edit, and delete
   custom agent CLIs. The form leads with what you change most — pick the **model** and the
   **thinking/reasoning level** from add/remove chip lists (a low/medium/high quick-fill is one
@@ -62,11 +67,12 @@ third-party service.
   actionlint, Gitleaks) 100% locally, scopes their findings to the diff, de-duplicates them, and
   hands them to the agent as ground truth to confirm/refute/merge — so it triages real findings
   instead of inventing noise. Best-effort; toggle off in Settings → "Ground reviews with local tools".
-- **Curated review prompts, out of the box** — Default, Security audit, Tests & edge
-  cases, Performance, Architecture & maintainability, and Quick triage. Edit them or add
-  your own in Settings, then pick one per run. Aerie always prepends the machine context
-  (repo, SHA, working-copy + diff paths) so a custom prompt can never leave the agent
-  without something to review. Prompt edits ask before discarding an unsaved draft.
+- **Curated review prompts, out of the box** — Default, Project audit, Security audit,
+  Tests & edge cases, Performance, Architecture & maintainability, and Quick triage.
+  Edit them or add your own in Settings, then pick one per run. Aerie always prepends the
+  machine context (repo, SHA, working-copy + diff/project-audit paths) so a custom prompt
+  can never leave the agent without something to review. Prompt edits ask before
+  discarding an unsaved draft.
 - **Structured findings** — each review also extracts the agent's concrete findings (file, line,
   severity, message) into a compact list under the review; the raw block is kept out of the posted
   comment. Sets up cross-agent consensus across a panel.
@@ -163,6 +169,7 @@ Other scripts:
 npm run typecheck      # tsc (node + web projects)
 npm run lint           # eslint
 npm test               # vitest (pure-logic unit tests)
+npm run smoke:store    # Electron ABI store migrations + CRUD smoke test
 npm run build          # typecheck + bundle (electron-vite)
 npm run build:unpack   # build an unpacked app into release/
 ```
@@ -191,12 +198,13 @@ xattr -dr com.apple.quarantine /Applications/Aerie.app
    encrypted locally.
 2. Start from the **Review cockpit** — clear any active/ready-to-post runs, or jump into a
    favorite/recent repository.
-3. **Pick a repo**, then a **commit, PR, or working-tree diff**.
+3. **Pick a repo**, then a **project audit, commit, PR, or working-tree diff**.
 4. (Optional) **Prepare a local checkout** to pre-clone.
 5. Choose an **agent**, **model**, **reasoning level**, and a **review prompt** (or apply a
    preset), then **Review with agent**.
-6. Watch the live transcript. When it finishes, **Post as commit/PR comment** or **Create
-   issue** — confirm the exact body (optionally tag the author) and it's posted.
+6. Watch the live transcript. When it finishes, **Post as commit/PR comment** where that
+   target exists, or **Create issue** — confirm the exact body (optionally tag the author)
+   and it's posted.
 
 ### Configuring agents & prompts
 
@@ -206,7 +214,8 @@ xattr -dr com.apple.quarantine /Applications/Aerie.app
   reasoning choices are stored separately and persist.
 - **Prompts** — Settings → **Review prompts**: edit the defaults or add focused prompts;
   the picker on the run screen selects one per review. Power users can reference
-  `{{repo}}`, `{{sha}}`, `{{repoPath}}`, `{{diffFile}}` placeholders in a prompt body.
+  `{{repo}}`, `{{sha}}`, `{{repoPath}}`, `{{diffFile}}`, and `{{reviewFile}}`
+  placeholders in a prompt body.
 
 ## Project layout
 

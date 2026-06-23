@@ -47,6 +47,7 @@
     "smoke:worktree": "node scripts/smoke-worktree.cjs",
     "smoke:findings": "npm run build && electron scripts/smoke-findings.cjs",
     "smoke:migration": "electron scripts/smoke-migration-v12.cjs",
+    "smoke:store": "electron scripts/smoke-store.cjs",
     "smoke:watches": "electron scripts/smoke-watches.cjs",
     "smoke:pipelines": "electron scripts/smoke-pipelines.cjs",
     "postinstall": "electron-rebuild -f -w better-sqlite3",
@@ -84,5 +85,10 @@
     "typescript": "^5.9.3",
     "vite": "^7.2.6",
     "vitest": "^4.1.9"
+  },
+  "overrides": {
+    "vite": {
+      "esbuild": "0.28.1"
+    }
   }
 }

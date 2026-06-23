@@ -1,4 +1,5 @@
 import type { RunHistoryItem } from '@shared/types'
+import { runRefLabel } from './runConsole'
 
 /**
  * Client-side export of the Run-history list (ROADMAP M14). Pure: projects each run to a SAFE,
@@ -24,7 +25,7 @@ export function toExportRun(run: RunHistoryItem): ExportedRun {
   return {
     repo: run.repoFullName,
     agent: run.agentId,
-    ref: run.refType === 'pr' ? `PR #${run.refId}` : run.refId,
+    ref: runRefLabel(run),
     sha: run.headSha,
     status: run.status,
     exitCode: run.exitCode,

@@ -15,6 +15,7 @@ import {
 } from '../lib/cockpit'
 import { formatRelativeTime } from '../lib/format'
 import { formatPollerStatus } from '../lib/pollerStatus'
+import { runRefLabel } from '../lib/runConsole'
 
 type ViewTarget = 'repos' | 'history' | 'tools' | 'automate' | 'accounts' | 'settings'
 
@@ -31,13 +32,6 @@ function RunRow({
   run: RunHistoryItem
   onOpenRun: (runId: number) => void
 }): React.JSX.Element {
-  const refLabel =
-    run.refType === 'pr'
-      ? `PR #${run.refId}`
-      : run.refType === 'working-tree'
-        ? run.refId
-        : run.headSha.slice(0, 8)
-
   return (
     <li>
       <button type="button" className="cockpit-run-row" onClick={() => onOpenRun(run.id)}>
@@ -47,7 +41,7 @@ function RunRow({
           <span className="cockpit-run-row__meta">
             <span className="cockpit-run-row__agent">{run.agentId}</span>
             <span aria-hidden="true">·</span>
-            <span className="cockpit-run-row__ref">{refLabel}</span>
+            <span className="cockpit-run-row__ref">{runRefLabel(run)}</span>
           </span>
         </span>
         <span className="cockpit-run-row__result">{runAttentionLabel(run)}</span>

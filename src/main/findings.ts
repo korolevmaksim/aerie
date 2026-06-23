@@ -55,7 +55,9 @@ export function fingerprintOf(parts: {
   message: string
 }): string {
   return fnv1a(
-    [parts.file, parts.line ?? '', parts.ruleId ?? '', normalizeMessage(parts.message)].join('\u0000')
+    [parts.file, parts.line ?? '', parts.ruleId ?? '', normalizeMessage(parts.message)].join(
+      '\u0000'
+    )
   )
 }
 

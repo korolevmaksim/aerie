@@ -14,9 +14,10 @@ export interface RunOutputMeta {
   status: string
 }
 
-/** A human label for a run's target: "PR #42", "working tree abc1234", or "commit abc1234". */
+/** A human label for a run's target: "PR #42", "project main", or "commit abc1234". */
 export function runRefLabel(run: RunRef): string {
   if (run.refType === 'pr') return `PR #${run.refId}`
+  if (run.refType === 'project') return `project ${run.refId}`
   if (run.refType === 'working-tree') return `working tree ${run.headSha.slice(0, 8)}`
   return `commit ${run.headSha.slice(0, 8)}`
 }

@@ -1,4 +1,5 @@
 import type { RunHistoryItem } from '@shared/types'
+import { runRefLabel } from './runConsole'
 
 /**
  * Free-text filtering for the Run-history list (ROADMAP M14). Pure + client-side over the
@@ -11,8 +12,9 @@ function searchableText(run: RunHistoryItem): string {
     run.repoFullName,
     run.agentId,
     run.headSha,
-    // For a PR, "pr #42" already contains the bare number, so a query of "42" or "pr #42" matches.
-    run.refType === 'pr' ? `pr #${run.refId}` : run.refId,
+    // For a PR, "pr #42" already contains the bare number, so "42" or "pr #42" matches.
+    runRefLabel(run),
+    run.refId,
     run.status,
     run.authorLogin ?? ''
   ]

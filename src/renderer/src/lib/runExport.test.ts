@@ -27,7 +27,7 @@ describe('toExportRun', () => {
     expect(e).toEqual({
       repo: 'octocat/hello-world',
       agent: 'codex',
-      ref: 'main',
+      ref: 'commit abcdef12',
       sha: 'abcdef1234567890',
       status: 'done',
       exitCode: 0,
@@ -45,6 +45,10 @@ describe('toExportRun', () => {
 
   it('formats a PR ref', () => {
     expect(toExportRun(run({ refType: 'pr', refId: '42' })).ref).toBe('PR #42')
+  })
+
+  it('formats a project ref', () => {
+    expect(toExportRun(run({ refType: 'project', refId: 'main' })).ref).toBe('project main')
   })
 })
 

@@ -3,6 +3,7 @@ import type { RunHistoryItem } from '@shared/types'
 import { formatRelativeTime } from '../lib/format'
 import { filterRuns } from '../lib/runFilter'
 import { runsToJson, runsToMarkdown } from '../lib/runExport'
+import { runRefLabel } from '../lib/runConsole'
 import RunView from './RunView'
 
 function HistoryPanel({
@@ -216,8 +217,7 @@ function HistoryPanel({
             </button>
             {selected.repoFullName}{' '}
             <span className="muted">
-              · {selected.agentId} ·{' '}
-              {selected.refType === 'pr' ? `PR #${selected.refId}` : selected.headSha.slice(0, 8)}
+              · {selected.agentId} · {runRefLabel(selected)}
             </span>
           </h2>
         </div>
@@ -298,7 +298,7 @@ function HistoryPanel({
         <p className="empty">Loading…</p>
       ) : accountRuns.length === 0 ? (
         <p className="empty">
-          No runs yet for this account. Use “Review with agent” on a commit or PR.
+          No runs yet for this account. Start a commit, PR, working-tree, or project review.
         </p>
       ) : visibleRuns.length === 0 ? (
         <p className="empty">
@@ -316,9 +316,7 @@ function HistoryPanel({
               <button type="button" className="history-row__open" onClick={() => setSelected(r)}>
                 <span className={`chip run__status run__status--${r.status}`}>{r.status}</span>
                 <span className="commit-row__msg">{r.repoFullName}</span>
-                <code className="sha">
-                  {r.refType === 'pr' ? `PR #${r.refId}` : r.headSha.slice(0, 8)}
-                </code>
+                <code className="sha">{runRefLabel(r)}</code>
                 <span className="muted">{r.agentId}</span>
                 <span className="muted">{formatRelativeTime(r.startedAt)}</span>
               </button>

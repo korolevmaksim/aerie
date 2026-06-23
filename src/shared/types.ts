@@ -315,10 +315,12 @@ export type RunStatus = 'queued' | 'running' | 'done' | 'error' | 'killed'
 /**
  * What a run reviews. 'commit'/'pr' come from GitHub; 'working-tree' reviews the
  * uncommitted changes in the user's mapped local clone (read-only, zero GitHub
- * calls). For a working-tree run, `refId` selects the diff: 'working-tree' = all
- * uncommitted tracked changes (`git diff HEAD`), 'staged' = `git diff --staged`.
+ * calls); 'project' reviews a whole repository snapshot from an app-owned checkout.
+ * For a working-tree run, `refId` selects the diff: 'working-tree' = all uncommitted
+ * tracked changes (`git diff HEAD`), 'staged' = `git diff --staged`. For a project
+ * run, `refId` is the branch/ref name whose HEAD snapshot is audited.
  */
-export type RefType = 'commit' | 'pr' | 'working-tree'
+export type RefType = 'commit' | 'pr' | 'working-tree' | 'project'
 
 /** The two working-tree review modes, used as `refId` when refType is 'working-tree'. */
 export type WorkingTreeMode = 'working-tree' | 'staged'
@@ -430,7 +432,7 @@ export interface StartRunParams {
   repoId: number
   sha: string
   refType: RefType
-  /** Commit SHA, PR number (as a string), or the WorkingTreeMode for working-tree runs. */
+  /** Commit SHA, PR number, WorkingTreeMode, or project branch/ref name. */
   refId: string
   agentId: string
   /** Selected review prompt; falls back to the built-in default when absent. */

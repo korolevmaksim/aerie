@@ -4,6 +4,7 @@ import { formatRelativeTime } from '../lib/format'
 import CommitDetailView from './CommitDetailView'
 import PrDetailView from './PrDetailView'
 import RepoMappingPanel from './RepoMappingPanel'
+import RunPanel from './RunPanel'
 import WorkingTreeView from './WorkingTreeView'
 
 type Detail = { kind: 'commit'; sha: string } | { kind: 'pull'; number: number } | null
@@ -213,6 +214,29 @@ function PullsTab({
   )
 }
 
+function ProjectReviewTab({
+  accountId,
+  repo
+}: {
+  accountId: number
+  repo: RepoSummary
+}): React.JSX.Element {
+  const refName = repo.defaultBranch ?? 'default'
+
+  return (
+    <div className="project-review">
+      <div className="project-review__summary">
+        <span className={`badge badge--${repo.isPrivate ? 'private' : 'public'}`}>
+          {repo.isPrivate ? 'private' : 'public'}
+        </span>
+        <span className="branch">{refName}</span>
+        {repo.pushedAt && <span className="muted">pushed {formatRelativeTime(repo.pushedAt)}</span>}
+      </div>
+      <RunPanel accountId={accountId} repoId={repo.id} refType="project" refId={refName} />
+    </div>
+  )
+}
+
 function RepoView({
   accountId,
   repo,
@@ -222,7 +246,7 @@ function RepoView({
   repo: RepoSummary
   onBack: () => void
 }): React.JSX.Element {
-  const [tab, setTab] = useState<'commits' | 'pulls' | 'worktree'>('commits')
+  const [tab, setTab] = useState<'project' | 'commits' | 'pulls' | 'worktree'>('project')
   const [detail, setDetail] = useState<Detail>(null)
   const [showMapping, setShowMapping] = useState(false)
 
@@ -261,6 +285,12 @@ function RepoView({
         </h2>
         <div className="tabs">
           <button
+            className={`tab ${tab === 'project' ? 'tab--active' : ''}`}
+            onClick={() => setTab('project')}
+          >
+            Project
+          </button>
+          <button
             className={`tab ${tab === 'commits' ? 'tab--active' : ''}`}
             onClick={() => setTab('commits')}
           >
@@ -289,7 +319,9 @@ function RepoView({
 
       {showMapping && <RepoMappingPanel repoId={repo.id} />}
 
-      {tab === 'commits' ? (
+      {tab === 'project' ? (
+        <ProjectReviewTab accountId={accountId} repo={repo} />
+      ) : tab === 'commits' ? (
         <CommitsTab
           accountId={accountId}
           repo={repo}

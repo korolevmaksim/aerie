@@ -6,15 +6,49 @@ import type { PrepareMode, PrepareResult } from '../shared/types'
 import { reviewDiffArgs } from './gitDiff'
 import { createKeyedMutex } from './keyedMutex'
 
-// Serializes ALL writes to an app-owned clone (fetch / clone / PR-head fetch / worktree add+remove)
-// per clone, so concurrent reviews on the SAME repo never race on its ref store (different repos
-// run in parallel). NOTE: cleanupCheckout's worktree-remove keys off baseDir, which equals the
-// clonePath in app-clone mode — keep that equality so cleanup serializes against worktree adds.
+// Serializes ALL writes to a clone's git metadata (fetch / clone / PR-head fetch / worktree
+// add+remove) per clone path, so concurrent reviews on the SAME repo never race on its ref store
+// or worktree registry (different repos still run in parallel). NOTE: cleanupCheckout's
+// worktree-remove keys off baseDir, which equals the clone path for both app-clone and
+// user-worktree mode — keep that equality so cleanup serializes against worktree adds.
 const cloneMutex = createKeyedMutex()
 
 // Kill a git child that produces NO output for this long — a stuck network fetch/clone must not
 // hold a clone's mutex (and its run slot) forever, blocking every future review of that repo.
 const GIT_BLOCK_TIMEOUT_MS = 120_000
+const PROJECT_CONTEXT_FILE_LIMIT = 800
+const PROJECT_LANDMARK_LIMIT = 80
+const PROJECT_LANDMARK_PATTERNS = [
+  /^package\.json$/,
+  /^pnpm-workspace\.yaml$/,
+  /^yarn\.lock$/,
+  /^package-lock\.json$/,
+  /^tsconfig(?:\.[\w-]+)?\.json$/,
+  /^vite\.config\./,
+  /^electron\.vite\.config\./,
+  /^next\.config\./,
+  /^Dockerfile$/,
+  /^docker-compose\./,
+  /^compose\.ya?ml$/,
+  /^pyproject\.toml$/,
+  /^requirements(?:-[\w-]+)?\.txt$/,
+  /^go\.mod$/,
+  /^Cargo\.toml$/,
+  /^build\.gradle/,
+  /^settings\.gradle/,
+  /^README(?:\.[\w-]+)?$/i,
+  /^AGENTS\.md$/,
+  /^SPEC\.md$/,
+  /^CHANGELOG\.md$/,
+  /^src\//,
+  /^app\//,
+  /^main\//,
+  /^backend\//,
+  /^frontend\//,
+  /^mobile\//,
+  /^test(?:s)?\//,
+  /^docs\//
+]
 
 /**
  * Git engine (SPEC §5/§6). Drives the system `git` through simple-git. App-owned
@@ -173,14 +207,17 @@ export async function checkoutWorktree(args: {
   useLocalWorktree?: boolean
 }): Promise<{ mode: PrepareMode; baseDir: string; worktreePath: string }> {
   const worktreePath = worktreePathFor(args.fullName, args.sha, args.runTag)
+  const userLocalPath = args.userLocalPath
 
-  if (args.useLocalWorktree && args.userLocalPath) {
-    if (!existsSync(join(args.userLocalPath, '.git'))) {
+  if (args.useLocalWorktree && userLocalPath) {
+    if (!existsSync(join(userLocalPath, '.git'))) {
       throw new Error('Mapped local path is not a git repository.')
     }
-    const git = localGit(args.userLocalPath)
-    await addDetachedWorktree(git, worktreePath, args.sha)
-    return { mode: 'user-worktree', baseDir: args.userLocalPath, worktreePath }
+    return cloneMutex.run(userLocalPath, async () => {
+      const git = localGit(userLocalPath)
+      await addDetachedWorktree(git, worktreePath, args.sha)
+      return { mode: 'user-worktree' as const, baseDir: userLocalPath, worktreePath }
+    })
   }
 
   const clonePath = clonePathFor(args.fullName)
@@ -239,6 +276,102 @@ export async function writeCommitDiff(
   const diffPath = join(diffDir, `${owner}-${name}-${sha.slice(0, 12)}-${runTag}.diff`)
   writeFileSync(diffPath, diff, 'utf8')
   return diffPath
+}
+
+function isProjectLandmark(path: string): boolean {
+  return PROJECT_LANDMARK_PATTERNS.some((pattern) => pattern.test(path))
+}
+
+function topLevelSummary(files: string[]): string[] {
+  const counts = new Map<string, number>()
+  for (const file of files) {
+    const [head] = file.split('/')
+    if (!head) continue
+    counts.set(head, (counts.get(head) ?? 0) + 1)
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, 40)
+    .map(([name, count]) => `${name}${count > 1 ? ` (${count})` : ''}`)
+}
+
+export function buildProjectReviewContext(args: {
+  fullName: string
+  sha: string
+  refName: string
+  files: string[]
+}): string {
+  const files = [...new Set(args.files.filter(Boolean))].sort()
+  const landmarks = files.filter(isProjectLandmark).slice(0, PROJECT_LANDMARK_LIMIT)
+  const listed = files.slice(0, PROJECT_CONTEXT_FILE_LIMIT)
+  const omitted = files.length - listed.length
+
+  return [
+    '# Aerie Project Review Context',
+    '',
+    `Repository: ${args.fullName}`,
+    `Reviewing: whole repository snapshot`,
+    `Ref: ${args.refName}`,
+    `Head SHA: ${args.sha}`,
+    '',
+    'This is not a patch review. Inspect the checked-out repository directly and audit the whole project across architecture, correctness, security, tests, maintainability, and release readiness.',
+    '',
+    `Tracked files: ${files.length}`,
+    '',
+    '## Top-level inventory',
+    ...topLevelSummary(files).map((line) => `- ${line}`),
+    '',
+    '## Landmarks',
+    ...(landmarks.length > 0 ? landmarks.map((file) => `- ${file}`) : ['- None detected']),
+    '',
+    `## Tracked files${omitted > 0 ? ` (first ${listed.length}, ${omitted} omitted)` : ''}`,
+    ...listed.map((file) => `- ${file}`)
+  ].join('\n')
+}
+
+/**
+ * Prepares a whole-project review: checks out the target SHA into an isolated worktree and writes
+ * a bounded project inventory/brief. No unified diff is generated; the agent is expected to read
+ * the local checkout directly.
+ */
+export async function prepareProjectReview(args: {
+  fullName: string
+  sha: string
+  refName: string
+  remoteUrl: string
+  runTag: string
+  token?: string
+  userLocalPath?: string | null
+  useLocalWorktree?: boolean
+}): Promise<PreparedCheckout> {
+  const { mode, baseDir, worktreePath } = await checkoutWorktree(args)
+  try {
+    const files = (await localGit(worktreePath).raw(['ls-files']))
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+    const { owner, name } = splitFullName(args.fullName)
+    const diffDir = dataDir('diffs')
+    mkdirSync(diffDir, { recursive: true })
+    const contextPath = join(
+      diffDir,
+      `${owner}-${name}-project-${args.sha.slice(0, 12)}-${args.runTag}.md`
+    )
+    writeFileSync(
+      contextPath,
+      buildProjectReviewContext({
+        fullName: args.fullName,
+        sha: args.sha,
+        refName: args.refName,
+        files
+      }),
+      'utf8'
+    )
+    return { mode, worktreePath, diffPath: contextPath, baseDir }
+  } catch (error) {
+    await removePreparedWorktree({ mode, baseDir, worktreePath })
+    throw error
+  }
 }
 
 /**
@@ -309,14 +442,32 @@ export async function prepareCheckout(args: {
   baseSha?: string | null
 }): Promise<PreparedCheckout> {
   const { mode, baseDir, worktreePath } = await checkoutWorktree(args)
-  const diffPath = await writeCommitDiff(
-    baseDir,
-    args.fullName,
-    args.sha,
-    args.runTag,
-    args.baseSha
+  try {
+    const diffPath = await writeCommitDiff(
+      baseDir,
+      args.fullName,
+      args.sha,
+      args.runTag,
+      args.baseSha
+    )
+    return { mode, worktreePath, diffPath, baseDir }
+  } catch (error) {
+    await removePreparedWorktree({ mode, baseDir, worktreePath })
+    throw error
+  }
+}
+
+async function removePreparedWorktree(prepared: {
+  mode: PrepareMode
+  baseDir: string
+  worktreePath: string
+}): Promise<void> {
+  if (prepared.mode === 'working-tree') return
+  await cloneMutex.run(prepared.baseDir, () =>
+    localGit(prepared.baseDir)
+      .raw(['worktree', 'remove', '--force', prepared.worktreePath])
+      .catch(() => undefined)
   )
-  return { mode, worktreePath, diffPath, baseDir }
 }
 
 /** Removes a run's worktree (off the repo it was added from) and its diff file. */
@@ -325,14 +476,7 @@ export async function cleanupCheckout(prepared: PreparedCheckout): Promise<void>
     // A working-tree review runs IN the user's own clone — there is no worktree to
     // remove and `worktreePath` IS their clone, so never run `worktree remove` on it.
     // Only drop the generated diff file.
-    if (prepared.mode !== 'working-tree') {
-      // Serialize the worktree remove with concurrent worktree adds on the same clone (same key).
-      await cloneMutex.run(prepared.baseDir, () =>
-        localGit(prepared.baseDir)
-          .raw(['worktree', 'remove', '--force', prepared.worktreePath])
-          .catch(() => undefined)
-      )
-    }
+    await removePreparedWorktree(prepared)
     rmSync(prepared.diffPath, { force: true })
   } catch {
     // cleanup must never throw

@@ -70,6 +70,7 @@ import {
   createCommitComment,
   createIssue,
   createPrComment,
+  getBranchHeadSha,
   getCommit,
   getPullRequest,
   listBranches,
@@ -156,14 +157,19 @@ interface RunTarget {
 }
 
 /**
- * Validate the SHARED fields of a run/batch request and resolve a working-tree HEAD
- * (the renderer supplies no sha for those). Agent id(s) are validated by the caller.
+ * Validate the SHARED fields of a run/batch request and resolve refs whose SHA is
+ * main-owned (working-tree/project). Agent id(s) are validated by the caller.
  * Returns the normalized target or a typed error — used by both single and batch starts.
  */
 async function resolveRunTarget(p: Partial<StartRunParams>): Promise<ApiResult<RunTarget>> {
   if (!p || typeof p !== 'object') return fail('Invalid run parameters.')
   if (!isValidId(p.accountId) || !isValidId(p.repoId)) return fail('Invalid account or repo id.')
-  if (p.refType !== 'commit' && p.refType !== 'pr' && p.refType !== 'working-tree') {
+  if (
+    p.refType !== 'commit' &&
+    p.refType !== 'pr' &&
+    p.refType !== 'working-tree' &&
+    p.refType !== 'project'
+  ) {
     return fail('Invalid ref type.')
   }
   if (typeof p.refId !== 'string') return fail('Invalid run parameters.')
@@ -172,6 +178,7 @@ async function resolveRunTarget(p: Partial<StartRunParams>): Promise<ApiResult<R
   }
 
   let sha = p.sha
+  let refId = p.refId
   if (p.refType === 'working-tree') {
     if (p.refId !== 'working-tree' && p.refId !== 'staged')
       return fail('Invalid working-tree mode.')
@@ -185,6 +192,17 @@ async function resolveRunTarget(p: Partial<StartRunParams>): Promise<ApiResult<R
     } catch (e) {
       return fail(e instanceof Error ? e.message : 'Could not read the local clone HEAD.')
     }
+  } else if (p.refType === 'project') {
+    const repo = getRepoById(p.repoId)
+    if (!repo) return fail('Repository not found.')
+    const branch = (p.refId.trim() || repo.default_branch || '').trim()
+    if (!branch) return fail('Repository has no default branch to review.')
+    try {
+      sha = await getBranchHeadSha(p.accountId, repo.full_name, branch)
+      refId = branch
+    } catch (e) {
+      return fail(e instanceof Error ? e.message : 'Could not resolve the project head.')
+    }
   }
   if (!isValidSha(sha)) return fail('Invalid SHA.')
 
@@ -195,7 +213,7 @@ async function resolveRunTarget(p: Partial<StartRunParams>): Promise<ApiResult<R
     repoId: p.repoId,
     sha,
     refType: p.refType,
-    refId: p.refId,
+    refId,
     promptId: p.promptId ?? undefined,
     authorLogin
   })
@@ -682,10 +700,15 @@ export function registerIpcHandlers(): void {
       const t = target.value
       // Dedup on the resolved HEAD + agent; for working-tree also on the mode (refId),
       // since 'working-tree' and 'staged' share a HEAD but review different diffs.
-      if (
-        hasActiveRun(t.repoId, t.sha, p.agentId, t.refType === 'working-tree' ? t.refId : undefined)
-      ) {
-        const subject = t.refType === 'working-tree' ? 'working-tree review' : 'commit'
+      if (hasActiveRun(t.repoId, t.refType, t.refId, t.sha, p.agentId)) {
+        const subject =
+          t.refType === 'working-tree'
+            ? 'working-tree review'
+            : t.refType === 'project'
+              ? 'project review'
+              : t.refType === 'pr'
+                ? 'pull request'
+                : 'commit'
         return fail(`A run for this ${subject} and agent is already in progress.`)
       }
       // Output and status flow through the central run-events hub (broadcast to all

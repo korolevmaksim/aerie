@@ -9,10 +9,28 @@ import type {
   RunStatus,
   StartBatchResult
 } from '@shared/types'
+import { copyForTarget, defaultPromptId } from '../lib/reviewLauncher'
 import RunView from './RunView'
 
+function ReviewField({
+  label,
+  children,
+  wide = false
+}: {
+  label: string
+  children: React.ReactNode
+  wide?: boolean
+}): React.JSX.Element {
+  return (
+    <label className={`review-field${wide ? ' review-field--wide' : ''}`}>
+      <span>{label}</span>
+      {children}
+    </label>
+  )
+}
+
 /**
- * Launcher for a run on a commit/PR/working-tree: pick an agent (installed ones
+ * Launcher for a run on a commit/PR/working-tree/project: pick an agent (installed ones
  * marked), a model, and a review prompt, start it, and show its live RunView. A run
  * already in flight for this ref is rehydrated so it can be controlled after
  * navigating away and back.
@@ -27,7 +45,7 @@ function RunPanel({
 }: {
   accountId: number
   repoId: number
-  /** Head SHA for commit/PR runs; for working-tree runs the main process resolves it. */
+  /** Head SHA for commit/PR runs; for working-tree/project runs main resolves it. */
   sha?: string
   refType: RefType
   refId: string
@@ -66,20 +84,22 @@ function RunPanel({
         setAgents(a.value)
         setAgentId((prev) => {
           if (prev) return prev
-          const firstAvailable = a.value.find((x) => x.available)
-          return (firstAvailable ?? a.value[0])?.id ?? ''
+          const firstAvailable = a.value.find((x) => x.available && !x.needsConsent)
+          if (firstAvailable) return firstAvailable.id
+          const firstInstalled = a.value.find((x) => x.available)
+          return (firstInstalled ?? a.value[0])?.id ?? ''
         })
       }
       if (p.ok) setPresets(p.value)
       if (pr.ok) {
         setPrompts(pr.value)
-        setPromptId((prev) => prev ?? pr.value[0]?.id ?? null)
+        setPromptId((prev) => prev ?? defaultPromptId(refType, pr.value))
       }
     })()
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [refType])
 
   // Rehydrate a run already in flight (or the latest) for this ref.
   useEffect(() => {
@@ -102,6 +122,9 @@ function RunPanel({
       if (match) {
         setCurrentRun(match)
         setCurrentStatus(match.status)
+      } else {
+        setCurrentRun(null)
+        setCurrentStatus(null)
       }
     })()
     return () => {
@@ -115,7 +138,7 @@ function RunPanel({
   // picker and the start request always use a live id (or the first prompt).
   const effectivePromptId = prompts.some((p) => p.id === promptId)
     ? promptId
-    : (prompts[0]?.id ?? null)
+    : defaultPromptId(refType, prompts)
 
   // A manual agent/model/reasoning change means the selection no longer matches a
   // preset, so the preset picker returns to its "Preset…" placeholder.
@@ -169,7 +192,7 @@ function RunPanel({
       const res = await window.aerie.runner.start({
         accountId,
         repoId,
-        // Working-tree runs have no renderer-known SHA — main resolves the clone HEAD.
+        // Working-tree/project runs have no renderer-known SHA — main resolves the target HEAD.
         sha: sha ?? '',
         refType,
         refId,
@@ -242,106 +265,155 @@ function RunPanel({
     }
   }
 
-  const installedAgents = agents.filter((a) => a.available)
   const labelFor = (id: string): string => agents.find((a) => a.id === id)?.label ?? id
+  const target = copyForTarget(refType, refId, sha)
+  const runnableAgents = agents.filter((a) => a.available && !a.needsConsent)
+  const startBlocker = !agentId
+    ? 'Select an agent.'
+    : !selectedAgent
+      ? 'Selected agent is no longer available.'
+      : !selectedAgent.available
+        ? `${selectedAgent.label} is not installed on PATH.`
+        : selectedAgent.needsConsent
+          ? `${selectedAgent.label} needs command approval in Tools.`
+          : null
 
   return (
-    <div className="run">
-      <label className="run__panel-toggle" title="Run several agents on this change at once">
-        <input
-          type="checkbox"
-          checked={panelMode}
-          onChange={(e) => {
-            setPanelMode(e.target.checked)
+    <div className="run review-launcher">
+      <div className="review-launcher__head">
+        <div className="review-launcher__target">
+          <span className="review-launcher__eyebrow">{target.eyebrow}</span>
+          <h3>{target.title}</h3>
+          <p>{target.detail}</p>
+        </div>
+        <div className="review-launcher__meta" aria-label="Review target metadata">
+          {target.meta.map((item) => (
+            <span key={item} className="chip">
+              {item}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div className="review-launcher__mode" role="group" aria-label="Review mode">
+        <button
+          type="button"
+          className={`review-launcher__mode-btn${!panelMode ? ' review-launcher__mode-btn--active' : ''}`}
+          onClick={() => {
+            setPanelMode(false)
             setError(null)
           }}
           disabled={starting}
-        />
-        Panel review (run several agents)
-      </label>
+        >
+          Single agent
+        </button>
+        <button
+          type="button"
+          className={`review-launcher__mode-btn${panelMode ? ' review-launcher__mode-btn--active' : ''}`}
+          onClick={() => {
+            setPanelMode(true)
+            setPanelIds((prev) =>
+              prev.size > 0 ? prev : new Set(runnableAgents.slice(0, 3).map((a) => a.id))
+            )
+            setError(null)
+          }}
+          disabled={starting}
+        >
+          Panel review
+        </button>
+      </div>
 
       {!panelMode ? (
         <>
-          <div className="run__controls">
+          <div className="run__controls review-launcher__controls">
             {presets.length > 0 && (
-              <select
-                className="field"
-                value={selectedPresetId}
-                onChange={(e) => onApplyPreset(e.target.value)}
-                disabled={active || starting}
-                title="Apply a saved preset"
-              >
-                <option value="" disabled>
-                  Preset…
-                </option>
-                {presets.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
+              <ReviewField label="Preset">
+                <select
+                  className="field"
+                  value={selectedPresetId}
+                  onChange={(e) => onApplyPreset(e.target.value)}
+                  disabled={active || starting}
+                  title="Apply a saved preset"
+                >
+                  <option value="" disabled>
+                    Preset…
                   </option>
-                ))}
-              </select>
+                  {presets.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </ReviewField>
             )}
-            <select
-              className="field"
-              aria-label="Agent"
-              value={agentId}
-              onChange={(e) => onChangeAgent(e.target.value)}
-              disabled={active || starting}
-            >
-              {agents.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.label}
-                  {a.available ? '' : ' — not installed'}
-                </option>
-              ))}
-            </select>
-            {prompts.length > 0 && (
+            <ReviewField label="Agent" wide>
               <select
                 className="field"
-                value={effectivePromptId ?? ''}
-                onChange={(e) => setPromptId(Number(e.target.value))}
+                value={agentId}
+                onChange={(e) => onChangeAgent(e.target.value)}
                 disabled={active || starting}
-                title="Review prompt"
               >
-                {prompts.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
+                {agents.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.label}
+                    {a.available ? '' : ' — not installed'}
                   </option>
                 ))}
               </select>
+            </ReviewField>
+            {prompts.length > 0 && (
+              <ReviewField label="Lens">
+                <select
+                  className="field"
+                  value={effectivePromptId ?? ''}
+                  onChange={(e) => setPromptId(Number(e.target.value))}
+                  disabled={active || starting}
+                  title="Review prompt"
+                >
+                  {prompts.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </ReviewField>
             )}
             {selectedAgent && selectedAgent.models.length > 0 && (
-              <select
-                className="field"
-                value={selectedAgent.model}
-                onChange={(e) => onChangeModel(e.target.value)}
-                disabled={active || starting}
-                title="Model"
-              >
-                {selectedAgent.models.map((m) => (
-                  <option key={m} value={m}>
-                    {m}
-                  </option>
-                ))}
-              </select>
+              <ReviewField label="Model">
+                <select
+                  className="field"
+                  value={selectedAgent.model}
+                  onChange={(e) => onChangeModel(e.target.value)}
+                  disabled={active || starting}
+                  title="Model"
+                >
+                  {selectedAgent.models.map((m) => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
+              </ReviewField>
             )}
             {selectedAgent && selectedAgent.reasoningLevels.length > 0 && (
-              <select
-                className="field"
-                value={selectedAgent.reasoning}
-                onChange={(e) => onChangeReasoning(e.target.value)}
-                disabled={active || starting}
-                title="Reasoning / thinking effort"
-              >
-                {selectedAgent.reasoningLevels.map((lvl) => (
-                  <option key={lvl} value={lvl}>
-                    {lvl}
-                  </option>
-                ))}
-              </select>
+              <ReviewField label="Effort">
+                <select
+                  className="field"
+                  value={selectedAgent.reasoning}
+                  onChange={(e) => onChangeReasoning(e.target.value)}
+                  disabled={active || starting}
+                  title="Reasoning / thinking effort"
+                >
+                  {selectedAgent.reasoningLevels.map((lvl) => (
+                    <option key={lvl} value={lvl}>
+                      {lvl}
+                    </option>
+                  ))}
+                </select>
+              </ReviewField>
             )}
             <button
-              className="btn btn--primary"
+              className="btn btn--primary review-launcher__cta"
               onClick={onStart}
               disabled={
                 !agentId ||
@@ -354,6 +426,12 @@ function RunPanel({
             >
               {active || starting ? 'Running…' : 'Review with agent'}
             </button>
+          </div>
+          <div className="review-launcher__readiness">
+            <span className="muted">
+              {runnableAgents.length}/{agents.length} agents ready
+            </span>
+            {startBlocker && <span className="hint">{startBlocker}</span>}
           </div>
           {selectedAgent && !selectedAgent.available && (
             <p className="hint">
@@ -374,24 +452,26 @@ function RunPanel({
         </>
       ) : (
         <>
-          <div className="run__controls">
+          <div className="run__controls review-launcher__controls">
             {prompts.length > 0 && (
-              <select
-                className="field"
-                value={effectivePromptId ?? ''}
-                onChange={(e) => setPromptId(Number(e.target.value))}
-                disabled={starting}
-                title="Review prompt (shared by every agent)"
-              >
-                {prompts.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
+              <ReviewField label="Lens" wide>
+                <select
+                  className="field"
+                  value={effectivePromptId ?? ''}
+                  onChange={(e) => setPromptId(Number(e.target.value))}
+                  disabled={starting}
+                  title="Review prompt (shared by every agent)"
+                >
+                  {prompts.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </ReviewField>
             )}
             <button
-              className="btn btn--primary"
+              className="btn btn--primary review-launcher__cta"
               onClick={onStartBatch}
               disabled={panelIds.size === 0 || starting}
             >
@@ -400,11 +480,11 @@ function RunPanel({
                 : `Review with ${panelIds.size} agent${panelIds.size === 1 ? '' : 's'}`}
             </button>
           </div>
-          {installedAgents.length === 0 ? (
-            <p className="hint">No installed agents to run — install an agent CLI and re-scan.</p>
+          {runnableAgents.length === 0 ? (
+            <p className="hint">No approved installed agents to run.</p>
           ) : (
             <div className="run__agent-picks">
-              {installedAgents.map((a) => (
+              {runnableAgents.map((a) => (
                 <label key={a.id} className="run__agent-pick">
                   <input
                     type="checkbox"
@@ -418,7 +498,7 @@ function RunPanel({
             </div>
           )}
           <p className="hint">
-            Each agent runs with its own saved model; up to 3 run at once (the rest queue).
+            {panelIds.size}/{runnableAgents.length} ready agents selected; up to 3 run at once.
           </p>
           {error && <p className="alert">{error}</p>}
           {batchSkipped.length > 0 && (
