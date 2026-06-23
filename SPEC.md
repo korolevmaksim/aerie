@@ -108,8 +108,10 @@ operator view over existing safe IPC data (`repos:list`, `runner:listAllRuns`,
 `runner:listAgents`, `pipelines:list`, `pipelines:pollerStatus`). It promotes the core
 review loop instead of module tabs: active runs, failed/stopped/ready-to-post reviews,
 favorite/recent repo targets, agent readiness, automation liveness, and the local trust
-boundary. It is a renderer-only composition layer: it adds no privileged IPC, GitHub write,
-token, git, or agent execution surface.
+boundary. The persistent task sidebar is renderer-only and can collapse to a compact rail;
+the preference is stored in renderer-local storage and adds no IPC surface. It is a
+renderer-only composition layer: it adds no privileged IPC, GitHub write, token, git, or
+agent execution surface.
 
 Runs also carry a private local disposition (`open` / `handled` / `verified`) so a solo
 operator can clear an audit from the attention queue after handling it locally instead of

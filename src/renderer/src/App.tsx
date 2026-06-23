@@ -14,6 +14,16 @@ import MissionControlPanel from './components/MissionControlPanel'
 
 type View = 'cockpit' | 'repos' | 'accounts' | 'history' | 'tools' | 'automate' | 'settings'
 
+const SIDEBAR_COLLAPSED_STORAGE_KEY = 'aerie.sidebarCollapsed'
+
+function readInitialSidebarCollapsed(): boolean {
+  try {
+    return window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
 function accountSwitchView(view: View): View {
   return view === 'history' || view === 'repos' || view === 'automate' ? view : 'cockpit'
 }
@@ -28,6 +38,7 @@ function App(): React.JSX.Element {
   // Command palette (M14): Cmd/Ctrl-K opens it; repos are loaded lazily for "jump to repo".
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [paletteRepos, setPaletteRepos] = useState<RepoSummary[]>([])
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(readInitialSidebarCollapsed)
 
   const reloadAccounts = useCallback(async (): Promise<void> => {
     const list = await window.aerie.accounts.list()
@@ -99,6 +110,14 @@ function App(): React.JSX.Element {
     }
   }, [paletteOpen, selectedId])
 
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, sidebarCollapsed ? '1' : '0')
+    } catch {
+      // Ignore storage failures; the toggle still works for the current window.
+    }
+  }, [sidebarCollapsed])
+
   const paletteCommands = useMemo<PaletteCommand[]>(() => {
     const cmds: PaletteCommand[] = []
     const views: { id: View; title: string }[] = [
@@ -168,38 +187,76 @@ function App(): React.JSX.Element {
     setView(target)
   }
 
-  const navItems: { id: View; label: string; hint: string; disabled?: boolean }[] = [
+  const sidebarToggleLabel = sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'
+
+  const navItems: {
+    id: View
+    label: string
+    shortLabel: string
+    hint: string
+    disabled?: boolean
+  }[] = [
     {
       id: 'cockpit',
       label: 'Cockpit',
+      shortLabel: 'Co',
       hint: 'Active reviews and next actions',
       disabled: !reposReady
     },
     {
       id: 'repos',
       label: 'Repositories',
+      shortLabel: 'Re',
       hint: 'Pick a commit, PR, or working tree',
       disabled: !reposReady
     },
-    { id: 'history', label: 'Run history', hint: 'Logs, findings, copies, and re-runs' },
-    { id: 'automate', label: 'Automate', hint: 'Local polling pipelines' },
-    { id: 'tools', label: 'Agents & tools', hint: 'Installed CLIs and approval' },
-    { id: 'accounts', label: 'Accounts', hint: 'GitHub tokens and rate limits' },
-    { id: 'settings', label: 'Settings', hint: 'Prompts, presets, and safety' }
+    {
+      id: 'history',
+      label: 'Run history',
+      shortLabel: 'Hi',
+      hint: 'Logs, findings, copies, and re-runs'
+    },
+    { id: 'automate', label: 'Automate', shortLabel: 'Au', hint: 'Local polling pipelines' },
+    {
+      id: 'tools',
+      label: 'Agents & tools',
+      shortLabel: 'To',
+      hint: 'Installed CLIs and approval'
+    },
+    {
+      id: 'accounts',
+      label: 'Accounts',
+      shortLabel: 'Ac',
+      hint: 'GitHub tokens and rate limits'
+    },
+    { id: 'settings', label: 'Settings', shortLabel: 'Se', hint: 'Prompts, presets, and safety' }
   ]
 
   return (
-    <div className="app app-shell">
-      <aside className="sidebar" aria-label="Aerie workspace navigation">
-        <div className="brand">
-          <span
-            className="wordmark"
-            aria-label="Aerie — go to review cockpit"
-            {...clickableRow(goHome)}
+    <div className={`app app-shell ${sidebarCollapsed ? 'app-shell--sidebar-collapsed' : ''}`}>
+      <aside id="aerie-sidebar" className="sidebar" aria-label="Aerie workspace navigation">
+        <div className="sidebar__top">
+          <div className="brand">
+            <span
+              className="wordmark"
+              aria-label="Aerie — go to review cockpit"
+              {...clickableRow(goHome)}
+            >
+              Aerie
+            </span>
+            <span className="tagline">Local agent mission control</span>
+          </div>
+          <button
+            className="sidebar-toggle"
+            type="button"
+            onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
+            aria-label={sidebarToggleLabel}
+            aria-controls="aerie-sidebar"
+            aria-expanded={!sidebarCollapsed}
+            title={sidebarToggleLabel}
           >
-            Aerie
-          </span>
-          <span className="tagline">Local agent mission control</span>
+            <span className="sidebar-toggle__icon" aria-hidden="true" />
+          </button>
         </div>
         {accounts.length > 0 && (
           <div className="sidebar__account">
@@ -234,14 +291,25 @@ function App(): React.JSX.Element {
               }}
               disabled={item.disabled}
               aria-current={view === item.id ? 'page' : undefined}
+              aria-label={`${item.label}: ${item.hint}`}
+              title={`${item.label} — ${item.hint}`}
             >
-              <span>{item.label}</span>
+              <span className="sidebar-nav__short" aria-hidden="true">
+                {item.shortLabel}
+              </span>
+              <span className="sidebar-nav__text">{item.label}</span>
               <small>{item.hint}</small>
             </button>
           ))}
         </nav>
-        <button className="sidebar-command" onClick={() => setPaletteOpen(true)}>
-          <span>Command palette</span>
+        <button
+          className="sidebar-command"
+          type="button"
+          onClick={() => setPaletteOpen(true)}
+          aria-label="Open command palette"
+          title="Open command palette"
+        >
+          <span className="sidebar-command__label">Command palette</span>
           <kbd>Cmd K</kbd>
         </button>
       </aside>

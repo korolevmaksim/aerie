@@ -33,6 +33,7 @@ third-party service.
 - **Review cockpit** — after adding an account, Aerie opens on an account-scoped cockpit
   with active runs, attention-worthy reviews, ready-to-post results, favorite/recent repo
   targets, agent readiness, automation liveness, and the local trust boundary in one place.
+  The task sidebar can collapse to a compact rail when the review surface needs more room.
 - **Browse repos, commits, and PRs** — cached with conditional requests (ETags), so
   re-listing costs ~0 rate limit.
 - **Local checkout** — Aerie clones into an app-owned working copy (or, opt-in, a

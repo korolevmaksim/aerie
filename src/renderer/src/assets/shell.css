@@ -1,10 +1,16 @@
 /* Workflow-first application shell and review cockpit. */
 
 .app-shell {
+  --sidebar-width: 268px;
   display: grid;
-  grid-template-columns: 268px minmax(0, 1fr);
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
   min-height: 100%;
   background: var(--bg);
+  transition: grid-template-columns 160ms ease;
+}
+
+.app-shell--sidebar-collapsed {
+  --sidebar-width: 72px;
 }
 
 .sidebar {
@@ -15,17 +21,69 @@
   padding: 1rem 0.95rem;
   border-right: 1px solid var(--border);
   background: rgba(13, 17, 23, 0.92);
+  overflow: hidden;
+  transition:
+    padding 160ms ease,
+    background-color 160ms ease;
 }
 
-.sidebar .brand {
+.sidebar__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.7rem;
+  min-width: 0;
+}
+
+.sidebar__top .brand {
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
   align-items: flex-start;
+  min-width: 0;
 }
 
 .sidebar .tagline {
   line-height: 1.3;
+}
+
+.sidebar-toggle {
+  display: grid;
+  flex: 0 0 2rem;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.sidebar-toggle:hover,
+.sidebar-toggle:focus-visible {
+  border-color: rgba(139, 148, 158, 0.34);
+  background: rgba(139, 148, 158, 0.12);
+  color: var(--fg);
+}
+
+.sidebar-toggle__icon {
+  position: relative;
+  width: 1.05rem;
+  height: 1.05rem;
+  border: 1.5px solid currentColor;
+  border-radius: 5px;
+}
+
+.sidebar-toggle__icon::before {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 4px;
+  width: 1.5px;
+  border-radius: 1px;
+  background: currentColor;
+  content: '';
 }
 
 .sidebar__account {
@@ -67,6 +125,10 @@
   cursor: pointer;
 }
 
+.sidebar-nav__short {
+  display: none;
+}
+
 .sidebar-nav__item small {
   color: var(--muted);
   font-size: 0.72rem;
@@ -98,6 +160,67 @@
   color: var(--muted);
   font: inherit;
   cursor: pointer;
+}
+
+.app-shell--sidebar-collapsed .sidebar {
+  align-items: center;
+  padding: 0.9rem 0.6rem;
+}
+
+.app-shell--sidebar-collapsed .sidebar__top {
+  justify-content: center;
+  width: 100%;
+}
+
+.app-shell--sidebar-collapsed .sidebar__top .brand,
+.app-shell--sidebar-collapsed .sidebar__account,
+.app-shell--sidebar-collapsed .sidebar-command__label {
+  display: none;
+}
+
+.app-shell--sidebar-collapsed .sidebar-toggle__icon::before {
+  right: 4px;
+  left: auto;
+}
+
+.app-shell--sidebar-collapsed .sidebar-nav {
+  width: 100%;
+}
+
+.app-shell--sidebar-collapsed .sidebar-nav__item {
+  align-items: center;
+  justify-content: center;
+  min-height: 2.7rem;
+  padding: 0.42rem;
+  text-align: center;
+}
+
+.app-shell--sidebar-collapsed .sidebar-nav__short {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 6px;
+  color: var(--fg);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.app-shell--sidebar-collapsed .sidebar-nav__text,
+.app-shell--sidebar-collapsed .sidebar-nav__item small {
+  display: none;
+}
+
+.app-shell--sidebar-collapsed .sidebar-command {
+  justify-content: center;
+  width: 100%;
+  padding: 0.58rem 0.25rem;
+}
+
+.app-shell--sidebar-collapsed .sidebar-command kbd {
+  font-size: 0.64rem;
 }
 
 kbd {
@@ -428,7 +551,9 @@ kbd {
 }
 
 @media (max-width: 980px) {
-  .app-shell {
+  .app-shell,
+  .app-shell--sidebar-collapsed {
+    --sidebar-width: 100%;
     grid-template-columns: 1fr;
   }
 
@@ -436,6 +561,41 @@ kbd {
     min-height: auto;
     border-right: none;
     border-bottom: 1px solid var(--border);
+  }
+
+  .app-shell--sidebar-collapsed .sidebar {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.55rem;
+    min-height: auto;
+    padding: 0.65rem 0.75rem;
+    overflow-x: auto;
+  }
+
+  .app-shell--sidebar-collapsed .sidebar__top {
+    flex: 0 0 auto;
+    width: auto;
+  }
+
+  .app-shell--sidebar-collapsed .sidebar-nav {
+    display: flex;
+    flex: 0 0 auto;
+    flex-direction: row;
+    width: auto;
+    min-width: max-content;
+  }
+
+  .app-shell--sidebar-collapsed .sidebar-nav__item {
+    width: 2.8rem;
+  }
+
+  .app-shell--sidebar-collapsed .sidebar-command {
+    flex: 0 0 auto;
+    width: auto;
+    margin-top: 0;
+    margin-left: auto;
+    padding-right: 0.5rem;
+    padding-left: 0.5rem;
   }
 
   .sidebar-nav {

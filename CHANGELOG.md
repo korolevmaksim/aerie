@@ -13,6 +13,10 @@ same change set.
 
 ### Added
 
+- **Collapsible task sidebar**: the review shell now has an icon-only sidebar toggle. The
+  collapsed state uses compact view labels with tooltips/ARIA labels, persists locally in the
+  renderer, and adds no IPC or privileged main-process surface.
+
 - **Pipeline model selection and scheduled project audits**: pipeline steps now pass their selected
   model through to the runner as a real per-run `{{model}}` override, and the editor chooses models
   from the selected agent/tool's known model list. Scheduled pipelines also gained a review target:
