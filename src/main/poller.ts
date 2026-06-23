@@ -7,6 +7,7 @@
 // shutdown). SPEC §10: pipelines are user-run/scheduled — this is a local poll loop, not a
 // webhook; every GitHub write stays behind the per-pipeline auto-post opt-in.
 
+import type { PollerStatus } from '../shared/types'
 import { pollCommitHead } from './github'
 import { log } from './logger'
 import { buildEnginePorts, loadEnabledPipelines } from './pipelineEngine'
@@ -36,6 +37,12 @@ let engine: { ports: EnginePorts; dispose: () => void } | null = null
 let stopped = true
 /** watchKey → next-poll epoch ms; persists across ticks. */
 const schedule = new Map<string, number>()
+// Read-only observability (M14): updated as a side effect of normal operation; never alters
+// pacing. `lastPolledAt`/`lastRate` are set after each GitHub poll, `nextPollAt` whenever a
+// timer is armed.
+let lastPolledAt: number | null = null
+let nextPollAt: number | null = null
+let lastRate: { remaining: number | null; limit: number | null } | null = null
 
 function repoInfo(repoId: number): RepoInfo | null {
   const r = getRepoById(repoId)
@@ -54,6 +61,10 @@ export function startPoller(): void {
   stopped = false
   engine = buildEnginePorts()
   schedule.clear()
+  // Fresh session: drop any last-poll bookkeeping from a prior run so the status reports
+  // nothing until this session actually polls (armTimer below sets nextPollAt).
+  lastPolledAt = null
+  lastRate = null
   log.info('poller started')
   armTimer(0)
 }
@@ -69,13 +80,26 @@ export function stopPoller(): void {
   engine?.dispose()
   engine = null
   schedule.clear()
+  nextPollAt = null
   log.info('poller stopped')
+}
+
+/** Read-only liveness snapshot for the Automate view (M14). No token/secret in the payload. */
+export function getPollerStatus(): PollerStatus {
+  return {
+    running: !stopped,
+    lastPolledAt: lastPolledAt === null ? null : new Date(lastPolledAt).toISOString(),
+    nextPollAt: stopped || nextPollAt === null ? null : new Date(nextPollAt).toISOString(),
+    rate: lastRate
+  }
 }
 
 function armTimer(delayMs: number): void {
   if (stopped) return
   if (timer) clearTimeout(timer)
-  timer = setTimeout(() => void tick(), Math.max(0, delayMs))
+  const delay = Math.max(0, delayMs)
+  nextPollAt = Date.now() + delay
+  timer = setTimeout(() => void tick(), delay)
 }
 
 async function tick(): Promise<void> {
@@ -113,6 +137,8 @@ async function tick(): Promise<void> {
           watch.repoFullName,
           watch.ref
         )
+        lastPolledAt = Date.now()
+        lastRate = { remaining: result.rate.remaining, limit: result.rate.limit }
         schedule.set(
           watchKey(watch),
           planNextPollAt({

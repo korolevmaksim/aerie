@@ -80,7 +80,8 @@ third-party service.
   filters, and the action) — choosing **Post** reveals an explicit auto-post toggle gated behind a
   distinct danger confirm. The list shows each pipeline's live run status, an enable toggle,
   **Run now** / **Dry run** buttons, and an expandable **run history**; a dry run never writes to
-  GitHub regardless of the opt-in.
+  GitHub regardless of the opt-in. A liveness line shows the poller's state — when it last checked,
+  when it'll next check, and the remaining GitHub API budget.
   Auto-post is off by default and enforced in the main process.
 - **Post back to GitHub — behind a confirm** — every write (commit comment, PR comment, or
   new issue) requires an explicit in-app confirmation showing the exact body. Optionally

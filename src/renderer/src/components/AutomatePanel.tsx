@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { AgentInfo, Pipeline, PipelineRunChange, PipelineWithRuns } from '@shared/types'
+import type {
+  AgentInfo,
+  Pipeline,
+  PipelineRunChange,
+  PipelineWithRuns,
+  PollerStatus
+} from '@shared/types'
 import {
   applyLiveChange,
   describeOutcome,
@@ -9,6 +15,7 @@ import {
   statusTone
 } from '../lib/automate'
 import { formatRelativeTime } from '../lib/format'
+import { formatPollerStatus } from '../lib/pollerStatus'
 import PipelineEditor, { type RepoOption } from './PipelineEditor'
 
 /**
@@ -103,6 +110,9 @@ function AutomatePanel({ accountId }: { accountId: number | null }): React.JSX.E
   const [repos, setRepos] = useState<RepoOption[]>([])
   const [agents, setAgents] = useState<AgentInfo[]>([])
   const [editing, setEditing] = useState<Pipeline | null | undefined>(undefined)
+  // Poller liveness (M14): re-fetched periodically so the relative "next check in …" stays fresh.
+  const [poller, setPoller] = useState<PollerStatus | null>(null)
+  const [now, setNow] = useState(() => Date.now())
 
   const load = useCallback(async (): Promise<void> => {
     const res = await window.aerie.pipelines.list()
@@ -120,6 +130,25 @@ function AutomatePanel({ accountId }: { accountId: number | null }): React.JSX.E
     })()
     return () => {
       cancelled = true
+    }
+  }, [])
+
+  // Poll the poller's own liveness on a slow cadence (and re-stamp `now`) so the status line's
+  // relative times stay current without a per-second timer.
+  useEffect(() => {
+    let cancelled = false
+    const fetchPoller = async (): Promise<void> => {
+      const res = await window.aerie.pipelines.pollerStatus()
+      if (!cancelled && res.ok) setPoller(res.value)
+    }
+    void fetchPoller()
+    const id = setInterval(() => {
+      setNow(Date.now())
+      void fetchPoller()
+    }, 15_000)
+    return () => {
+      cancelled = true
+      clearInterval(id)
     }
   }, [])
 
@@ -215,6 +244,18 @@ function AutomatePanel({ accountId }: { accountId: number | null }): React.JSX.E
         Pipelines watch a repo and run your agents on a new commit, then notify, stage, or (only
         when you opt in) post the review. They run locally on a poll — never a webhook.
       </p>
+
+      {poller && items && items.length > 0 && (
+        // Ambient liveness — deliberately NOT an aria-live region: the relative countdown
+        // re-renders every 15s and would otherwise spam a screen reader with no actionable change.
+        <p className="poller-status">
+          <span
+            className={`poller-dot poller-dot--${poller.running ? 'on' : 'off'}`}
+            aria-hidden="true"
+          />
+          {formatPollerStatus(poller, now)}
+        </p>
+      )}
 
       {error && (
         <p className="alert" role="alert">

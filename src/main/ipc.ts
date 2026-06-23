@@ -23,6 +23,7 @@ import type {
   ConsensusResult,
   PipelineRunOutcome,
   PipelineWithRuns,
+  PollerStatus,
   PullRequestDetail,
   PullRequestSummary,
   RefType,
@@ -82,6 +83,7 @@ import { clonePathFor, headShaOf, prepareCheckout } from './gitEngine'
 import { parsePipelineRow } from './pipelineEngineLogic'
 import { buildEnginePorts } from './pipelineEngine'
 import { planManualRun, toPipelineWithRuns, validateSaveRequest } from './pipelineIpc'
+import { getPollerStatus } from './poller'
 import { runPipelineForDelta } from './pipelines'
 import { buildCommitDelta, DELTA_META } from './pollerLogic'
 import { isTrustedSender } from './security'
@@ -854,6 +856,12 @@ export function registerIpcHandlers(): void {
   // --- automation pipelines (M9a). Config CRUD only; the poller picks up changes on its
   //     next tick (it reloads the enabled set each cycle). Every GitHub write still goes
   //     through the engine's auto-post gate — these handlers never write to GitHub.
+  // Read-only poller liveness for the Automate view (M14). No token/secret in the payload.
+  ipcMain.handle(CHANNELS.pipelinesPollerStatus, (event): ApiResult<PollerStatus> => {
+    if (!isTrustedSender(event)) return fail('Untrusted sender.')
+    return ok(getPollerStatus())
+  })
+
   ipcMain.handle(CHANNELS.pipelinesList, (event): ApiResult<PipelineWithRuns[]> => {
     if (!isTrustedSender(event)) return fail('Untrusted sender.')
     try {

@@ -669,6 +669,29 @@ select.field {
   justify-content: flex-end;
 }
 
+/* Poller liveness line in the Automate view (M14). The dot is decorative (aria-hidden); the
+   text label is the source of truth, so state is never conveyed by color alone. */
+.poller-status {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.82rem;
+  color: var(--muted, #8a8f98);
+  margin: 0 0 0.6rem;
+}
+
+.poller-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  flex: none;
+  background: var(--border);
+}
+
+.poller-dot--on {
+  background: #3fb950;
+}
+
 /* Transient "Copied N runs…" confirmation next to the export buttons. */
 .history-copied {
   font-size: 0.8rem;

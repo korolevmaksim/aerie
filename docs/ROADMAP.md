@@ -770,8 +770,12 @@ did/didn't fire) + **notification-fatigue controls** (batching, quiet hours, don
   (filtered) runs to the clipboard (`lib/runExport.ts`, pure + unit-tested) — a GFM table or a
   JSON array of a SAFE field subset that excludes the local run-log path, internal ids, and any
   token; aria-live "Copied N runs" confirmation. Client-side only. Frontend-review APPROVED.
-  **Still TODO (M14):** structured 2-column launcher, console toolbar, left-rail IA, value-first
-  onboarding, poller observability.
+- **Shipped (M14 — poller observability):** a read-only `pipelines:pollerStatus` IPC exposes the
+  poller's `{ running, lastPolledAt, nextPollAt, rate:{remaining,limit} }` (no token; no behavior
+  change — pure bookkeeping in `poller.ts`); the Automate view renders a liveness line via the pure
+  `lib/pollerStatus.ts` formatter (unit-tested), refreshed every 15s. Code + security review
+  APPROVED. **Still TODO (M14):** structured 2-column launcher, console toolbar, left-rail IA,
+  value-first onboarding.
 
 ---
 

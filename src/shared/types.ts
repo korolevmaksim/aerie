@@ -11,6 +11,22 @@ export interface RateLimitInfo {
   reset: number
 }
 
+/**
+ * Read-only liveness snapshot of the automation poller (ROADMAP M14), surfaced in the Automate
+ * view so the user can trust automation is alive. Carries no token/secret — only timing + the
+ * last-seen public rate budget.
+ */
+export interface PollerStatus {
+  /** Whether the poll loop is running (it runs while the app is open). */
+  running: boolean
+  /** ISO timestamp of the last actual GitHub poll, or null if none yet this session. */
+  lastPolledAt: string | null
+  /** ISO timestamp of the next scheduled tick, or null when not running. */
+  nextPollAt: string | null
+  /** Last-seen GitHub primary rate budget (either number may be null until first observed). */
+  rate: { remaining: number | null; limit: number | null } | null
+}
+
 export type AccountKind = 'user' | 'org'
 
 /**

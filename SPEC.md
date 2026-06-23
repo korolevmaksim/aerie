@@ -293,6 +293,11 @@ settings(key, value)
 > UI live-update: the engine adapter's write ports emit a token-free `PipelineRunChange`
 > (pipelineId/runId/status/action/posted) after each `pipeline_run` write, `main` broadcasts it, and
 > `aerie.pipelines.onStatus` delivers it. It is an outbound push — no new renderer→main surface.
+> A read-only `pipelines:pollerStatus` handler (M14) returns a `PollerStatus`
+> (`{ running, lastPolledAt, nextPollAt, rate: { remaining, limit } }`) so the Automate view can
+> show poller liveness. It is `isTrustedSender`-guarded, mutates nothing (cannot start/stop the
+> poller or trigger a poll), and carries **no token/secret** — only timing + the public rate
+> budget the poller last observed (the token and `resetAt` are never included).
 
 > **ETag-cached polling foundation (ROADMAP M8).** The automation engine needs to detect a
 > new commit/PR head cheaply. `listCommits`/`listPullRequests` now mirror `listRepos`' ETag

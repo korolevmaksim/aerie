@@ -13,6 +13,13 @@ same change set.
 
 ### Added
 
+- **Automation poller liveness** (ROADMAP M14): the Automate view now shows a compact status line
+  — e.g. "● Watching · next check in ~2m · last checked 30s ago · API 4800/5000" — so you can
+  trust the background poller is alive and see when it'll next check (and why it might be backing
+  off on a low API budget). Read-only over a new `pipelines:pollerStatus` IPC that carries only
+  timing + the public rate numbers (never a token); refreshed every 15s. Pure status formatter is
+  unit-tested; the poller exposes its existing schedule state without changing its pacing.
+
 - **Run-history export** (ROADMAP M14): "Copy MD" / "Copy JSON" buttons copy the
   currently-visible runs (respecting the active search + repo filter) to the clipboard — a GFM
   table or a JSON array. Purely client-side; the export carries only safe metadata (repo, agent,

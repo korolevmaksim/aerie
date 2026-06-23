@@ -7,6 +7,7 @@ import type {
   AgentCandidate,
   AgentInfo,
   ApiResult,
+  PollerStatus,
   BranchSummary,
   CommitDetail,
   CommitSummary,
@@ -205,6 +206,9 @@ const api = {
    *  to GitHub directly — every write goes through the engine's per-pipeline auto-post gate. */
   pipelines: {
     list: (): Promise<ApiResult<PipelineWithRuns[]>> => ipcRenderer.invoke(CHANNELS.pipelinesList),
+    /** Read-only poller liveness (M14): running, last/next poll, last-seen rate budget. */
+    pollerStatus: (): Promise<ApiResult<PollerStatus>> =>
+      ipcRenderer.invoke(CHANNELS.pipelinesPollerStatus),
     /** Create (id omitted/null) or update (with id) a pipeline; returns the saved item. */
     save: (req: SavePipelineRequest): Promise<ApiResult<PipelineWithRuns>> =>
       ipcRenderer.invoke(CHANNELS.pipelinesSave, req),

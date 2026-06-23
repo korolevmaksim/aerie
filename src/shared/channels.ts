@@ -53,6 +53,7 @@ export const CHANNELS = {
   pipelinesSetEnabled: 'pipelines:setEnabled',
   pipelinesRunNow: 'pipelines:runNow',
   pipelinesDryRun: 'pipelines:dryRun',
+  pipelinesPollerStatus: 'pipelines:pollerStatus',
   githubPost: 'github:post',
   systemInfo: 'system:info',
   systemOpenPath: 'system:openPath',
