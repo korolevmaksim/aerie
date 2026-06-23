@@ -30,6 +30,7 @@ import type {
   ConsensusResult,
   RunFinding,
   RunHistoryItem,
+  RunLocalStatus,
   RunOutputChunk,
   RunRecord,
   RunStatusUpdate,
@@ -164,6 +165,8 @@ const api = {
       ipcRenderer.invoke(CHANNELS.runnerConsensus, params),
     transcript: (runId: number): Promise<ApiResult<string>> =>
       ipcRenderer.invoke(CHANNELS.runnerTranscript, runId),
+    setLocalStatus: (runId: number, localStatus: RunLocalStatus): Promise<ApiResult<RunRecord>> =>
+      ipcRenderer.invoke(CHANNELS.runnerSetLocalStatus, { runId, localStatus }),
     /** Post a finished run's output to GitHub. Gated by the in-app confirm UI. */
     post: (params: PostRunParams): Promise<ApiResult<PostResult>> =>
       ipcRenderer.invoke(CHANNELS.githubPost, params),

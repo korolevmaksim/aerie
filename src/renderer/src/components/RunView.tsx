@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { PostKind, RunFinding, RunRecord, RunStatus } from '@shared/types'
+import type { PostKind, RunFinding, RunLocalStatus, RunRecord, RunStatus } from '@shared/types'
+import { formatRelativeTime } from '../lib/format'
 import { runOutputToMarkdown, runRefLabel } from '../lib/runConsole'
 import PostConfirmModal from './PostConfirmModal'
 
@@ -8,6 +9,12 @@ const MAX_BODY = 60000
 
 function isTerminal(s: RunStatus): boolean {
   return s === 'done' || s === 'error' || s === 'killed'
+}
+
+function localStatusLabel(status: RunLocalStatus): string {
+  if (status === 'handled') return 'Handled locally'
+  if (status === 'verified') return 'Verified locally'
+  return 'Open'
 }
 
 /**
@@ -19,10 +26,12 @@ function isTerminal(s: RunStatus): boolean {
 function RunView({
   run,
   onStatusChange,
+  onRunUpdate,
   onRerun
 }: {
   run: RunRecord
   onStatusChange?: (status: RunStatus) => void
+  onRunUpdate?: (run: RunRecord) => void
   /** When provided, a finished run shows a "Re-run" action (re-launch same agent + target). */
   onRerun?: () => void
 }): React.JSX.Element {
@@ -33,6 +42,10 @@ function RunView({
   const [postModal, setPostModal] = useState<{ kind: PostKind; targetLabel: string } | null>(null)
   const [posting, setPosting] = useState(false)
   const [postedUrl, setPostedUrl] = useState<string | null>(run.postedUrl)
+  const [localStatus, setLocalStatus] = useState<RunLocalStatus>(run.localStatus)
+  const [localStatusAt, setLocalStatusAt] = useState<string | null>(run.localStatusAt)
+  const [settingLocalStatus, setSettingLocalStatus] = useState(false)
+  const [localStatusError, setLocalStatusError] = useState<string | null>(null)
   const [postError, setPostError] = useState<string | null>(null)
   const [copied, setCopied] = useState<string | null>(null)
   const runIdRef = useRef(run.id)
@@ -150,6 +163,26 @@ function RunView({
   const lowQualityMatch = output.match(/^\[aerie\] ⚠ low-quality review:\s*(.+)$/m)
   const lowQualityNote = lowQualityMatch ? lowQualityMatch[1].trim() : null
 
+  const updateLocalStatus = useCallback(
+    async (next: RunLocalStatus): Promise<void> => {
+      setSettingLocalStatus(true)
+      setLocalStatusError(null)
+      try {
+        const res = await window.aerie.runner.setLocalStatus(run.id, next)
+        if (res.ok) {
+          setLocalStatus(res.value.localStatus)
+          setLocalStatusAt(res.value.localStatusAt)
+          onRunUpdate?.(res.value)
+        } else {
+          setLocalStatusError(res.error)
+        }
+      } finally {
+        setSettingLocalStatus(false)
+      }
+    },
+    [onRunUpdate, run.id]
+  )
+
   const onConfirmPost = async (body: string, title: string): Promise<void> => {
     if (!postModal) return
     setPosting(true)
@@ -199,6 +232,18 @@ function RunView({
           >
             Re-run
           </button>
+        )}
+        {isTerminal(status) && localStatus !== 'open' && (
+          <span
+            className={`chip run__local-chip run__local-chip--${localStatus}`}
+            title={
+              localStatusAt
+                ? `${localStatusLabel(localStatus)} ${formatRelativeTime(localStatusAt)}`
+                : undefined
+            }
+          >
+            {localStatusLabel(localStatus)}
+          </span>
         )}
         {copyText.length > 0 && (
           <span className="runview__bar-actions">
@@ -251,6 +296,49 @@ function RunView({
         <p className="run__warn" role="alert">
           ⚠ This review looks low-quality: {lowQualityNote} Check it before posting.
         </p>
+      )}
+
+      {isTerminal(status) && (
+        <div className="run__local">
+          {localStatus === 'open' ? (
+            <span className="muted">No local disposition yet.</span>
+          ) : (
+            <span className="muted">
+              {localStatusLabel(localStatus)}
+              {localStatusAt ? ` ${formatRelativeTime(localStatusAt)}` : ''}
+            </span>
+          )}
+          <button
+            className="btn btn--ghost"
+            onClick={() => void updateLocalStatus('handled')}
+            disabled={settingLocalStatus || localStatus === 'handled'}
+          >
+            Mark handled
+          </button>
+          {status === 'done' && (
+            <button
+              className="btn btn--ghost"
+              onClick={() => void updateLocalStatus('verified')}
+              disabled={settingLocalStatus || localStatus === 'verified'}
+            >
+              Mark verified
+            </button>
+          )}
+          {localStatus !== 'open' && (
+            <button
+              className="btn btn--ghost"
+              onClick={() => void updateLocalStatus('open')}
+              disabled={settingLocalStatus}
+            >
+              Reopen
+            </button>
+          )}
+          {localStatusError && (
+            <span className="run__local-error" role="alert">
+              {localStatusError}
+            </span>
+          )}
+        </div>
       )}
 
       {canPost && (

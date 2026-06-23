@@ -25,6 +25,8 @@ function run(partial: Partial<RunHistoryItem>): RunHistoryItem {
     finishedAt: partial.finishedAt ?? null,
     outputPath: partial.outputPath ?? null,
     postedUrl: partial.postedUrl ?? null,
+    localStatus: partial.localStatus ?? 'open',
+    localStatusAt: partial.localStatusAt ?? null,
     authorLogin: partial.authorLogin ?? null
   }
 }
@@ -41,14 +43,18 @@ describe('cockpit helpers', () => {
     expect(needsHumanAttention(ready)).toBe(true)
     expect(needsHumanAttention(posted)).toBe(false)
     expect(needsHumanAttention(failed)).toBe(true)
+    expect(needsHumanAttention(run({ status: 'done', localStatus: 'handled' }))).toBe(false)
+    expect(isReadyToPost(run({ status: 'done', localStatus: 'verified' }))).toBe(false)
   })
 
-  it('builds the cockpit summary without treating posted runs as attention items', () => {
+  it('builds the cockpit summary without treating posted or handled runs as attention items', () => {
     const summary = cockpitSummary([
       run({ status: 'queued' }),
       run({ status: 'running' }),
       run({ status: 'done', postedUrl: null }),
       run({ status: 'done', postedUrl: 'https://github.com/x/y/pull/1#comment' }),
+      run({ status: 'done', localStatus: 'handled' }),
+      run({ status: 'error', exitCode: 1, localStatus: 'verified' }),
       run({ status: 'killed' })
     ])
 
@@ -56,8 +62,9 @@ describe('cockpit helpers', () => {
       active: 2,
       attention: 2,
       readyToPost: 1,
+      handled: 2,
       posted: 1,
-      completed: 2
+      completed: 3
     })
   })
 
@@ -68,5 +75,7 @@ describe('cockpit helpers', () => {
     expect(newestRuns([older, newer]).map((r) => r.id)).toEqual([2, 1])
     expect(runAttentionLabel(older)).toBe('Failed')
     expect(runAttentionLabel(newer)).toBe('Running')
+    expect(runAttentionLabel(run({ localStatus: 'handled' }))).toBe('Handled locally')
+    expect(runAttentionLabel(run({ localStatus: 'verified' }))).toBe('Verified locally')
   })
 })

@@ -9,6 +9,7 @@ import type {
   ConsensusResult,
   RunFinding,
   RunHistoryItem,
+  RunLocalStatus,
   RunRecord,
   RunStatus,
   StartBatchParams,
@@ -64,6 +65,7 @@ import { createSemaphore } from './semaphore'
 import { TOOL_CATALOG } from './toolCatalog'
 import {
   getAccount,
+  getRun,
   getPrompt,
   getRepoById,
   deleteSetting,
@@ -75,6 +77,7 @@ import {
   listFindingsForRun,
   listRunsForRepo,
   setSetting,
+  updateRunLocalStatus,
   updateRunStatus,
   type RepoRow,
   type RunRow
@@ -415,8 +418,29 @@ function rowToRecord(row: RunRow): RunRecord {
     finishedAt: row.finished_at,
     outputPath: row.output_path,
     postedUrl: row.posted_url,
+    localStatus: row.local_status,
+    localStatusAt: row.local_status_at,
     authorLogin: row.author_login
   }
+}
+
+function isTerminalStatus(status: RunStatus): boolean {
+  return status === 'done' || status === 'error' || status === 'killed'
+}
+
+export function setRunLocalStatus(runId: number, localStatus: RunLocalStatus): RunRecord {
+  const current = getRun(runId)
+  if (!current) throw new Error('Run not found.')
+  if (localStatus !== 'open' && !isTerminalStatus(current.status)) {
+    throw new Error('Only finished runs can be marked handled or verified.')
+  }
+  if (localStatus === 'verified' && current.status !== 'done') {
+    throw new Error('Only successful runs can be marked verified.')
+  }
+  updateRunLocalStatus(runId, localStatus, localStatus === 'open' ? null : new Date().toISOString())
+  const updated = getRun(runId)
+  if (!updated) throw new Error('Run not found.')
+  return rowToRecord(updated)
 }
 
 /**

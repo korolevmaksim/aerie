@@ -13,6 +13,12 @@ same change set.
 
 ### Added
 
+- **Local run disposition**: finished runs can now be marked **Handled locally** or
+  **Verified locally** from the run view, with a **Reopen** action for mistakes. The state is
+  persisted in SQLite (`runs.local_status/local_status_at`), exposed through a metadata-only
+  runner IPC, shown in History/export/search, and excluded from the Cockpit attention /
+  ready-to-post queues without pretending the review was posted to GitHub.
+
 - **Project-wide reviews**: repo detail now opens on a **Project** target that runs the same
   local-agent review loop against the current default-branch snapshot. Main resolves the branch
   head at launch, checks it out through the existing isolated worktree path, writes a bounded

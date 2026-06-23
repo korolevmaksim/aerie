@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { RunHistoryItem } from '@shared/types'
+import type { RunHistoryItem, RunRecord } from '@shared/types'
 import { formatRelativeTime } from '../lib/format'
 import { filterRuns } from '../lib/runFilter'
 import { runsToJson, runsToMarkdown } from '../lib/runExport'
@@ -190,6 +190,21 @@ function HistoryPanel({
     }
   }, [])
 
+  const applyRunUpdate = useCallback((updated: RunRecord): void => {
+    setRuns((prev) =>
+      prev.map((run) =>
+        run.id === updated.id
+          ? { ...updated, repoFullName: run.repoFullName, accountId: run.accountId }
+          : run
+      )
+    )
+    setSelected((prev) =>
+      prev && prev.id === updated.id
+        ? { ...updated, repoFullName: prev.repoFullName, accountId: prev.accountId }
+        : prev
+    )
+  }, [])
+
   // Safety net: while any run for THIS account is still active, re-poll the list
   // so a status that settled before this panel mounted (or any missed event)
   // still converges.
@@ -226,7 +241,12 @@ function HistoryPanel({
             {error}
           </p>
         )}
-        <RunView key={selected.id} run={selected} onRerun={() => void rerunSelected(selected)} />
+        <RunView
+          key={selected.id}
+          run={selected}
+          onRunUpdate={applyRunUpdate}
+          onRerun={() => void rerunSelected(selected)}
+        />
       </section>
     )
   }
@@ -329,6 +349,11 @@ function HistoryPanel({
                 >
                   posted ↗
                 </a>
+              )}
+              {r.localStatus !== 'open' && (
+                <span className={`chip history-row__local history-row__local--${r.localStatus}`}>
+                  {r.localStatus === 'verified' ? 'verified' : 'handled'}
+                </span>
               )}
             </li>
           ))}

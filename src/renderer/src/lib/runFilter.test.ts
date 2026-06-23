@@ -17,6 +17,8 @@ const run = (over: Partial<RunHistoryItem> = {}): RunHistoryItem => ({
   finishedAt: '2026-06-23T00:05:00Z',
   outputPath: null,
   postedUrl: null,
+  localStatus: 'open',
+  localStatusAt: null,
   authorLogin: 'monalisa',
   ...over
 })
@@ -33,6 +35,7 @@ describe('matchesRunQuery', () => {
     expect(matchesRunQuery(run(), 'abcdef')).toBe(true) // headSha prefix
     expect(matchesRunQuery(run(), 'done')).toBe(true) // status
     expect(matchesRunQuery(run(), 'monalisa')).toBe(true) // authorLogin
+    expect(matchesRunQuery(run({ localStatus: 'handled' }), 'handled locally')).toBe(true)
   })
 
   it('matches a PR by number with or without the # prefix', () => {

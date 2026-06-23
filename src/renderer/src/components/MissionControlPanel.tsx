@@ -303,6 +303,7 @@ function MissionControlPanel({
           tone={summary.attention > 0 ? 'bad' : 'good'}
         />
         <Metric label="ready to post" value={summary.readyToPost} tone="warn" />
+        <Metric label="handled" value={summary.handled} tone="neutral" />
         <Metric label="completed" value={summary.completed} tone="good" />
         <Metric label="posted" value={summary.posted} tone="neutral" />
       </div>

@@ -31,6 +31,7 @@ import type {
   ReposResult,
   RunFinding,
   RunHistoryItem,
+  RunLocalStatus,
   RunRecord,
   SettingKey,
   StartBatchParams,
@@ -56,6 +57,7 @@ import {
   saveUserAgent,
   setAgentModel,
   setAgentReasoning,
+  setRunLocalStatus,
   startBatch,
   startRun
 } from './agentRunner'
@@ -145,6 +147,7 @@ function fail(error: string): ApiResult<never> {
 }
 
 const SEVERITY_VALUES = new Set<string>(['critical', 'high', 'medium', 'low', 'info'])
+const RUN_LOCAL_STATUS_VALUES = new Set<RunLocalStatus>(['open', 'handled', 'verified'])
 
 interface RunTarget {
   accountId: number
@@ -810,6 +813,23 @@ export function registerIpcHandlers(): void {
     const run = getRun(runId)
     if (!run) return fail('Run not found.')
     return ok(getRunTranscript(runId, run.output_path))
+  })
+
+  ipcMain.handle(CHANNELS.runnerSetLocalStatus, (event, params: unknown): ApiResult<RunRecord> => {
+    if (!isTrustedSender(event)) return fail('Untrusted sender.')
+    const p = params as { runId?: unknown; localStatus?: unknown }
+    if (!isValidId(p?.runId)) return fail('Invalid run id.')
+    if (
+      typeof p.localStatus !== 'string' ||
+      !RUN_LOCAL_STATUS_VALUES.has(p.localStatus as RunLocalStatus)
+    ) {
+      return fail('Invalid local run status.')
+    }
+    try {
+      return ok(setRunLocalStatus(p.runId, p.localStatus as RunLocalStatus))
+    } catch (error) {
+      return fail(error instanceof Error ? error.message : 'Failed to update run status.')
+    }
   })
 
   // --- post results to GitHub (Stage 6) — write, gated by the in-app confirm --

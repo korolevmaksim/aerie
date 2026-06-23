@@ -46,6 +46,7 @@ export const CHANNELS = {
   runnerFindings: 'runner:findings',
   runnerConsensus: 'runner:consensus',
   runnerTranscript: 'runner:transcript',
+  runnerSetLocalStatus: 'runner:setLocalStatus',
   runsListAll: 'runs:listAll',
   pipelinesList: 'pipelines:list',
   pipelinesSave: 'pipelines:save',

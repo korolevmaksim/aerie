@@ -17,6 +17,8 @@ const run = (over: Partial<RunHistoryItem> = {}): RunHistoryItem => ({
   finishedAt: '2026-06-23T00:05:00Z',
   outputPath: '/Users/secret/Library/Application Support/aerie/runs/1.log',
   postedUrl: 'https://github.com/octocat/hello-world/commit/abc#comment',
+  localStatus: 'handled',
+  localStatusAt: '2026-06-23T00:06:00Z',
   authorLogin: 'monalisa',
   ...over
 })
@@ -33,6 +35,8 @@ describe('toExportRun', () => {
       exitCode: 0,
       startedAt: '2026-06-23T00:00:00Z',
       finishedAt: '2026-06-23T00:05:00Z',
+      localStatus: 'handled',
+      localStatusAt: '2026-06-23T00:06:00Z',
       author: 'monalisa',
       postedUrl: 'https://github.com/octocat/hello-world/commit/abc#comment'
     })

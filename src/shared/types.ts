@@ -463,6 +463,17 @@ export interface StartBatchResult {
   skipped: { id: string; reason: 'not-eligible' | 'over-cap' | 'already-running' }[]
 }
 
+/**
+ * Private local operator disposition for a run. Deliberately separate from
+ * `postedUrl`: posting is a GitHub write, while this is workflow state on this machine.
+ */
+export type RunLocalStatus = 'open' | 'handled' | 'verified'
+
+export interface SetRunLocalStatusParams {
+  runId: number
+  localStatus: RunLocalStatus
+}
+
 /** A normalized finding persisted for a run (tool output or an agent's findings block). */
 export interface RunFinding {
   /** The tool/agent that produced it (e.g. 'eslint', 'codex'). */
@@ -509,6 +520,9 @@ export interface RunRecord {
   finishedAt: string | null
   outputPath: string | null
   postedUrl: string | null
+  /** Private local workflow state: clears handled/verified runs from attention queues. */
+  localStatus: RunLocalStatus
+  localStatusAt: string | null
   /** GitHub login of the reviewed commit/PR author (for @-mention on post). */
   authorLogin: string | null
 }

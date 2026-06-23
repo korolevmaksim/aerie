@@ -7,7 +7,8 @@ import type {
   PipelineDraft,
   PipelineRunStatus,
   PipelineTrigger,
-  RefType
+  RefType,
+  RunLocalStatus
 } from '../shared/types'
 import {
   DEFAULT_PROJECT_REVIEW_INSTRUCTIONS,
@@ -327,6 +328,16 @@ const MIGRATIONS: ReadonlyArray<(db: Database.Database) => void> = [
         new Date().toISOString()
       )
     }
+  },
+  // v16 — private local run disposition. This lets a solo operator mark an
+  // audit as handled/verified without pretending it was posted to GitHub.
+  (db) => {
+    db.exec(`
+      ALTER TABLE runs
+        ADD COLUMN local_status TEXT NOT NULL DEFAULT 'open'
+          CHECK (local_status IN ('open','handled','verified'));
+      ALTER TABLE runs ADD COLUMN local_status_at TEXT;
+    `)
   }
 ]
 
@@ -689,6 +700,8 @@ export interface RunRow {
   finished_at: string | null
   output_path: string | null
   posted_url: string | null
+  local_status: RunLocalStatus
+  local_status_at: string | null
   author_login: string | null
 }
 
@@ -741,6 +754,16 @@ export function updateRunStatus(
 
 export function setRunPostedUrl(id: number, url: string): void {
   requireDb().prepare(`UPDATE runs SET posted_url = ? WHERE id = ?`).run(url, id)
+}
+
+export function updateRunLocalStatus(
+  id: number,
+  localStatus: RunLocalStatus,
+  localStatusAt: string | null
+): void {
+  requireDb()
+    .prepare(`UPDATE runs SET local_status = ?, local_status_at = ? WHERE id = ?`)
+    .run(localStatus, localStatusAt, id)
 }
 
 export function getRun(id: number): RunRow | undefined {

@@ -16,6 +16,8 @@ function searchableText(run: RunHistoryItem): string {
     runRefLabel(run),
     run.refId,
     run.status,
+    run.localStatus,
+    run.localStatus === 'open' ? '' : `${run.localStatus} locally`,
     run.authorLogin ?? ''
   ]
     .join(' ')

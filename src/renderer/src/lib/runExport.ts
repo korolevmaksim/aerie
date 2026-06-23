@@ -17,6 +17,8 @@ export interface ExportedRun {
   exitCode: number | null
   startedAt: string
   finishedAt: string | null
+  localStatus: string
+  localStatusAt: string | null
   author: string | null
   postedUrl: string | null
 }
@@ -31,6 +33,8 @@ export function toExportRun(run: RunHistoryItem): ExportedRun {
     exitCode: run.exitCode,
     startedAt: run.startedAt,
     finishedAt: run.finishedAt,
+    localStatus: run.localStatus,
+    localStatusAt: run.localStatusAt,
     author: run.authorLogin,
     postedUrl: run.postedUrl
   }
@@ -48,6 +52,7 @@ const MD_COLUMNS: { header: string; cell: (r: ExportedRun) => string }[] = [
   { header: 'SHA', cell: (r) => r.sha.slice(0, 8) },
   { header: 'Status', cell: (r) => r.status },
   { header: 'Exit', cell: (r) => (r.exitCode === null ? '' : String(r.exitCode)) },
+  { header: 'Local', cell: (r) => r.localStatus },
   { header: 'Started', cell: (r) => r.startedAt },
   { header: 'Finished', cell: (r) => r.finishedAt ?? '' },
   { header: 'Author', cell: (r) => r.author ?? '' },

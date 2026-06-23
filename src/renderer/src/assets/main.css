@@ -533,8 +533,14 @@ select.field {
   border-radius: 7px;
 }
 
-.history-row__posted {
+.history-row__posted,
+.history-row__local {
   flex: none;
+}
+
+.history-row__local {
+  color: var(--muted);
+  border-color: var(--border);
 }
 
 /* shared run view */
@@ -1452,6 +1458,16 @@ select.field {
   border-color: var(--low);
 }
 
+.run__local-chip {
+  color: var(--muted);
+  border-color: var(--border);
+}
+
+.run__local-chip--verified {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+
 .run__console {
   margin: 0;
   max-height: 360px;
@@ -1468,11 +1484,17 @@ select.field {
   color: #c9d1d9;
 }
 
+.run__local,
 .run__post {
   display: flex;
   align-items: center;
   gap: 0.6rem;
   flex-wrap: wrap;
+}
+
+.run__local-error {
+  color: var(--low);
+  font-size: 0.82rem;
 }
 
 /* confirm modal (Stage 6) */
