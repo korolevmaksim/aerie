@@ -179,6 +179,9 @@ async function resolveRunTarget(p: Partial<StartRunParams>): Promise<ApiResult<R
   if (p.promptId !== undefined && p.promptId !== null && !isValidId(p.promptId)) {
     return fail('Invalid prompt id.')
   }
+  if (p.model !== undefined && typeof p.model !== 'string') {
+    return fail('Invalid model.')
+  }
 
   let sha = p.sha
   let refId = p.refId
@@ -717,7 +720,7 @@ export function registerIpcHandlers(): void {
       // Output and status flow through the central run-events hub (broadcast to all
       // windows + the tray); no per-sender wiring here.
       try {
-        return ok(startRun({ ...t, agentId: p.agentId }))
+        return ok(startRun({ ...t, agentId: p.agentId, model: p.model }))
       } catch (error) {
         return fail(error instanceof Error ? error.message : 'Failed to start run.')
       }

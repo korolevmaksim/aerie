@@ -49,6 +49,9 @@ function PipelineRow({
         <span className="pipeline__name">{pipeline.name}</span>
         <code className="pipeline__repo">{repoFullName ?? `repo #${pipeline.repoId}`}</code>
         <span className="pipeline__trigger badge">{pipeline.trigger}</span>
+        <span className="pipeline__trigger badge">
+          {pipeline.reviewTarget === 'project' ? 'project audit' : 'commit diff'}
+        </span>
         <span className={`status-pill status-pill--${statusTone(view.status)}`} aria-live="polite">
           {statusLabel(view.status)}
           {view.posted ? ' · posted' : ''}
@@ -241,8 +244,8 @@ function AutomatePanel({ accountId }: { accountId: number | null }): React.JSX.E
         </button>
       </div>
       <p className="muted">
-        Pipelines watch a repo and run your agents on a new commit, then notify, stage, or (only
-        when you opt in) post the review. They run locally on a poll — never a webhook.
+        Pipelines watch a repo and run your agents on a new default-branch head, then notify, stage,
+        or (only when you opt in) post the review. They run locally on a poll — never a webhook.
       </p>
 
       {poller && items && items.length > 0 && (

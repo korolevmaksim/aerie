@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Stage smoke for the M9a v14 "automation pipelines" migration + store helpers: runs
+// Stage smoke for the M9a "automation pipelines" migrations + store helpers: runs
 // INSIDE Electron (real better-sqlite3 ABI) and proves:
 //   1. pipelines/pipeline_runs tables exist; the CHECK constraints reject bad
 //      trigger / action_kind / status values;
@@ -13,8 +13,9 @@
 //      WITHOUT touching any watch state;
 //   7. ON DELETE CASCADE: deleting a pipeline removes its runs; deleting a repo removes
 //      its pipelines (and their runs);
-//   8. foreign_key_check reports no violations.
-// Mirrors the exact v14 SQL + helper statements in src/main/store.ts — keep in sync.
+//   8. scheduled project-audit runs can be recorded with ref_type='project';
+//   9. foreign_key_check reports no violations.
+// Mirrors the exact pipeline SQL + helper statements in src/main/store.ts — keep in sync.
 // Run: `npm run smoke:pipelines`
 
 const { app } = require('electron')
@@ -62,7 +63,7 @@ app.whenReady().then(() => {
         id          INTEGER PRIMARY KEY AUTOINCREMENT,
         pipeline_id INTEGER NOT NULL REFERENCES pipelines(id) ON DELETE CASCADE,
         trigger     TEXT    NOT NULL CHECK (trigger IN ('commit','pr','schedule','manual')),
-        ref_type    TEXT    NOT NULL CHECK (ref_type IN ('commit','pr','working-tree')),
+        ref_type    TEXT    NOT NULL CHECK (ref_type IN ('commit','pr','working-tree','project')),
         ref         TEXT    NOT NULL,
         head_sha    TEXT    NOT NULL,
         status      TEXT    NOT NULL CHECK (status IN ('pending','running','done','error','skipped')),
@@ -252,6 +253,23 @@ app.whenReady().then(() => {
     db.prepare(`UPDATE pipeline_runs SET status='error' WHERE dedupe_key='k2'`).run()
     assert(!findDone.get('k2'), 'an errored run is NOT treated as already-processed (retryable)')
 
+    insertRun.run({
+      pipelineId: pid2,
+      trigger: 'schedule',
+      refType: 'project',
+      ref: 'main',
+      headSha: 'e'.repeat(40),
+      action: 'notify',
+      dedupeKey: 'kproject',
+      startedAt: '2026-06-22T02:30:00Z'
+    })
+    assert(
+      db.prepare(`SELECT ref_type FROM pipeline_runs WHERE dedupe_key='kproject'`).get()
+        .ref_type === 'project',
+      "a scheduled project-audit run can be recorded with ref_type='project'"
+    )
+    db.prepare(`UPDATE pipeline_runs SET status='done' WHERE dedupe_key='kproject'`).run()
+
     // --- guardrail inputs (countActivePipelineRuns / recentPipelineRunStarts /
     //     lastRepoPipelineRunStart), exactly as the store helpers query them. ---
     // k1 is 'done', k2 is 'error' so far → 0 active for pid2. Add one running.
@@ -280,8 +298,8 @@ app.whenReady().then(() => {
       )
       .all(pid2, '2026-06-22T02:00:00Z')
       .map((r) => r.started_at)
-    // started_at of k2 (02:00), kactive (05:00) are >= cutoff; k1 (01:00) is not.
-    assert(recent.length === 2, `expected 2 recent starts, got ${recent.length}`)
+    // started_at of k2 (02:00), kproject (02:30), kactive (05:00) are >= cutoff; k1 (01:00) is not.
+    assert(recent.length === 3, `expected 3 recent starts, got ${recent.length}`)
     assert(recent[0] === '2026-06-22T05:00:00Z', 'recent starts are newest-first')
 
     const lastRepo = db
@@ -336,7 +354,7 @@ app.whenReady().then(() => {
 
     db.close()
     console.log(
-      'smoke:pipelines PASS — v14 pipelines + pipeline_runs (CRUD, dedupe, crash recovery) verified'
+      'smoke:pipelines PASS — pipelines + pipeline_runs (CRUD, project runs, dedupe, crash recovery) verified'
     )
     app.exit(0)
   } catch (err) {

@@ -18,6 +18,7 @@ import {
   deriveWatches,
   matchingPipelines,
   selectDueWatches,
+  shouldProcessHead,
   watchKey,
   DELTA_META,
   type RepoInfo,
@@ -159,9 +160,10 @@ async function tick(): Promise<void> {
         // won't re-run. On a pipeline error `processDelta` deliberately does NOT advance
         // last_seen, so the same head is re-detected next cycle — that retry is safe because
         // the engine's dedupe gate skips any already-completed identical work (no double write).
-        if (result.changed && result.headSha && !stopped) {
+        const applicable = matchingPipelines(pipelines, watch)
+        if (result.headSha && shouldProcessHead(applicable, result.changed) && !stopped) {
           const delta = buildCommitDelta(watch, result.headSha, DELTA_META)
-          await processDelta(matchingPipelines(pipelines, watch), delta, ports)
+          await processDelta(applicable, delta, ports)
         }
       } catch (err) {
         log.warn('poller: poll failed', {

@@ -5,7 +5,7 @@
 // ONLY engine→GitHub write call site is `dispatchGithubWrite`, which re-asserts the auto-post
 // gate before any write. Verified by the build smoke (it compiles against the real signatures).
 
-import type { Pipeline, PipelineStep } from '../shared/types'
+import type { Pipeline, PipelineReviewTarget, PipelineStep } from '../shared/types'
 import { aggregateRunFindings, startRun } from './agentRunner'
 import { createCommitComment, createIssue, createPrComment } from './github'
 import { log } from './logger'
@@ -40,9 +40,25 @@ const githubWriters: GithubWriters = { createCommitComment, createPrComment, cre
 /** Maps a pipeline step to a real `startRun`. Only agent steps run (tool steps are filtered
  *  out by `loadEnabledPipelines`; this guards defensively). A PR delta runs against the PR
  *  number; a commit delta against the head SHA. */
-function startStep(step: PipelineStep, delta: DeltaContext): number {
+function startStep(
+  step: PipelineStep,
+  delta: DeltaContext,
+  reviewTarget: PipelineReviewTarget
+): number {
   if (step.kind !== 'agent') {
     throw new Error(`pipeline step "${step.id}": tool steps are not yet supported`)
+  }
+  if (reviewTarget === 'project') {
+    const run = startRun({
+      accountId: delta.accountId,
+      repoId: delta.repoId,
+      sha: delta.headSha,
+      refType: 'project',
+      refId: delta.ref,
+      agentId: step.ref,
+      model: step.model
+    })
+    return run.id
   }
   let refId: string
   if (delta.refType === 'pr') {
@@ -65,7 +81,8 @@ function startStep(step: PipelineStep, delta: DeltaContext): number {
     sha: delta.headSha,
     refType: delta.refType,
     refId,
-    agentId: step.ref
+    agentId: step.ref,
+    model: step.model
   })
   return run.id
 }

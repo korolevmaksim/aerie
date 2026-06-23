@@ -137,3 +137,11 @@ export function matchingPipelines(pipelines: Pipeline[], spec: WatchSpec): Pipel
       (p.trigger === 'commit' || (p.trigger === 'schedule' && parseScheduleMs(p.schedule) !== null))
   )
 }
+
+/**
+ * Whether a due watch should drive the engine. Commit-diff pipelines need a new head; scheduled
+ * project audits are cadence-based and intentionally re-run on the current snapshot.
+ */
+export function shouldProcessHead(pipelines: Pipeline[], changed: boolean): boolean {
+  return changed || pipelines.some((p) => p.trigger === 'schedule' && p.reviewTarget === 'project')
+}

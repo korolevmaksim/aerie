@@ -883,7 +883,7 @@ async function execute(
       promptFile,
       diffFile: prepared.diffPath,
       outFile: join(runsDir, `${runId}.agentout`),
-      model: resolveModel(agent),
+      model: params.model?.trim() || resolveModel(agent),
       reasoning: resolveReasoning(agent),
       // Working-tree/project reviews are measured at HEAD; commit/PR runs use the PR base
       // or the commit's first parent.

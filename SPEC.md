@@ -259,7 +259,7 @@ http_cache(key, etag, payload, updated_at)   -- conditional-request (ETag) cache
 watches(id, repo_id, ref_type['commit'|'pr'], ref, last_seen_sha, last_polled_at)  -- M8
 pipelines(id, repo_id, name, trigger['commit'|'pr'|'schedule'|'manual'], enabled,
           action_kind['notify'|'stage'|'post'], auto_post, config, created_at, updated_at)  -- M9a
-pipeline_runs(id, pipeline_id, trigger, ref_type, ref, head_sha,
+pipeline_runs(id, pipeline_id, trigger, ref_type['commit'|'pr'|'working-tree'|'project'], ref, head_sha,
               status['pending'|'running'|'done'|'error'|'skipped'], action, posted,
               dedupe_key, started_at, finished_at)  -- M9a
 settings(key, value)
@@ -279,21 +279,23 @@ settings(key, value)
 > **Project reviews.** A `ref_type` of `'project'` reviews a whole repository snapshot:
 > `ref_id` is the audited branch/ref name, `head_sha` is resolved in the main process from
 > GitHub immediately before launch, and the runner checks that SHA out into the normal
-> app-owned isolated worktree. Instead of generating a unified diff, Aerie writes a bounded
-> project audit brief (`diffPath`/`{{reviewFile}}`) with repo metadata, top-level inventory,
-> landmarks, and a capped tracked-file list; the agent is expected to inspect the checked-out
-> source directly. Project reviews do not post to a single commit/PR thread; finished output
-> can be turned into a GitHub issue through the existing explicit confirm flow.
+> app-owned isolated worktree, unless the repo is explicitly configured to use its mapped
+> local worktree. Instead of generating a unified diff, Aerie writes a bounded project audit
+> brief (`diffPath`/`{{reviewFile}}`) with repo metadata, top-level inventory, landmarks,
+> and a capped tracked-file list; the agent is expected to inspect the checked-out source
+> directly. Project reviews do not post to a single commit/PR thread; finished output can
+> be turned into a GitHub issue through the existing explicit confirm flow.
 
 > **Automation pipelines — foundation (ROADMAP M9a).** A pipeline is a configurable
 > `trigger → scope filter → steps → aggregate → action` automation, persisted per repo. The
-> authored config (`PipelineDraft`: trigger/schedule/scope/steps/action/guardrails) is the
+> authored config (`PipelineDraft`: trigger/schedule/reviewTarget/scope/steps/action/guardrails) is the
 > source of truth, stored as JSON in `pipelines.config`; `enabled`, `action_kind`, and
 > `auto_post` are PROMOTED to columns (derived on every write) for cheap querying and a
 > SQL-level auto-post guard. Pure, unit-tested `pipelineModel.ts` holds the security-critical
 > logic: `isPipelineDraft` (validate before anything reaches the engine), `matchesScope`
 > (branch/label/author/path/draft/maxCommits — absent predicate = wildcard), `dedupeKey` +
-> `pipelineConfigHash` (so the poller never re-runs identical work on an unchanged head), and
+> `pipelineConfigHash` (steps + per-step models + action + review target, so the poller never
+> re-runs identical commit-diff work on an unchanged head), and
 > the **auto-post gate** — `mayAutoPost`/`assertMayPost`/`effectiveAction`. Per SPEC §10
 > auto-post is a HARD per-pipeline opt-in: the engine may reach a GitHub write ONLY when
 > `action.kind==='post'` AND `action.autoPost===true`; `assertMayPost` throws otherwise (a
@@ -324,10 +326,13 @@ settings(key, value)
 > rate-based continuous cadence. `deriveWatches` carries the interval as `WatchSpec.scheduleMs`
 > (a commit pipeline sharing the branch forces rate-based; two schedules merge to the
 > most-frequent), and the poller reschedules a schedule-only watch at `now + scheduleMs`. A
-> scheduled run reviews the latest commit when it changes (deduped exactly like a commit run) and
-> flows through the **identical gated path** — `matchesScope` → guardrails → dedupe →
-> `assertMayPost` — so it adds no new exec/post surface. Run-now also covers `schedule` pipelines
-> (a one-shot forced run on the current head). `pr` remains manual-only.
+> scheduled run has a `reviewTarget`: `commit` reviews the latest commit diff when the head changes
+> (deduped exactly like a commit run), while `project` reviews the whole repository snapshot on every
+> due cadence even when the head SHA is unchanged. Both paths flow through the **identical gated
+> path** — `matchesScope` → guardrails → dedupe policy → `assertMayPost` — so they add no new
+> exec/post surface. Project-audit schedule runs record `pipeline_runs.ref_type='project'` and route
+> post actions to GitHub issues. Run-now also covers `schedule` pipelines (a one-shot forced run on
+> the current head). `pr` remains manual-only.
 
 > **Automation pipelines — engine core (ROADMAP M9a).** `pipelines.ts` is the dependency-injected,
 > electron-free engine. `runPipelineForDelta(pipeline, delta, ports)` drives one pipeline:
@@ -354,6 +359,9 @@ settings(key, value)
 > write path is the pure `dispatchGithubWrite`, which re-asserts `assertMayPost` and routes commit→
 > `createCommitComment` / pr→`createPrComment` / issue→`createIssue`. `loadEnabledPipelines` parses +
 > validates each persisted config (skipping malformed/forged rows and, for now, tool-bearing pipelines).
+> `startStep` passes each step's optional model to `startRun`, where it becomes the real `{{model}}`
+> substitution for that run instead of a decorative editor field; absent means the agent's saved
+> default model.
 > `poller.ts` is the single self-rescheduling timer that drives it: each tick it derives the watches
 > for the enabled pipelines (commit-trigger → repo default branch), polls the due ones with
 > `pollCommitHead`, and on a new head runs `processDelta` through the live ports — pacing each watch

@@ -87,7 +87,7 @@ export function shortSha(sha: string): string {
 export function formatRunLine(run: PipelineRunSummary): string {
   const parts: string[] = [run.action]
   if (run.posted) parts.push('posted')
-  parts.push(run.trigger)
+  parts.push(run.refType === 'project' ? 'project audit' : run.trigger)
   if (run.headSha) parts.push(shortSha(run.headSha))
   return parts.join(' · ')
 }

@@ -13,6 +13,14 @@ same change set.
 
 ### Added
 
+- **Pipeline model selection and scheduled project audits**: pipeline steps now pass their selected
+  model through to the runner as a real per-run `{{model}}` override, and the editor chooses models
+  from the selected agent/tool's known model list. Scheduled pipelines also gained a review target:
+  they can keep reviewing the latest commit diff on head changes, or run a whole-project audit on
+  every due cadence using the existing Project runner and repo clone/worktree setting. Project audit
+  pipeline runs are recorded with `pipeline_runs.ref_type='project'` and post actions route to
+  GitHub issues.
+
 - **Local run disposition**: finished runs can now be marked **Handled locally** or
   **Verified locally** from the run view, with a **Reopen** action for mistakes. The state is
   persisted in SQLite (`runs.local_status/local_status_at`), exposed through a metadata-only
@@ -51,14 +59,14 @@ same change set.
 
 - **Scheduled pipelines actually run now** (ROADMAP M9a): the `schedule` trigger was a non-functional
   stub — the editor had no cadence field and the poller only fired `commit` triggers. You can now set
-  **Run every N minutes / hours / days** in the pipeline editor, and a scheduled pipeline polls its
-  repo's default branch on that cadence (instead of the continuous commit cadence), reviewing the
-  latest commit when it changes — lighter on API budget for a periodic check. It runs once right
-  after you enable it (so it's testable), and **Run now** works on it too. The cadence is stored as a
-  compact `<N><unit>` string (`src/shared/schedule.ts`, shared by the editor + poller and
-  unit-tested); a scheduled run flows through the **same gated path** as a commit run (scope →
-  guardrails → dedupe → the `assertMayPost` auto-post gate), so it adds no new write/exec surface.
-  `pr` remains manual-only.
+  **Run every N minutes / hours / days** in the pipeline editor, and a commit-target scheduled
+  pipeline polls its repo's default branch on that cadence (instead of the continuous commit
+  cadence), reviewing the latest commit when it changes — lighter on API budget for a periodic check.
+  It runs once right after you enable it (so it's testable), and **Run now** works on it too. The
+  cadence is stored as a compact `<N><unit>` string (`src/shared/schedule.ts`, shared by the editor +
+  poller and unit-tested); a scheduled run flows through the **same gated path** as a commit run
+  (scope → guardrails → dedupe → the `assertMayPost` auto-post gate), so it adds no new write/exec
+  surface. `pr` remains manual-only.
 
 - **Pick model & thinking level in the agent editor** (ROADMAP M12): the custom-agent form no
   longer forces hand-typing raw flags. It is restructured into **Identity** · **Basics** ·

@@ -154,6 +154,9 @@ export interface PollResult {
 
 export type PipelineTrigger = 'commit' | 'pr' | 'schedule' | 'manual'
 
+/** What the pipeline reviews when a commit/schedule watch fires. */
+export type PipelineReviewTarget = 'commit' | 'project'
+
 /** What the pipeline does with the aggregated result. `post` is gated by `autoPost`. */
 export type PipelineActionKind = 'notify' | 'stage' | 'post'
 
@@ -215,6 +218,12 @@ export interface PipelineDraft {
   name: string
   repoId: number
   trigger: PipelineTrigger
+  /**
+   * Scope of the review work. `commit` reviews the latest commit diff; `project`
+   * audits the whole checked-out default-branch snapshot. Absent means `commit`
+   * for older saved pipelines.
+   */
+  reviewTarget?: PipelineReviewTarget
   /** Cron-ish schedule for `trigger==='schedule'`, interpreted by the poller. */
   schedule?: string
   enabled: boolean
@@ -435,6 +444,8 @@ export interface StartRunParams {
   /** Commit SHA, PR number, WorkingTreeMode, or project branch/ref name. */
   refId: string
   agentId: string
+  /** Optional per-run model override; falls back to the agent's saved/default model. */
+  model?: string
   /** Selected review prompt; falls back to the built-in default when absent. */
   promptId?: number
   /** GitHub login of the commit/PR author, so a posted comment can @-mention them. */

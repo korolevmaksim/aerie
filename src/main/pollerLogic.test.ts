@@ -5,6 +5,7 @@ import {
   deriveWatches,
   matchingPipelines,
   selectDueWatches,
+  shouldProcessHead,
   watchKey,
   type RepoInfo,
   type WatchSpec
@@ -182,5 +183,20 @@ describe('matchingPipelines', () => {
       pipeline({ id: 6, repoId: 7, trigger: 'manual' }) // manual-only
     ]
     expect(matchingPipelines(ps, spec).map((p) => p.id)).toEqual([1, 4])
+  })
+})
+
+describe('shouldProcessHead', () => {
+  it('requires a changed head unless a scheduled project audit is due', () => {
+    expect(shouldProcessHead([pipeline({ trigger: 'schedule', schedule: '6h' })], false)).toBe(
+      false
+    )
+    expect(
+      shouldProcessHead(
+        [pipeline({ trigger: 'schedule', schedule: '6h', reviewTarget: 'project' })],
+        false
+      )
+    ).toBe(true)
+    expect(shouldProcessHead([pipeline({ trigger: 'commit' })], true)).toBe(true)
   })
 })

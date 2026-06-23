@@ -8,12 +8,14 @@ import type {
   PipelineAction,
   PipelineActionKind,
   PipelineDraft,
+  PipelineReviewTarget,
   PipelineScope,
   PipelineStep,
   PipelineTrigger
 } from '../shared/types'
 
 const TRIGGERS: readonly PipelineTrigger[] = ['commit', 'pr', 'schedule', 'manual']
+const REVIEW_TARGETS: readonly PipelineReviewTarget[] = ['commit', 'project']
 const ACTION_KINDS: readonly PipelineActionKind[] = ['notify', 'stage', 'post']
 const POST_TARGETS = ['commit', 'pr', 'issue'] as const
 
@@ -91,6 +93,13 @@ export function isPipelineDraft(value: unknown): value is PipelineDraft {
   if (typeof value.trigger !== 'string' || !TRIGGERS.includes(value.trigger as PipelineTrigger)) {
     return false
   }
+  if (
+    value.reviewTarget !== undefined &&
+    (typeof value.reviewTarget !== 'string' ||
+      !REVIEW_TARGETS.includes(value.reviewTarget as PipelineReviewTarget))
+  ) {
+    return false
+  }
   if (value.schedule !== undefined && typeof value.schedule !== 'string') return false
   if (typeof value.enabled !== 'boolean') return false
   if (!isScope(value.scope)) return false
@@ -102,6 +111,13 @@ export function isPipelineDraft(value: unknown): value is PipelineDraft {
   // engine re-checks before acting. This validator guarantees structural shape only — the
   // engine must not assume a non-null `schedule`/`target` from a passing draft.
   return true
+}
+
+/** Older saved pipelines do not carry `reviewTarget`; they review commit diffs. */
+export function reviewTargetOf(pipeline: {
+  reviewTarget?: PipelineReviewTarget
+}): PipelineReviewTarget {
+  return pipeline.reviewTarget ?? 'commit'
 }
 
 // --- the auto-post safety gate (SPEC §10) ------------------------------------
@@ -192,10 +208,15 @@ export function matchesScope(scope: PipelineScope, ctx: ScopeContext): boolean {
 /**
  * A stable hash of the bits that determine a run's WORK, so the poller never re-runs
  * identical work on an unchanged head. Includes the steps + their models + the action
- * kind; scope/enabled/name do not affect the produced result and are excluded.
+ * kind + review target; scope/enabled/name do not affect the produced result and are excluded.
  */
-export function pipelineConfigHash(steps: PipelineStep[], action: PipelineActionKind): string {
+export function pipelineConfigHash(
+  steps: PipelineStep[],
+  action: PipelineActionKind,
+  reviewTarget: PipelineReviewTarget = 'commit'
+): string {
   const canon = JSON.stringify({
+    reviewTarget,
     steps: steps.map((s) => ({
       kind: s.kind,
       ref: s.ref,

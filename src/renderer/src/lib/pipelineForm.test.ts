@@ -51,6 +51,7 @@ describe('formToDraft — happy path', () => {
         name: 'CI review',
         repoId: 7,
         trigger: 'commit',
+        reviewTarget: 'commit',
         enabled: false,
         scope: {},
         steps: [{ id: 's1', kind: 'agent', ref: 'codex' }],
@@ -131,7 +132,25 @@ describe('formToDraft — happy path', () => {
       validForm({ trigger: 'schedule', scheduleEvery: '30', scheduleUnit: 'm' })
     )
     expect(r.ok && r.draft.trigger).toBe('schedule')
+    expect(r.ok && r.draft.reviewTarget).toBe('commit')
     expect(r.ok && r.draft.schedule).toBe('30m')
+  })
+
+  it('maps a scheduled project audit target and forces project posts to issues', () => {
+    const r = formToDraft(
+      validForm({
+        trigger: 'schedule',
+        reviewTarget: 'project',
+        actionKind: 'post',
+        autoPost: true,
+        postTarget: 'commit'
+      })
+    )
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      expect(r.draft.reviewTarget).toBe('project')
+      expect(r.draft.action).toEqual({ kind: 'post', autoPost: true, target: 'issue' })
+    }
   })
 
   it('round-trips a schedule cadence through draftToForm → formToDraft', () => {

@@ -40,9 +40,9 @@ const emptyAgg: ConsensusResult = { findings: [], total: 0 }
 interface Recorder {
   posts: Array<{ target: string; body: string }>
   notifies: string[]
-  startedSteps: string[]
+  startedSteps: Array<{ id: string; model?: string; reviewTarget: string }>
   inserted: number
-  inserts: Array<{ trigger: string; action: string; dedupeKey: string }>
+  inserts: Array<{ trigger: string; refType: string; action: string; dedupeKey: string }>
   statusUpdates: Array<{ id: number; status: string }>
   postedFlags: number[]
   advanced: number
@@ -73,6 +73,7 @@ function fakePorts(
       rec.inserted += 1
       rec.inserts.push({
         trigger: input.trigger,
+        refType: input.refType,
         action: input.action,
         dedupeKey: input.dedupeKey
       })
@@ -90,8 +91,8 @@ function fakePorts(
       pipelineRunStartsLastHourMs: [],
       activeRunCount: 0
     }),
-    startStep: (step) => {
-      rec.startedSteps.push(step.id)
+    startStep: (step, _delta, reviewTarget) => {
+      rec.startedSteps.push({ id: step.id, model: step.model, reviewTarget })
       rec.events.push(`start:${step.id}`)
       const id = (runIdSeq += 1)
       stepRunId.set(id, step.id)
@@ -197,6 +198,38 @@ describe('runPipelineForDelta — the auto-post gate', () => {
     )
     expect(posted).toMatchObject({ ran: true, action: 'post', posted: true })
     expect(r2.posts).toHaveLength(1)
+  })
+
+  it('a scheduled PROJECT pipeline records/runs a project audit target and posts issues', async () => {
+    const { ports, rec } = fakePorts()
+    const out = await runPipelineForDelta(
+      pipeline({
+        trigger: 'schedule',
+        reviewTarget: 'project',
+        schedule: '24h',
+        action: action({ kind: 'post', autoPost: true, target: 'commit' })
+      }),
+      delta(),
+      ports
+    )
+    expect(out).toMatchObject({ ran: true, action: 'post', posted: true })
+    expect(rec.inserts[0].refType).toBe('project')
+    expect(rec.startedSteps[0].reviewTarget).toBe('project')
+    expect(rec.posts[0].target).toBe('issue')
+  })
+
+  it('passes a pipeline step model through the run plan', async () => {
+    const { ports, rec } = fakePorts()
+    await runPipelineForDelta(
+      pipeline({ steps: [{ id: 's1', kind: 'agent', ref: 'codex', model: 'gpt-5.5-high' }] }),
+      delta(),
+      ports
+    )
+    expect(rec.startedSteps[0]).toMatchObject({
+      id: 's1',
+      model: 'gpt-5.5-high',
+      reviewTarget: 'commit'
+    })
   })
 })
 

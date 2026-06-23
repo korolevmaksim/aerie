@@ -9,6 +9,7 @@ import type {
   PipelineActionKind,
   PipelineDraft,
   PipelineGuardrails,
+  PipelineReviewTarget,
   PipelineScope,
   PipelineStep,
   PipelineTrigger,
@@ -42,6 +43,8 @@ export interface PipelineFormState {
   /** Numeric string from the repo picker ('' = none selected). */
   repoId: string
   trigger: PipelineTrigger
+  /** What the pipeline reviews when a default-branch watch fires. */
+  reviewTarget: PipelineReviewTarget
   /** Schedule cadence — only meaningful (and shown) when trigger === 'schedule'. */
   scheduleEvery: string
   scheduleUnit: ScheduleUnit
@@ -75,6 +78,7 @@ export function blankForm(): PipelineFormState {
     name: '',
     repoId: '',
     trigger: 'commit',
+    reviewTarget: 'commit',
     scheduleEvery: '6',
     scheduleUnit: 'h',
     steps: [blankStep('s1')],
@@ -118,6 +122,7 @@ export function draftToForm(draft: PipelineDraft): PipelineFormState {
     name: draft.name,
     repoId: String(draft.repoId),
     trigger: draft.trigger,
+    reviewTarget: draft.reviewTarget ?? 'commit',
     scheduleEvery: String(parseScheduleParts(draft.schedule).every),
     scheduleUnit: parseScheduleParts(draft.schedule).unit,
     steps:
@@ -137,7 +142,7 @@ export function draftToForm(draft: PipelineDraft): PipelineFormState {
     maxCommitsText: draft.scope.maxCommits ? String(draft.scope.maxCommits) : '',
     actionKind: draft.action.kind,
     autoPost: draft.action.autoPost,
-    postTarget: draft.action.target ?? 'commit',
+    postTarget: draft.reviewTarget === 'project' ? 'issue' : (draft.action.target ?? 'commit'),
     maxConcurrentRunsText: draft.guardrails.maxConcurrentRuns
       ? String(draft.guardrails.maxConcurrentRuns)
       : '',
@@ -218,11 +223,15 @@ export function formToDraft(form: PipelineFormState, base?: PipelineDraft): Form
   if (!form.includeDrafts) scope.includeDrafts = false
   if (maxCommits && maxCommits > 0) scope.maxCommits = maxCommits
 
+  const reviewTarget: PipelineReviewTarget =
+    form.trigger === 'schedule' ? form.reviewTarget : 'commit'
+  const postTarget: PostTarget = reviewTarget === 'project' ? 'issue' : form.postTarget
+
   const action: PipelineAction = {
     kind: form.actionKind,
     // autoPost only applies to a 'post' action; never persist a true flag on notify/stage.
     autoPost: form.actionKind === 'post' ? form.autoPost : false,
-    ...(form.actionKind === 'post' ? { target: form.postTarget } : {})
+    ...(form.actionKind === 'post' ? { target: postTarget } : {})
   }
 
   const guardrails: PipelineGuardrails = {}
@@ -254,6 +263,7 @@ export function formToDraft(form: PipelineFormState, base?: PipelineDraft): Form
     name,
     repoId,
     trigger: form.trigger,
+    reviewTarget,
     ...(schedule ? { schedule } : {}),
     enabled: base?.enabled ?? false,
     scope,

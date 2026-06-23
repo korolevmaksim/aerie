@@ -338,6 +338,40 @@ const MIGRATIONS: ReadonlyArray<(db: Database.Database) => void> = [
           CHECK (local_status IN ('open','handled','verified'));
       ALTER TABLE runs ADD COLUMN local_status_at TEXT;
     `)
+  },
+  // v17 — allow scheduled pipeline runs to record project-wide audit targets.
+  // Automation still watches commit heads, but a pipeline may now review the whole
+  // project snapshot at that head, so pipeline_runs.ref_type needs to accept 'project'.
+  (db) => {
+    db.exec(`
+      CREATE TABLE pipeline_runs_new (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        pipeline_id INTEGER NOT NULL REFERENCES pipelines(id) ON DELETE CASCADE,
+        trigger     TEXT    NOT NULL CHECK (trigger IN ('commit','pr','schedule','manual')),
+        ref_type    TEXT    NOT NULL CHECK (ref_type IN ('commit','pr','working-tree','project')),
+        ref         TEXT    NOT NULL,
+        head_sha    TEXT    NOT NULL,
+        status      TEXT    NOT NULL CHECK (status IN ('pending','running','done','error','skipped')),
+        action      TEXT    NOT NULL CHECK (action IN ('notify','stage','post')),
+        posted      INTEGER NOT NULL DEFAULT 0,
+        dedupe_key  TEXT    NOT NULL,
+        started_at  TEXT    NOT NULL,
+        finished_at TEXT
+      );
+      INSERT INTO pipeline_runs_new (id, pipeline_id, trigger, ref_type, ref, head_sha,
+                                     status, action, posted, dedupe_key, started_at, finished_at)
+        SELECT id, pipeline_id, trigger, ref_type, ref, head_sha,
+               status, action, posted, dedupe_key, started_at, finished_at
+        FROM pipeline_runs;
+      DROP TABLE pipeline_runs;
+      ALTER TABLE pipeline_runs_new RENAME TO pipeline_runs;
+      CREATE INDEX idx_pipeline_runs_pipeline ON pipeline_runs (pipeline_id);
+      CREATE INDEX idx_pipeline_runs_dedupe ON pipeline_runs (dedupe_key);
+    `)
+    const violations = db.pragma('foreign_key_check') as unknown[]
+    if (Array.isArray(violations) && violations.length > 0) {
+      throw new Error('v17 migration left dangling foreign keys')
+    }
   }
 ]
 

@@ -90,18 +90,20 @@ third-party service.
 - **Command palette (Cmd/Ctrl-K)** — fuzzy-jump to any view, account, or repo without reaching
   for the mouse.
 - **Automate (pipelines)** — an **Automate** view that watches a repo's default branch on a local
-  poll (never a webhook) and, on a new commit, runs your chosen agents, aggregates their findings,
-  and then **notifies**, **stages** the result for you to post, or — only when you flip a per-pipeline
-  opt-in — **auto-posts** it. A **`commit`** pipeline reacts to every new commit at a continuous
-  cadence; a **`schedule`** pipeline polls the default branch on a cadence **you set** (every N
-  minutes / hours / days) and reviews the latest commit when it changes — lighter on API budget for
-  a periodic check (it also runs once right after you enable it). **Create/edit pipelines** in-app
-  (repo, trigger + schedule cadence, agent steps, scope filters, and the action) — choosing **Post**
-  reveals an explicit auto-post toggle gated behind a distinct danger confirm. The editor ignores
-  backdrop clicks, and **Cancel** / **Esc** asks before discarding unsaved pipeline changes. The list shows each pipeline's live run status, an enable toggle,
-  **Run now** / **Dry run** buttons, and an expandable **run history**; a dry run never writes to
-  GitHub regardless of the opt-in. A liveness line shows the poller's state — when it last checked,
-  when it'll next check, and the remaining GitHub API budget.
+  poll (never a webhook), runs your chosen agents, aggregates their findings, and then **notifies**,
+  **stages** the result for you to post, or — only when you flip a per-pipeline opt-in —
+  **auto-posts** it. A **`commit`** pipeline reacts to every new commit at a continuous cadence; a
+  **`schedule`** pipeline polls the default branch on a cadence **you set** (every N minutes / hours
+  / days). Scheduled pipelines can review either the latest commit diff when the head changes, or a
+  whole-project snapshot on every due cadence using the same Project runner and repo clone/worktree
+  setting. **Create/edit pipelines** in-app (repo, trigger + schedule cadence, review target, agent
+  steps with model selection from the chosen agent/tool, scope filters, and the action) — choosing
+  **Post** reveals an explicit auto-post toggle gated behind a distinct danger confirm. Project
+  audits post as issues. The editor ignores backdrop clicks, and **Cancel** / **Esc** asks before
+  discarding unsaved pipeline changes. The list shows each pipeline's live run status, an enable
+  toggle, **Run now** / **Dry run** buttons, and an expandable **run history**; a dry run never
+  writes to GitHub regardless of the opt-in. A liveness line shows the poller's state — when it last
+  checked, when it'll next check, and the remaining GitHub API budget.
   Auto-post is off by default and enforced in the main process.
 - **Post back to GitHub — behind a confirm** — every write (commit comment, PR comment, or
   new issue) requires an explicit in-app confirmation showing the exact body. If you edit that

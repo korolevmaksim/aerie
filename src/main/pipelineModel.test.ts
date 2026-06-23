@@ -42,6 +42,9 @@ describe('isPipelineDraft', () => {
     for (const kind of ['notify', 'stage', 'post'] as const) {
       expect(isPipelineDraft(draft({ action: action({ kind }) }))).toBe(true)
     }
+    for (const reviewTarget of ['commit', 'project'] as const) {
+      expect(isPipelineDraft(draft({ reviewTarget }))).toBe(true)
+    }
   })
 
   it('rejects non-objects and missing/empty required fields', () => {
@@ -50,6 +53,7 @@ describe('isPipelineDraft', () => {
     expect(isPipelineDraft(draft({ name: '' }))).toBe(false)
     expect(isPipelineDraft({ ...draft(), repoId: 1.5 })).toBe(false)
     expect(isPipelineDraft({ ...draft(), trigger: 'webhook' })).toBe(false)
+    expect(isPipelineDraft({ ...draft(), reviewTarget: 'workspace' })).toBe(false)
     expect(isPipelineDraft({ ...draft(), enabled: 'yes' })).toBe(false)
   })
 
@@ -183,6 +187,9 @@ describe('dedupe key + config hash', () => {
     ]
     expect(pipelineConfigHash(a, 'notify')).toBe(pipelineConfigHash(b, 'notify'))
     expect(pipelineConfigHash(a, 'notify')).not.toBe(pipelineConfigHash(a, 'post'))
+    expect(pipelineConfigHash(a, 'notify', 'commit')).not.toBe(
+      pipelineConfigHash(a, 'notify', 'project')
+    )
     expect(pipelineConfigHash(a, 'notify')).not.toBe(
       pipelineConfigHash([{ id: 's1', kind: 'agent', ref: 'codex', model: 'o3' }], 'notify')
     )

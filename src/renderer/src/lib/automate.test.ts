@@ -116,6 +116,9 @@ describe('shortSha / formatRunLine', () => {
         run({ action: 'post', posted: true, trigger: 'manual', headSha: 'b'.repeat(40) })
       )
     ).toBe('post · posted · manual · bbbbbbb')
+    expect(formatRunLine(run({ refType: 'project', trigger: 'schedule' }))).toBe(
+      'notify · project audit · aaaaaaa'
+    )
   })
 
   it('omits the sha when absent', () => {

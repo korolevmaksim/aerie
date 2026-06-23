@@ -14,6 +14,7 @@ import type {
   Pipeline,
   PipelineAction,
   PipelineActionKind,
+  PipelineReviewTarget,
   PipelineRunOutcome,
   PipelineRunStatus,
   PipelineStep,
@@ -27,6 +28,7 @@ import {
   effectiveAction,
   matchesScope,
   pipelineConfigHash,
+  reviewTargetOf,
   type ScopeContext
 } from './pipelineModel'
 import { checkGuardrails, planWaves, type GuardrailState } from './pipelinePlan'
@@ -77,7 +79,7 @@ export interface EnginePorts {
   /** Recent-activity snapshot for guardrail checks. */
   guardrailState(pipeline: Pipeline): GuardrailState
   /** Starts one step's run; returns the runId. Agent steps map to `startRun`. */
-  startStep(step: PipelineStep, delta: DeltaContext): number
+  startStep(step: PipelineStep, delta: DeltaContext, reviewTarget: PipelineReviewTarget): number
   /** Resolves when the run reaches a terminal state (via `runEvents.onFinished`). */
   waitForRun(runId: number): Promise<'done' | 'error' | 'killed'>
   /** M6 aggregation over the panel's persisted findings. */
@@ -111,8 +113,8 @@ export interface RunOptions {
 
 function triggerMatches(pipeline: Pipeline, delta: DeltaContext): boolean {
   if (pipeline.repoId !== delta.repoId) return false
-  // A `schedule` pipeline reviews the default-branch head when it changes — a commit delta, same as
-  // a `commit` pipeline; only its POLL CADENCE differs (handled by the poller's WatchSpec.scheduleMs).
+  // Commit and schedule pipelines are both driven by the default-branch watch. The pipeline's
+  // reviewTarget later decides whether that head becomes a commit diff or a whole-project audit.
   if (pipeline.trigger === 'commit' || pipeline.trigger === 'schedule') {
     return delta.refType === 'commit'
   }
@@ -169,19 +171,24 @@ export async function runPipelineForDelta(
       if (!guard.allowed) return { ran: false, reason: 'guardrail', detail: guard.reason }
     }
 
+    const reviewTarget = reviewTargetOf(pipeline)
+    const runRefType: RefType = reviewTarget === 'project' ? 'project' : delta.refType
     const key = dedupeKey({
       repoId: delta.repoId,
-      refType: delta.refType,
+      refType: runRefType,
       ref: delta.ref,
       baseSha: delta.baseSha,
       headSha: delta.headSha,
       catalogVersion: delta.catalogVersion,
       promptHash: delta.promptHash,
-      configHash: pipelineConfigHash(pipeline.steps, pipeline.action.kind)
+      configHash: pipelineConfigHash(pipeline.steps, pipeline.action.kind, reviewTarget)
     })
     // A dry run always runs (you're testing) and a manual run is explicit — both bypass the
     // dedupe gate. Only the auto (poller) path skips already-completed work.
-    if (!opts.manual && !opts.dryRun && ports.findCompletedDedupe(key)) {
+    // A scheduled project audit is intentionally cadence-based: it re-runs on the current
+    // snapshot even if the head SHA has not changed. Commit-diff schedules stay deduped.
+    const cadenceProjectAudit = pipeline.trigger === 'schedule' && reviewTarget === 'project'
+    if (!opts.manual && !opts.dryRun && !cadenceProjectAudit && ports.findCompletedDedupe(key)) {
       return { ran: false, reason: 'dedupe' }
     }
 
@@ -196,7 +203,7 @@ export async function runPipelineForDelta(
     pipelineRunId = ports.insertPipelineRun({
       pipelineId: pipeline.id,
       trigger: opts.manual ? 'manual' : pipeline.trigger,
-      refType: delta.refType,
+      refType: runRefType,
       ref: delta.ref,
       headSha: delta.headSha,
       action: effective,
@@ -212,7 +219,7 @@ export async function runPipelineForDelta(
     for (const wave of plan.waves) {
       const started = wave.map((stepId) => {
         const step = pipeline.steps.find((s) => s.id === stepId)!
-        return ports.startStep(step, delta)
+        return ports.startStep(step, delta, reviewTarget)
       })
       runIds.push(...started)
       await Promise.all(started.map((runId) => ports.waitForRun(runId)))
@@ -227,7 +234,10 @@ export async function runPipelineForDelta(
       // run forces `action` to autoPost:false, so it can never reach here), but assert again
       // immediately before the write so no future edit can slip a non-enabled action in.
       assertMayPost(action)
-      const target: PostTarget = action.target ?? (delta.refType === 'pr' ? 'pr' : 'commit')
+      const target: PostTarget =
+        reviewTarget === 'project'
+          ? 'issue'
+          : (action.target ?? (delta.refType === 'pr' ? 'pr' : 'commit'))
       await ports.post(action, target, delta, body)
       ports.setPipelineRunPosted(pipelineRunId)
       posted = true

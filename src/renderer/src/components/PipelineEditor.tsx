@@ -3,6 +3,7 @@ import type {
   AgentInfo,
   Pipeline,
   PipelineActionKind,
+  PipelineReviewTarget,
   PipelineTrigger,
   PostTarget
 } from '@shared/types'
@@ -26,6 +27,7 @@ export interface RepoOption {
 }
 
 const TRIGGERS: PipelineTrigger[] = ['commit', 'pr', 'schedule', 'manual']
+const REVIEW_TARGETS: PipelineReviewTarget[] = ['commit', 'project']
 const ACTIONS: PipelineActionKind[] = ['notify', 'stage', 'post']
 const TARGETS: PostTarget[] = ['commit', 'pr', 'issue']
 
@@ -101,10 +103,19 @@ function PipelineEditor({
   const set = (patch: Partial<PipelineFormState>): void => setForm((f) => ({ ...f, ...patch }))
   const setStep = (i: number, patch: Partial<PipelineStepForm>): void =>
     setForm((f) => ({ ...f, steps: f.steps.map((s, j) => (j === i ? { ...s, ...patch } : s)) }))
+  const setStepAgent = (i: number, ref: string): void => {
+    const agent = agents.find((a) => a.id === ref)
+    setStep(i, { ref, model: agent?.model ?? '' })
+  }
   const addStep = (): void =>
     setForm((f) => ({ ...f, steps: [...f.steps, blankStep(nextStepId(f.steps))] }))
   const removeStep = (i: number): void =>
     setForm((f) => ({ ...f, steps: f.steps.filter((_, j) => j !== i) }))
+  const stepModelOptions = (agent: AgentInfo | undefined, selected: string): string[] => {
+    const models = agent?.models ?? []
+    return selected && !models.includes(selected) ? [selected, ...models] : models
+  }
+  const postTargets: PostTarget[] = form.reviewTarget === 'project' ? ['issue'] : TARGETS
 
   // Auto-post is the only place a user opts a pipeline into unattended GitHub writes (default
   // off). Enabling it requires an explicit danger confirm; `autoPost` can become true ONLY after
@@ -219,80 +230,119 @@ function PipelineEditor({
           </label>
 
           {form.trigger === 'schedule' && (
-            <label className="pe-field">
-              <span>Run every</span>
-              <div className="pe-schedule">
-                <input
-                  className="field"
-                  type="number"
-                  min={1}
-                  aria-label="Schedule interval amount"
-                  value={form.scheduleEvery}
-                  onChange={(e) => set({ scheduleEvery: e.target.value })}
-                />
+            <>
+              <label className="pe-field">
+                <span>Run every</span>
+                <div className="pe-schedule">
+                  <input
+                    className="field"
+                    type="number"
+                    min={1}
+                    aria-label="Schedule interval amount"
+                    value={form.scheduleEvery}
+                    onChange={(e) => set({ scheduleEvery: e.target.value })}
+                  />
+                  <select
+                    className="field"
+                    aria-label="Schedule interval unit"
+                    value={form.scheduleUnit}
+                    onChange={(e) => set({ scheduleUnit: e.target.value as ScheduleUnit })}
+                  >
+                    {SCHEDULE_UNITS.map((u) => (
+                      <option key={u} value={u}>
+                        {SCHEDULE_UNIT_LABEL[u]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <span className="hint">
+                  Polls the default branch on this cadence and reviews it when the head changes
+                  (minimum 1 minute). It checks once right after you save &amp; enable it.
+                </span>
+              </label>
+              <label className="pe-field">
+                <span>Review</span>
                 <select
                   className="field"
-                  aria-label="Schedule interval unit"
-                  value={form.scheduleUnit}
-                  onChange={(e) => set({ scheduleUnit: e.target.value as ScheduleUnit })}
+                  value={form.reviewTarget}
+                  onChange={(e) => {
+                    const reviewTarget = e.target.value as PipelineReviewTarget
+                    set({
+                      reviewTarget,
+                      ...(reviewTarget === 'project' ? { postTarget: 'issue' } : {})
+                    })
+                  }}
                 >
-                  {SCHEDULE_UNITS.map((u) => (
-                    <option key={u} value={u}>
-                      {SCHEDULE_UNIT_LABEL[u]}
+                  {REVIEW_TARGETS.map((t) => (
+                    <option key={t} value={t}>
+                      {t === 'commit' ? 'Latest commit diff' : 'Whole project snapshot'}
                     </option>
                   ))}
                 </select>
-              </div>
-              <span className="hint">
-                Polls the default branch on this cadence and reviews the latest commit when it
-                changes (minimum 1 minute). It checks once right after you save &amp; enable it.
-              </span>
-            </label>
+                <span className="hint">
+                  Project reviews use the same project-audit runner as the repo Project tab and
+                  respect the repo&apos;s app-clone vs mapped local-worktree setting.
+                </span>
+              </label>
+            </>
           )}
 
           <fieldset className="pe-fieldset">
             <legend>Steps (agents)</legend>
-            {form.steps.map((s, i) => (
-              <div className="pe-step" key={s.id}>
-                <span className="pe-step__id">{s.id}</span>
-                <select
-                  className="field"
-                  aria-label={`Step ${s.id} agent`}
-                  value={s.ref}
-                  onChange={(e) => setStep(i, { ref: e.target.value })}
-                >
-                  <option value="">Select an agent…</option>
-                  {agents.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.label}
-                      {a.available ? '' : ' (not installed)'}
+            {form.steps.map((s, i) => {
+              const agent = agents.find((a) => a.id === s.ref)
+              const models = stepModelOptions(agent, s.model)
+              return (
+                <div className="pe-step" key={s.id}>
+                  <span className="pe-step__id">{s.id}</span>
+                  <select
+                    className="field"
+                    aria-label={`Step ${s.id} agent`}
+                    value={s.ref}
+                    onChange={(e) => setStepAgent(i, e.target.value)}
+                  >
+                    <option value="">Select an agent…</option>
+                    {agents.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.label}
+                        {a.available ? '' : ' (not installed)'}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    className="field"
+                    aria-label={`Step ${s.id} model`}
+                    value={s.model}
+                    onChange={(e) => setStep(i, { model: e.target.value })}
+                    disabled={!agent || models.length === 0}
+                  >
+                    <option value="">
+                      {agent?.model ? `Agent default (${agent.model})` : 'Agent default'}
                     </option>
-                  ))}
-                </select>
-                <input
-                  className="field"
-                  aria-label={`Step ${s.id} model (optional)`}
-                  placeholder="model (optional)"
-                  value={s.model}
-                  onChange={(e) => setStep(i, { model: e.target.value })}
-                />
-                <input
-                  className="field"
-                  aria-label={`Step ${s.id} depends on (optional)`}
-                  placeholder="depends on, e.g. s1"
-                  value={s.dependsOn}
-                  onChange={(e) => setStep(i, { dependsOn: e.target.value })}
-                />
-                <button
-                  className="btn btn--ghost"
-                  onClick={() => removeStep(i)}
-                  disabled={form.steps.length <= 1}
-                  aria-label={`Remove step ${s.id}`}
-                >
-                  Remove
-                </button>
-              </div>
-            ))}
+                    {models.map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    className="field"
+                    aria-label={`Step ${s.id} depends on (optional)`}
+                    placeholder="depends on, e.g. s1"
+                    value={s.dependsOn}
+                    onChange={(e) => setStep(i, { dependsOn: e.target.value })}
+                  />
+                  <button
+                    className="btn btn--ghost"
+                    onClick={() => removeStep(i)}
+                    disabled={form.steps.length <= 1}
+                    aria-label={`Remove step ${s.id}`}
+                  >
+                    Remove
+                  </button>
+                </div>
+              )
+            })}
             <button className="btn btn--ghost" onClick={addStep}>
               Add step
             </button>
@@ -382,7 +432,7 @@ function PipelineEditor({
                     value={form.postTarget}
                     onChange={(e) => set({ postTarget: e.target.value as PostTarget })}
                   >
-                    {TARGETS.map((t) => (
+                    {postTargets.map((t) => (
                       <option key={t} value={t}>
                         {t === 'commit' && 'Commit comment'}
                         {t === 'pr' && 'PR comment'}
@@ -404,6 +454,11 @@ function PipelineEditor({
                   <p className="hint">
                     With auto-post off, a post action stages the review for you to publish with the
                     usual confirm.
+                  </p>
+                )}
+                {form.reviewTarget === 'project' && (
+                  <p className="hint">
+                    Project audits post as issues because they are not tied to a PR.
                   </p>
                 )}
               </div>
