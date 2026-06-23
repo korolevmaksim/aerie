@@ -25,6 +25,14 @@ export interface AgentFormState {
   timeoutSec: string // numeric string
   kind: 'agent' | 'tool'
   env: EnvRow[]
+  /** Default model substituted into {{model}}; '' = none. Always a member of `models`. */
+  model: string
+  /** Selectable models offered to the run dropdown (the chip list). */
+  models: string[]
+  /** Default reasoning level substituted into {{reasoning}}; '' = none. */
+  reasoning: string
+  /** Selectable reasoning/thinking levels (empty → the CLI has no reasoning control). */
+  reasoningLevels: string[]
 }
 
 export function blankForm(): AgentFormState {
@@ -39,7 +47,11 @@ export function blankForm(): AgentFormState {
     outputFile: '',
     timeoutSec: '900',
     kind: 'agent',
-    env: []
+    env: [],
+    model: '',
+    models: [],
+    reasoning: '',
+    reasoningLevels: []
   }
 }
 
@@ -84,7 +96,11 @@ export function agentToForm(agent: Agent): AgentFormState {
     outputFile: agent.outputFile ?? '',
     timeoutSec: String(agent.timeoutSec),
     kind: agent.kind ?? 'agent',
-    env: recordToEnvRows(agent.env ?? {})
+    env: recordToEnvRows(agent.env ?? {}),
+    model: agent.model ?? '',
+    models: agent.models ?? [],
+    reasoning: agent.reasoning ?? '',
+    reasoningLevels: agent.reasoningLevels ?? []
   }
 }
 
@@ -115,8 +131,14 @@ export function formToAgent(form: AgentFormState, base?: Agent): FormToAgentResu
   if (form.outputCapture === 'file' && !outputFile) {
     return { ok: false, error: 'An output file is required when capturing from a file.' }
   }
+  const { models, model } = normalizeModels(form.models, form.model)
+  const { levels: reasoningLevels, level: reasoning } = normalizeReasoning(
+    form.reasoningLevels,
+    form.reasoning
+  )
   const agent: Agent = {
-    // Preserve non-form fields (models/reasoning/detect/modelDiscovery/successExitCodes).
+    // Preserve non-form fields (detect/modelDiscovery/successExitCodes). The four
+    // model/reasoning fields are owned by the form below, so they override `base`.
     ...base,
     id,
     label: form.label.trim(),
@@ -128,7 +150,43 @@ export function formToAgent(form: AgentFormState, base?: Agent): FormToAgentResu
     outputFile: outputFile || null,
     timeoutSec,
     kind: form.kind,
-    env: envRowsToRecord(form.env)
+    env: envRowsToRecord(form.env),
+    // Optional, only emitted when set so a cleared list never serializes a stale value.
+    ...(models.length > 0 ? { models } : {}),
+    ...(model ? { model } : {}),
+    ...(reasoningLevels.length > 0 ? { reasoningLevels } : {}),
+    ...(reasoning ? { reasoning } : {})
   }
+  // An emptied list must clear the key even when `base` carried one — the conditional
+  // spreads above add it but never remove it, so drop the stale key explicitly.
+  if (models.length === 0) delete agent.models
+  if (!model) delete agent.model
+  if (reasoningLevels.length === 0) delete agent.reasoningLevels
+  if (!reasoning) delete agent.reasoning
   return { ok: true, agent }
+}
+
+/**
+ * Serialize-normalize the model set: with no models there is no default (clear it); with
+ * models, the default must be one of them — keep a valid default, else adopt the first.
+ */
+export function normalizeModels(
+  models: string[],
+  model: string
+): { models: string[]; model: string } {
+  if (models.length === 0) return { models: [], model: '' }
+  if (model && models.includes(model)) return { models, model }
+  // A set-but-missing default is pushed onto the list; an empty/invalid one falls back to first.
+  if (model) return { models: [...models, model], model }
+  return { models, model: models[0] }
+}
+
+/** With no reasoning levels there is no reasoning control — clear the default. */
+export function normalizeReasoning(
+  levels: string[],
+  level: string
+): { levels: string[]; level: string } {
+  if (levels.length === 0) return { levels: [], level: '' }
+  if (level && levels.includes(level)) return { levels, level }
+  return { levels, level: levels[0] }
 }

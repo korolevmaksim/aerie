@@ -298,6 +298,140 @@ select.field {
   margin-top: 0.4rem;
 }
 
+/* M12 redesign: grouped sections (Identity / Basics / Advanced) + chip sub-editors. */
+.agent-editor__group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 0.8rem 0.9rem;
+  margin: 0;
+}
+.agent-editor__group > legend {
+  padding: 0 0.4rem;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+/* A sub-editor nests inside Basics; a softer panel fill separates it from its parent. */
+.agent-editor__subeditor {
+  background: var(--panel);
+}
+
+/* Advanced is a native <details>; the summary is the disclosure control. */
+.agent-editor__advanced > summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--fg);
+  list-style: revert;
+  user-select: none;
+}
+/* Collapse the flex gap when closed so the summary doesn't carry section padding alone. */
+.agent-editor__advanced:not([open]) {
+  gap: 0;
+}
+
+.agent-editor__chips {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.agent-editor__chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.agent-editor__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.15rem 0.3rem 0.15rem 0.6rem;
+  font-size: 0.8rem;
+}
+/* The default model/level reads as accented, distinguishing it from the rest of the set. */
+.agent-editor__chip--default {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.agent-editor__chip-default {
+  cursor: pointer;
+}
+.agent-editor__chip-remove {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.85rem;
+  line-height: 1;
+  padding: 0.1rem 0.25rem;
+  border-radius: 999px;
+}
+.agent-editor__chip-remove:hover {
+  color: var(--danger);
+}
+.agent-editor__add-row {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.agent-editor__add-row .field {
+  flex: 1;
+  min-width: 8rem;
+}
+/* Live add/level counts are announced (aria-live) but visually quiet. */
+.agent-editor__count {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.agent-editor__count:empty {
+  display: none;
+}
+/* "installed on this machine" availability note. */
+.agent-editor__source {
+  color: var(--ok);
+}
+
+/* Token legend above the Args textarea: code chips + muted descriptions. */
+.agent-editor__tokens {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.8rem;
+}
+.agent-editor__token code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--accent);
+}
+
+/* Non-blocking amber caution when a model/reasoning is set but its token is absent from
+   args — same palette as .run__warn, scoped tighter for the sub-editor. */
+.agent-editor__warn {
+  background: rgba(210, 153, 34, 0.12);
+  border: 1px solid rgba(210, 153, 34, 0.45);
+  color: #e3b341;
+  padding: 0.45rem 0.65rem;
+  border-radius: 7px;
+  font-size: 0.8rem;
+  margin: 0;
+}
+.agent-editor__warn code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* Reduced motion: the editor signals state via content change, not transforms — there is no
+   transform-based reveal to suppress, so the disclosure is instant either way. */
+@media (prefers-reduced-motion: reduce) {
+  .agent-editor__advanced > summary {
+    transition: none;
+  }
+}
+
 /* Exec-consent (M12): a user-added agent awaiting approval to run. */
 .agent-consent {
   display: inline-flex;

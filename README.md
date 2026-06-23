@@ -39,8 +39,11 @@ third-party service.
   staged) for a pre-PR pass. Zero GitHub calls, no checkout, never touches your working
   copy — read-only `git diff` only.
 - **Edit your own agents** — the Tools tab has an in-app editor to add, clone, edit, and delete
-  custom agent CLIs (the full contract: command, args, env, output capture, …). A user-added agent
-  must be **explicitly approved** before Aerie will run its command — editing the command re-requires
+  custom agent CLIs. The form leads with what you change most — pick the **model** and the
+  **thinking/reasoning level** from add/remove chip lists (a low/medium/high quick-fill is one
+  click) instead of hand-typing raw flags — and tucks the full contract (args, env, output
+  capture, …) behind an **Advanced** section with a token legend. A user-added agent must be
+  **explicitly approved** before Aerie will run its command — editing the command re-requires
   approval — and a custom agent can never shadow a built-in.
 - **Spots coding CLIs you haven't wired** — the Tools tab also flags coding-agent CLIs found on your
   PATH that Aerie has no agent for yet (a **"Detected, not configured"** list) with an **Add as
@@ -186,9 +189,10 @@ xattr -dr com.apple.quarantine /Applications/Aerie.app
 
 ### Configuring agents & prompts
 
-- **Agents** — Settings shows the path to `agents.json`; edit it to add an agent, change a
-  command, or adjust model/flags. Per-agent model and reasoning choices are stored
-  separately and persist.
+- **Agents** — use the Tools tab's in-app editor to add an agent, change its command, or curate
+  its models and thinking levels; the chip lists you build there become the dropdowns on the run
+  screen. Settings also shows the path to `agents.json` for hand-editing. Per-agent model and
+  reasoning choices are stored separately and persist.
 - **Prompts** — Settings → **Review prompts**: edit the defaults or add focused prompts;
   the picker on the run screen selects one per review. Power users can reference
   `{{repo}}`, `{{sha}}`, `{{repoPath}}`, `{{diffFile}}` placeholders in a prompt body.

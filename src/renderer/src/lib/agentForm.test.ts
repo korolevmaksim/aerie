@@ -76,18 +76,94 @@ describe('formToAgent', () => {
     if (r.ok) expect(r.agent.outputFile).toBe('/tmp/out')
   })
 
-  it('preserves non-form base fields (models/detect/modelDiscovery)', () => {
+  it('preserves non-form base fields (detect/modelDiscovery/successExitCodes)', () => {
     const base = {
-      models: ['m1'],
       detect: 'mybin',
+      successExitCodes: [0, 1],
       modelDiscovery: { kind: 'command', argv: ['models'], format: 'lines' }
     } as unknown as Agent
     const r = formToAgent({ ...ok, id: 'x', label: 'x', command: 'c' }, base)
     expect(r.ok).toBe(true)
     if (r.ok) {
-      expect(r.agent.models).toEqual(['m1'])
       expect(r.agent.detect).toBe('mybin')
+      expect(r.agent.successExitCodes).toEqual([0, 1])
       expect(r.agent.modelDiscovery).toEqual({ kind: 'command', argv: ['models'], format: 'lines' })
+    }
+  })
+
+  it('round-trips the model/models/reasoning/reasoningLevels fields', () => {
+    const r = formToAgent({
+      ...ok,
+      id: 'x',
+      label: 'x',
+      command: 'c',
+      models: ['fast', 'slow'],
+      model: 'slow',
+      reasoningLevels: ['low', 'medium', 'high'],
+      reasoning: 'high'
+    })
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      expect(r.agent.models).toEqual(['fast', 'slow'])
+      expect(r.agent.model).toBe('slow')
+      expect(r.agent.reasoningLevels).toEqual(['low', 'medium', 'high'])
+      expect(r.agent.reasoning).toBe('high')
+    }
+  })
+
+  it('clears reasoning when there are no reasoning levels (even if a base carried one)', () => {
+    const base = { reasoning: 'high', reasoningLevels: ['low', 'high'] } as unknown as Agent
+    const r = formToAgent(
+      { ...ok, id: 'x', label: 'x', command: 'c', reasoning: '', reasoningLevels: [] },
+      base
+    )
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      expect(r.agent.reasoningLevels).toBeUndefined()
+      expect(r.agent.reasoning).toBeUndefined()
+    }
+  })
+
+  it('ensures the default model is a member of models (pushes a set-but-missing one)', () => {
+    const r = formToAgent({
+      ...ok,
+      id: 'x',
+      label: 'x',
+      command: 'c',
+      models: ['a', 'b'],
+      model: 'c' // not in the list
+    })
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      expect(r.agent.models).toEqual(['a', 'b', 'c'])
+      expect(r.agent.model).toBe('c')
+    }
+  })
+
+  it('adopts the first model as default when none is set, and clears model with no models', () => {
+    const withModels = formToAgent({
+      ...ok,
+      id: 'x',
+      label: 'x',
+      command: 'c',
+      models: ['a', 'b'],
+      model: ''
+    })
+    expect(withModels.ok).toBe(true)
+    if (withModels.ok) expect(withModels.agent.model).toBe('a')
+
+    const noModels = formToAgent({
+      ...ok,
+      id: 'x',
+      label: 'x',
+      command: 'c',
+      models: [],
+      model: 'stale'
+    })
+    expect(noModels.ok).toBe(true)
+    if (noModels.ok) {
+      expect(noModels.agent.models).toBeUndefined()
+      expect(noModels.agent.model).toBeUndefined()
     }
   })
 })
@@ -105,7 +181,11 @@ describe('agentToForm', () => {
       outputFile: null,
       timeoutSec: 120,
       env: { K: 'v' },
-      kind: 'tool'
+      kind: 'tool',
+      models: ['fast', 'slow'],
+      model: 'slow',
+      reasoningLevels: ['low', 'high'],
+      reasoning: 'low'
     }
     const f = agentToForm(a)
     expect(f).toMatchObject({
@@ -113,12 +193,33 @@ describe('agentToForm', () => {
       command: 'node',
       argsText: '-e\ny',
       timeoutSec: '120',
-      kind: 'tool'
+      kind: 'tool',
+      models: ['fast', 'slow'],
+      model: 'slow',
+      reasoningLevels: ['low', 'high'],
+      reasoning: 'low'
     })
     expect(f.env).toEqual([{ key: 'K', value: 'v' }])
     // round-trips back
     const back = formToAgent(f, a)
     expect(back.ok).toBe(true)
-    if (back.ok) expect(back.agent).toMatchObject({ id: 'x', args: ['-e', 'y'], env: { K: 'v' } })
+    if (back.ok)
+      expect(back.agent).toMatchObject({
+        id: 'x',
+        args: ['-e', 'y'],
+        env: { K: 'v' },
+        models: ['fast', 'slow'],
+        model: 'slow',
+        reasoningLevels: ['low', 'high'],
+        reasoning: 'low'
+      })
+  })
+
+  it('defaults the new model/reasoning fields to empty', () => {
+    const f = blankForm()
+    expect(f.model).toBe('')
+    expect(f.models).toEqual([])
+    expect(f.reasoning).toBe('')
+    expect(f.reasoningLevels).toEqual([])
   })
 })

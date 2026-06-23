@@ -13,6 +13,21 @@ same change set.
 
 ### Added
 
+- **Pick model & thinking level in the agent editor** (ROADMAP M12): the custom-agent form no
+  longer forces hand-typing raw flags. It is restructured into **Identity** · **Basics** ·
+  **Advanced**, with the model and reasoning/thinking level now edited as accessible add /
+  remove / set-default chip lists (a real ARIA radiogroup with arrow-key default movement) right
+  in Basics — the chips become the run-screen dropdowns. The Thinking sub-editor adds a
+  low/medium/high quick-fill and an explicit "this CLI has no reasoning control" state. The full
+  contract (args + a `{{token}}` legend, prompt delivery, kind, timeout, output capture,
+  environment) moves into a collapsed **Advanced** `<details>`, and a non-blocking amber warning
+  flags when a model/level is set but its `{{model}}`/`{{reasoning}}` token is missing from the
+  args. After a save, an inline hint surfaces that the new agent needs approval before it can run.
+  Renderer-only: model/reasoning serialization rules (drop reasoning with no levels; keep the
+  default model a member of `models`) live in the pure, unit-tested `formToAgent`; main still
+  re-validates and still gates exec-consent. (Live "discover models" is deferred — it needs a
+  security-gated main IPC; cloning a built-in and manual add already cover the workflow.)
+
 - **Re-run a review** (ROADMAP M14): a finished run in the history view now has a **Re-run**
   button that re-launches the same agent on the same commit/PR (useful for a second opinion, since
   agents are non-deterministic, or after tweaking the agent's model). It goes through the existing
