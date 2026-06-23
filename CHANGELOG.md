@@ -111,6 +111,15 @@ same change set.
 
 ### Fixed
 
+- **Agent autodiscovery now sees tools in version-managed / custom dirs**: a GUI-launched app on
+  macOS inherits a truncated `PATH`, so CLIs installed under e.g. nvm's versioned node bin,
+  `~/.kimi-code/bin`, or `~/.mimocode/bin` showed as **"Not installed"** in Tools even though they
+  were installed (Codex, Gemini, Kimi, MiMo were affected). Aerie now resolves your **login-shell
+  PATH** at startup (the exact env your terminal sees) and merges it with the existing static
+  well-known-dir list, so detection matches your shell. The resolve is timeout-bounded and never
+  blocks startup on failure (it falls back to the static list); `fish` falls back to the static
+  list (its list-typed `$PATH` isn't parsed).
+
 - **Run-history rows are now keyboard-operable** (ROADMAP M11, WCAG 2.1.1): each row in Run
   history was a mouse-only clickable `<li>` (no keyboard focus or activation) and nested the
   "posted ↗" link inside the clickable area. The open action is now a real `<button>`

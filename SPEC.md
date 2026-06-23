@@ -145,6 +145,15 @@ with no real agent installed.
 
 Adding Agy / Kimi / Claude Code = editing `agents.json`. No code change. Ever.
 
+**PATH resolution for detection.** A GUI-launched macOS app inherits a truncated `PATH`, so
+CLIs in version-managed/custom dirs (nvm's versioned node bin, `~/.kimi-code/bin`, …) would read
+as not installed. At startup `main` resolves the user's **login-shell PATH** (`shellPath.ts` —
+`$SHELL -ilc`, marker-isolated, timeout-bounded, never throws) and merges it with a static
+well-known-dir list (`osPath.ts` `augmentedPath` + `mergePaths`) into `process.env.PATH`, before
+any tool lookup. It only affects DETECTION (`whichOnPath`); running an agent is still gated by
+provenance trust + exec-consent (§4). `fish` degrades to the static list (its list `$PATH` isn't
+parsed). The shell read carries no token (none is in `process.env`; tokens live in `safeStorage`).
+
 **Data-driven detection catalog (ROADMAP M2).** Beyond the on-machine-verified
 `DEFAULT_AGENTS`, the app ships a broader **catalog** of agent-CLI templates that
 `mergeAgents` surfaces only when their `detect` binary is on PATH (never persisted to

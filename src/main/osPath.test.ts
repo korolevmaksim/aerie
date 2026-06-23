@@ -1,6 +1,28 @@
 import { delimiter } from 'path'
 import { describe, expect, it } from 'vitest'
-import { augmentedPath } from './osPath'
+import { augmentedPath, mergePaths } from './osPath'
+
+describe('mergePaths', () => {
+  const d = delimiter
+  it('concatenates lists in order, keeping the first occurrence of each dir', () => {
+    expect(mergePaths(`/a${d}/b`, `/b${d}/c`)).toBe(`/a${d}/b${d}/c`)
+  })
+  it('drops empty entries and empty lists', () => {
+    expect(mergePaths('', `/a${d}${d}/b`, '')).toBe(`/a${d}/b`)
+  })
+  it('login-shell PATH takes precedence over the static fallback (first list wins ties)', () => {
+    // /nvm only in the shell list; /usr/bin in both → appears once, shell order.
+    const shell = `/nvm/bin${d}/usr/bin`
+    const fallback = `/usr/bin${d}/opt/homebrew/bin`
+    expect(mergePaths(shell, fallback)).toBe(`/nvm/bin${d}/usr/bin${d}/opt/homebrew/bin`)
+  })
+  it('a single list is deduplicated', () => {
+    expect(mergePaths(`/a${d}/a${d}/b`)).toBe(`/a${d}/b`)
+  })
+  it('all-empty input yields an empty string', () => {
+    expect(mergePaths('', '')).toBe('')
+  })
+})
 
 describe('augmentedPath', () => {
   const home = '/Users/me'

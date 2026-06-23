@@ -56,3 +56,22 @@ export function augmentedPath(
   const base = currentPath ? [currentPath] : []
   return [...base, ...additions].join(delimiter)
 }
+
+/**
+ * Merges several PATH strings (in priority order) into one: splits each on the platform path
+ * delimiter and keeps the FIRST occurrence of every non-empty dir, preserving order. Used to
+ * fold the resolved login-shell PATH together with the static `augmentedPath` fallback. Pure.
+ */
+export function mergePaths(...lists: string[]): string {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const list of lists) {
+    for (const dir of list.split(delimiter)) {
+      if (dir && !seen.has(dir)) {
+        seen.add(dir)
+        out.push(dir)
+      }
+    }
+  }
+  return out.join(delimiter)
+}

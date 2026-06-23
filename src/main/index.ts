@@ -11,7 +11,8 @@ import { log } from './logger'
 import { hasActiveRuns, killAllRuns } from './agentRunner'
 import { pruneAllWorktreesAndDiffs } from './gitEngine'
 import { startPoller, stopPoller } from './poller'
-import { augmentedPath } from './osPath'
+import { augmentedPath, mergePaths } from './osPath'
+import { loginShellPath } from './shellPath'
 import { onChange, onFinished, onOutput, onStatus } from './runEvents'
 import { onPipelineRunChange } from './pipelineEvents'
 import { initTray, destroyTray } from './tray'
@@ -159,13 +160,23 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(() => {
     // Fix the macOS GUI-launch truncated PATH so tools installed via Homebrew,
-    // cargo, npm, bun, etc. are detected (autodiscovery). Must run before any tool
-    // lookup (listAgentInfos) and before the agent runner spawns a CLI.
-    process.env.PATH = augmentedPath(process.env.PATH ?? '', {
-      home: app.getPath('home'),
-      platform: process.platform,
-      exists: existsSync
-    })
+    // cargo, npm, bun, version managers (nvm), and custom dirs are detected
+    // (autodiscovery). Must run before any tool lookup (listAgentInfos) and before
+    // the agent runner spawns a CLI. Strategy: take the user's real LOGIN-SHELL PATH
+    // (the exact env their terminal sees — picks up nvm/custom dirs a static list
+    // can't predict), then merge the static well-known-dir fallback for anything the
+    // shell missed. If the shell resolve fails it degrades to the static augment.
+    const shellPath = loginShellPath()
+    process.env.PATH = mergePaths(
+      shellPath ?? '',
+      augmentedPath(process.env.PATH ?? '', {
+        home: app.getPath('home'),
+        platform: process.platform,
+        exists: existsSync
+      })
+    )
+    // Diagnostic for "tool still not detected" reports — note the source, not the PATH itself.
+    log.info('startup PATH resolved', { fromLoginShell: shellPath !== null })
 
     electronApp.setAppUserModelId('com.aerie.app')
 
