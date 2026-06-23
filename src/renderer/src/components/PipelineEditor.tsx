@@ -16,6 +16,7 @@ import {
   type PipelineFormState,
   type PipelineStepForm
 } from '../lib/pipelineForm'
+import { SCHEDULE_UNIT_LABEL, SCHEDULE_UNITS, type ScheduleUnit } from '@shared/schedule'
 
 /** A repo the user has added, for the picker. */
 export interface RepoOption {
@@ -190,10 +191,42 @@ function PipelineEditor({
               ))}
             </select>
             <span className="hint">
-              Commit pipelines run automatically on a new default-branch commit; all triggers can be
-              run manually.
+              Commit pipelines run on each new default-branch commit; schedule pipelines re-check
+              the default branch on a set cadence; all triggers can be run manually.
             </span>
           </label>
+
+          {form.trigger === 'schedule' && (
+            <label className="pe-field">
+              <span>Run every</span>
+              <div className="pe-schedule">
+                <input
+                  className="field"
+                  type="number"
+                  min={1}
+                  aria-label="Schedule interval amount"
+                  value={form.scheduleEvery}
+                  onChange={(e) => set({ scheduleEvery: e.target.value })}
+                />
+                <select
+                  className="field"
+                  aria-label="Schedule interval unit"
+                  value={form.scheduleUnit}
+                  onChange={(e) => set({ scheduleUnit: e.target.value as ScheduleUnit })}
+                >
+                  {SCHEDULE_UNITS.map((u) => (
+                    <option key={u} value={u}>
+                      {SCHEDULE_UNIT_LABEL[u]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <span className="hint">
+                Polls the default branch on this cadence and reviews the latest commit when it
+                changes (minimum 1 minute). It checks once right after you save &amp; enable it.
+              </span>
+            </label>
+          )}
 
           <fieldset className="pe-fieldset">
             <legend>Steps (agents)</legend>

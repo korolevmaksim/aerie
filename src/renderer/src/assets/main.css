@@ -1626,6 +1626,18 @@ select.field {
   font-family: ui-monospace, monospace;
   color: var(--muted);
 }
+.pe-schedule {
+  display: flex;
+  gap: 0.4rem;
+}
+.pe-schedule > input {
+  width: 6rem;
+  flex: none;
+}
+.pe-schedule > select {
+  flex: 1;
+  min-width: 0;
+}
 .pe-radio {
   display: flex;
   gap: 1rem;

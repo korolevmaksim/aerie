@@ -167,6 +167,37 @@ describe('runPipelineForDelta — the auto-post gate', () => {
     )
     expect(rec.posts[0].target).toBe('commit')
   })
+
+  it('a SCHEDULE pipeline runs its steps on a commit delta (regression: triggerMatches)', async () => {
+    const { ports, rec } = fakePorts()
+    // A disabled post must still RUN its steps but never write.
+    const staged = await runPipelineForDelta(
+      pipeline({
+        trigger: 'schedule',
+        schedule: '6h',
+        action: action({ kind: 'post', autoPost: false, target: 'commit' })
+      }),
+      delta(),
+      ports
+    )
+    expect(staged).toMatchObject({ ran: true, action: 'stage', posted: false })
+    expect(rec.startedSteps.length).toBeGreaterThan(0) // steps actually ran
+    expect(rec.posts).toHaveLength(0) // auto-post gate still holds
+
+    // And an enabled post on a schedule pipeline writes exactly once (gate honored, not bypassed).
+    const { ports: p2, rec: r2 } = fakePorts()
+    const posted = await runPipelineForDelta(
+      pipeline({
+        trigger: 'schedule',
+        schedule: '6h',
+        action: action({ kind: 'post', autoPost: true, target: 'commit' })
+      }),
+      delta(),
+      p2
+    )
+    expect(posted).toMatchObject({ ran: true, action: 'post', posted: true })
+    expect(r2.posts).toHaveLength(1)
+  })
 })
 
 describe('runPipelineForDelta — gates skip without running', () => {

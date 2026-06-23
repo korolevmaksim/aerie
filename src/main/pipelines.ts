@@ -111,9 +111,13 @@ export interface RunOptions {
 
 function triggerMatches(pipeline: Pipeline, delta: DeltaContext): boolean {
   if (pipeline.repoId !== delta.repoId) return false
-  if (pipeline.trigger === 'commit') return delta.refType === 'commit'
+  // A `schedule` pipeline reviews the default-branch head when it changes — a commit delta, same as
+  // a `commit` pipeline; only its POLL CADENCE differs (handled by the poller's WatchSpec.scheduleMs).
+  if (pipeline.trigger === 'commit' || pipeline.trigger === 'schedule') {
+    return delta.refType === 'commit'
+  }
   if (pipeline.trigger === 'pr') return delta.refType === 'pr'
-  // 'schedule'/'manual' pipelines are not delta-driven.
+  // 'manual' is not delta-driven (run-now sets opts.manual to bypass this gate).
   return false
 }
 

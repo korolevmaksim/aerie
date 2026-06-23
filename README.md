@@ -81,9 +81,12 @@ third-party service.
 - **Automate (pipelines)** — an **Automate** view that watches a repo's default branch on a local
   poll (never a webhook) and, on a new commit, runs your chosen agents, aggregates their findings,
   and then **notifies**, **stages** the result for you to post, or — only when you flip a per-pipeline
-  opt-in — **auto-posts** it. **Create/edit pipelines** in-app (repo, trigger, agent steps, scope
-  filters, and the action) — choosing **Post** reveals an explicit auto-post toggle gated behind a
-  distinct danger confirm. The list shows each pipeline's live run status, an enable toggle,
+  opt-in — **auto-posts** it. A **`commit`** pipeline reacts to every new commit at a continuous
+  cadence; a **`schedule`** pipeline polls the default branch on a cadence **you set** (every N
+  minutes / hours / days) and reviews the latest commit when it changes — lighter on API budget for
+  a periodic check (it also runs once right after you enable it). **Create/edit pipelines** in-app
+  (repo, trigger + schedule cadence, agent steps, scope filters, and the action) — choosing **Post**
+  reveals an explicit auto-post toggle gated behind a distinct danger confirm. The list shows each pipeline's live run status, an enable toggle,
   **Run now** / **Dry run** buttons, and an expandable **run history**; a dry run never writes to
   GitHub regardless of the opt-in. A liveness line shows the poller's state — when it last checked,
   when it'll next check, and the remaining GitHub API budget.

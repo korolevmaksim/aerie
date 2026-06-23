@@ -101,15 +101,46 @@ describe('formToDraft — happy path', () => {
     }
   })
 
-  it('preserves enabled + schedule from base on edit', () => {
+  it('preserves enabled from base, and drops a stale schedule for a non-schedule trigger', () => {
     const base: PipelineDraft = {
       ...((formToDraft(validForm()) as { draft: PipelineDraft }).draft as PipelineDraft),
       enabled: true,
-      schedule: '0 * * * *'
+      schedule: '6h'
     }
-    const r = formToDraft(validForm({ name: 'edited' }), base)
+    const r = formToDraft(validForm({ name: 'edited' }), base) // trigger stays 'commit'
     expect(r.ok && r.draft.enabled).toBe(true)
-    expect(r.ok && r.draft.schedule).toBe('0 * * * *')
+    expect(r.ok && r.draft.schedule).toBeUndefined()
+  })
+
+  it('builds the schedule string from the form for a schedule trigger', () => {
+    const r = formToDraft(
+      validForm({ trigger: 'schedule', scheduleEvery: '30', scheduleUnit: 'm' })
+    )
+    expect(r.ok && r.draft.trigger).toBe('schedule')
+    expect(r.ok && r.draft.schedule).toBe('30m')
+  })
+
+  it('round-trips a schedule cadence through draftToForm → formToDraft', () => {
+    const draft = (
+      formToDraft(validForm({ trigger: 'schedule', scheduleEvery: '2', scheduleUnit: 'd' })) as {
+        draft: PipelineDraft
+      }
+    ).draft
+    const form = draftToForm(draft)
+    expect(form.scheduleEvery).toBe('2')
+    expect(form.scheduleUnit).toBe('d')
+    expect((formToDraft(form) as { draft: PipelineDraft }).draft.schedule).toBe('2d')
+  })
+})
+
+describe('formToDraft — schedule validation', () => {
+  it('rejects a non-positive or non-numeric schedule interval', () => {
+    expect(
+      formToDraft(validForm({ trigger: 'schedule', scheduleEvery: '0', scheduleUnit: 'h' }))
+    ).toMatchObject({ ok: false })
+    expect(
+      formToDraft(validForm({ trigger: 'schedule', scheduleEvery: 'abc', scheduleUnit: 'h' }))
+    ).toMatchObject({ ok: false })
   })
 })
 

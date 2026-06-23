@@ -160,7 +160,14 @@ describe('planManualRun', () => {
     const r = planManualRun(pipeline(), repo())
     expect(r).toEqual({
       ok: true,
-      spec: { repoId: 7, accountId: 5, repoFullName: 'o/r', refType: 'commit', ref: 'main' }
+      spec: {
+        repoId: 7,
+        accountId: 5,
+        repoFullName: 'o/r',
+        refType: 'commit',
+        ref: 'main',
+        scheduleMs: null
+      }
     })
   })
 

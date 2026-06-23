@@ -86,8 +86,8 @@ export function planManualRun(
   pipeline: Pipeline,
   repo: RepoRow | undefined
 ): { ok: true; spec: WatchSpec } | { ok: false; error: string } {
-  if (pipeline.trigger !== 'commit') {
-    return { ok: false, error: 'Run-now currently supports commit-trigger pipelines.' }
+  if (pipeline.trigger !== 'commit' && pipeline.trigger !== 'schedule') {
+    return { ok: false, error: 'Run-now currently supports commit and schedule pipelines.' }
   }
   if (!repo) return { ok: false, error: 'Unknown repository.' }
   if (!repo.default_branch) return { ok: false, error: 'Repository has no default branch.' }
@@ -98,7 +98,9 @@ export function planManualRun(
       accountId: repo.account_id,
       repoFullName: repo.full_name,
       refType: 'commit',
-      ref: repo.default_branch
+      ref: repo.default_branch,
+      // Run-now is a one-shot forced run; the poller's per-cadence reschedule field is irrelevant.
+      scheduleMs: null
     }
   }
 }

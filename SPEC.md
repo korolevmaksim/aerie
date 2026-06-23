@@ -282,6 +282,18 @@ settings(key, value)
 > step-chaining/barrier, the M6 aggregator, the `assertMayPost`-gated actioner, and the IPC
 > surface — is the next M9a slice.
 
+> **Schedule trigger (cadence-based runs).** A `schedule` pipeline is watched on the same
+> default-branch path as a `commit` pipeline, but polled at a fixed user cadence parsed from
+> `Pipeline.schedule` — a compact `<N><unit>` string (`30m`/`6h`/`2d`, min 1 minute; the format
+> lives in `src/shared/schedule.ts`, shared by the editor and the poller) — instead of the
+> rate-based continuous cadence. `deriveWatches` carries the interval as `WatchSpec.scheduleMs`
+> (a commit pipeline sharing the branch forces rate-based; two schedules merge to the
+> most-frequent), and the poller reschedules a schedule-only watch at `now + scheduleMs`. A
+> scheduled run reviews the latest commit when it changes (deduped exactly like a commit run) and
+> flows through the **identical gated path** — `matchesScope` → guardrails → dedupe →
+> `assertMayPost` — so it adds no new exec/post surface. Run-now also covers `schedule` pipelines
+> (a one-shot forced run on the current head). `pr` remains manual-only.
+
 > **Automation pipelines — engine core (ROADMAP M9a).** `pipelines.ts` is the dependency-injected,
 > electron-free engine. `runPipelineForDelta(pipeline, delta, ports)` drives one pipeline:
 > trigger/scope filter (`matchesScope`) → `planWaves`/`checkGuardrails`/dedupe gates → insert a

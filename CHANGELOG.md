@@ -13,6 +13,17 @@ same change set.
 
 ### Added
 
+- **Scheduled pipelines actually run now** (ROADMAP M9a): the `schedule` trigger was a non-functional
+  stub — the editor had no cadence field and the poller only fired `commit` triggers. You can now set
+  **Run every N minutes / hours / days** in the pipeline editor, and a scheduled pipeline polls its
+  repo's default branch on that cadence (instead of the continuous commit cadence), reviewing the
+  latest commit when it changes — lighter on API budget for a periodic check. It runs once right
+  after you enable it (so it's testable), and **Run now** works on it too. The cadence is stored as a
+  compact `<N><unit>` string (`src/shared/schedule.ts`, shared by the editor + poller and
+  unit-tested); a scheduled run flows through the **same gated path** as a commit run (scope →
+  guardrails → dedupe → the `assertMayPost` auto-post gate), so it adds no new write/exec surface.
+  `pr` remains manual-only.
+
 - **Pick model & thinking level in the agent editor** (ROADMAP M12): the custom-agent form no
   longer forces hand-typing raw flags. It is restructured into **Identity** · **Basics** ·
   **Advanced**, with the model and reasoning/thinking level now edited as accessible add /

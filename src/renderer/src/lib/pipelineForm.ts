@@ -14,6 +14,12 @@ import type {
   PipelineTrigger,
   PostTarget
 } from '@shared/types'
+import {
+  formatSchedule,
+  parseScheduleMs,
+  parseScheduleParts,
+  type ScheduleUnit
+} from '@shared/schedule'
 
 export interface PipelineStepForm {
   /** Stable id within the pipeline (referenced by other steps' `dependsOn`). */
@@ -36,6 +42,9 @@ export interface PipelineFormState {
   /** Numeric string from the repo picker ('' = none selected). */
   repoId: string
   trigger: PipelineTrigger
+  /** Schedule cadence — only meaningful (and shown) when trigger === 'schedule'. */
+  scheduleEvery: string
+  scheduleUnit: ScheduleUnit
   steps: PipelineStepForm[]
   // scope (comma-separated text)
   branchesText: string
@@ -66,6 +75,8 @@ export function blankForm(): PipelineFormState {
     name: '',
     repoId: '',
     trigger: 'commit',
+    scheduleEvery: '6',
+    scheduleUnit: 'h',
     steps: [blankStep('s1')],
     branchesText: '',
     pathsText: '',
@@ -100,6 +111,8 @@ export function draftToForm(draft: PipelineDraft): PipelineFormState {
     name: draft.name,
     repoId: String(draft.repoId),
     trigger: draft.trigger,
+    scheduleEvery: String(parseScheduleParts(draft.schedule).every),
+    scheduleUnit: parseScheduleParts(draft.schedule).unit,
     steps:
       draft.steps.length > 0
         ? draft.steps.map((s) => ({
@@ -217,11 +230,24 @@ export function formToDraft(form: PipelineFormState, base?: PipelineDraft): Form
     if (value && value > 0) guardrails[field] = value
   }
 
+  // The schedule string is built from the form ONLY for a schedule trigger (so switching away
+  // from 'schedule' drops a stale cadence rather than silently carrying base.schedule).
+  let schedule: string | undefined
+  if (form.trigger === 'schedule') {
+    const every = Number(form.scheduleEvery.trim())
+    if (!Number.isInteger(every) || every <= 0) {
+      return err('Schedule interval must be a positive whole number.')
+    }
+    const s = formatSchedule(every, form.scheduleUnit)
+    if (parseScheduleMs(s) === null) return err('Schedule interval must be at least 1 minute.')
+    schedule = s
+  }
+
   const draft: PipelineDraft = {
     name,
     repoId,
     trigger: form.trigger,
-    ...(base?.schedule ? { schedule: base.schedule } : {}),
+    ...(schedule ? { schedule } : {}),
     enabled: base?.enabled ?? false,
     scope,
     steps,

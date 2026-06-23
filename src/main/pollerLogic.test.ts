@@ -36,7 +36,8 @@ const spec: WatchSpec = {
   accountId: 3,
   repoFullName: 'o/r',
   refType: 'commit',
-  ref: 'main'
+  ref: 'main',
+  scheduleMs: null
 }
 
 describe('deriveWatches', () => {
@@ -69,6 +70,43 @@ describe('deriveWatches', () => {
     )
     expect(ws).toHaveLength(2)
     expect(ws.map((w) => w.repoFullName).sort()).toEqual(['o/r', 'o/r2'])
+  })
+
+  it('a schedule pipeline produces a watch carrying its fixed interval (ms)', () => {
+    const ws = deriveWatches(
+      [pipeline({ trigger: 'schedule', schedule: '6h' })],
+      lookup({ 7: repo() })
+    )
+    expect(ws).toEqual([{ ...spec, scheduleMs: 6 * 3_600_000 }])
+  })
+
+  it('skips a schedule pipeline with no/invalid cadence', () => {
+    expect(deriveWatches([pipeline({ trigger: 'schedule' })], lookup({ 7: repo() }))).toEqual([])
+    expect(
+      deriveWatches([pipeline({ trigger: 'schedule', schedule: 'nope' })], lookup({ 7: repo() }))
+    ).toEqual([])
+  })
+
+  it('a commit pipeline sharing the branch forces rate-based (scheduleMs null) on the merged watch', () => {
+    const ws = deriveWatches(
+      [
+        pipeline({ id: 1, trigger: 'schedule', schedule: '6h' }),
+        pipeline({ id: 2, trigger: 'commit' })
+      ],
+      lookup({ 7: repo() })
+    )
+    expect(ws).toEqual([{ ...spec, scheduleMs: null }])
+  })
+
+  it('two schedule pipelines on one branch merge to the most-frequent interval', () => {
+    const ws = deriveWatches(
+      [
+        pipeline({ id: 1, trigger: 'schedule', schedule: '6h' }),
+        pipeline({ id: 2, trigger: 'schedule', schedule: '30m' })
+      ],
+      lookup({ 7: repo() })
+    )
+    expect(ws).toEqual([{ ...spec, scheduleMs: 30 * 60_000 }])
   })
 })
 
@@ -134,12 +172,15 @@ describe('buildCommitDelta', () => {
 })
 
 describe('matchingPipelines', () => {
-  it('keeps only this repo + commit-trigger pipelines', () => {
+  it('keeps this repo + commit and valid-schedule pipelines; drops other repos/triggers', () => {
     const ps = [
       pipeline({ id: 1, repoId: 7, trigger: 'commit' }),
       pipeline({ id: 2, repoId: 8, trigger: 'commit' }), // other repo
-      pipeline({ id: 3, repoId: 7, trigger: 'pr' }) // other trigger
+      pipeline({ id: 3, repoId: 7, trigger: 'pr' }), // non-firing trigger
+      pipeline({ id: 4, repoId: 7, trigger: 'schedule', schedule: '6h' }), // scheduled → fires on new head
+      pipeline({ id: 5, repoId: 7, trigger: 'schedule', schedule: 'bad' }), // invalid cadence → dropped
+      pipeline({ id: 6, repoId: 7, trigger: 'manual' }) // manual-only
     ]
-    expect(matchingPipelines(ps, spec).map((p) => p.id)).toEqual([1])
+    expect(matchingPipelines(ps, spec).map((p) => p.id)).toEqual([1, 4])
   })
 })

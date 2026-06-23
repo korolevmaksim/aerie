@@ -4,6 +4,7 @@
 // electron-bound timer + pollCommitHead + processDelta wiring lives in `poller.ts`.
 
 import type { Pipeline } from '../shared/types'
+import { parseScheduleMs } from '../shared/schedule'
 import type { DeltaContext } from './pipelines'
 
 /** The repo facts a watch needs (resolved by the poller from the store). */
@@ -22,6 +23,18 @@ export interface WatchSpec {
   refType: 'commit'
   /** Branch name. */
   ref: string
+  /**
+   * Fixed poll interval in ms for a SCHEDULE-only watch (its `schedule` trigger cadence). `null`
+   * means rate-based continuous polling — used when any `commit` pipeline shares this branch (the
+   * faster cadence wins) or for a pure commit watch.
+   */
+  scheduleMs: number | null
+}
+
+/** Merge a watch's interval across contributing pipelines: a commit (null) forces rate-based; else the most frequent (min) schedule interval. */
+function mergeInterval(a: number | null, b: number | null): number | null {
+  if (a === null || b === null) return null
+  return Math.min(a, b)
 }
 
 /** Stable schedule key for a watch — `<repoId>:<refType>:<ref>`. */
@@ -30,10 +43,12 @@ export function watchKey(spec: { repoId: number; refType: string; ref: string })
 }
 
 /**
- * Derives the unique commit-branch watches for the enabled pipelines. A commit-trigger
- * pipeline watches its repo's default branch; a pipeline whose repo is missing or has no
- * default branch is skipped. PR/schedule/manual triggers produce no watches in this slice.
- * Deduped by (repo, ref) so several pipelines on one repo share a single watch.
+ * Derives the unique default-branch watches for the enabled pipelines. A `commit` pipeline watches
+ * its repo's default branch at the rate-based cadence; a `schedule` pipeline watches it at its own
+ * fixed interval (parsed from `schedule`, e.g. "6h"); a pipeline whose repo is missing/has no
+ * default branch, or a `schedule` pipeline with no valid interval, is skipped. PR/manual triggers
+ * produce no watches. Deduped by (repo, ref): pipelines on one branch share a single watch, and the
+ * watch's `scheduleMs` is the most-frequent cadence among them (a commit pipeline forces rate-based).
  */
 export function deriveWatches(
   pipelines: Pipeline[],
@@ -41,7 +56,9 @@ export function deriveWatches(
 ): WatchSpec[] {
   const byKey = new Map<string, WatchSpec>()
   for (const p of pipelines) {
-    if (p.trigger !== 'commit') continue
+    if (p.trigger !== 'commit' && p.trigger !== 'schedule') continue
+    const interval = p.trigger === 'schedule' ? parseScheduleMs(p.schedule) : null
+    if (p.trigger === 'schedule' && interval === null) continue // no/invalid cadence → no watch
     const repo = repoInfo(p.repoId)
     if (!repo || !repo.defaultBranch) continue
     const spec: WatchSpec = {
@@ -49,9 +66,13 @@ export function deriveWatches(
       accountId: repo.accountId,
       repoFullName: repo.fullName,
       refType: 'commit',
-      ref: repo.defaultBranch
+      ref: repo.defaultBranch,
+      scheduleMs: interval
     }
-    byKey.set(watchKey(spec), spec)
+    const key = watchKey(spec)
+    const existing = byKey.get(key)
+    if (existing) existing.scheduleMs = mergeInterval(existing.scheduleMs, interval)
+    else byKey.set(key, spec)
   }
   return [...byKey.values()]
 }
@@ -104,7 +125,15 @@ export function buildCommitDelta(spec: WatchSpec, headSha: string, meta: DeltaMe
   }
 }
 
-/** The enabled pipelines a watch's delta applies to (its repo + a commit trigger). */
+/**
+ * The enabled pipelines a watch's delta applies to: its repo, triggered by a new commit on the
+ * watched branch — both `commit` pipelines and `schedule` pipelines (with a valid cadence), since
+ * a scheduled pipeline reviews the default-branch head when it changes, just at its own poll rate.
+ */
 export function matchingPipelines(pipelines: Pipeline[], spec: WatchSpec): Pipeline[] {
-  return pipelines.filter((p) => p.trigger === 'commit' && p.repoId === spec.repoId)
+  return pipelines.filter(
+    (p) =>
+      p.repoId === spec.repoId &&
+      (p.trigger === 'commit' || (p.trigger === 'schedule' && parseScheduleMs(p.schedule) !== null))
+  )
 }

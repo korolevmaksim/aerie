@@ -139,16 +139,20 @@ async function tick(): Promise<void> {
         )
         lastPolledAt = Date.now()
         lastRate = { remaining: result.rate.remaining, limit: result.rate.limit }
+        // A schedule-only watch polls at its fixed user cadence; a commit (or mixed) watch uses the
+        // rate-aware continuous cadence.
         schedule.set(
           watchKey(watch),
-          planNextPollAt({
-            rate: result.rate,
-            nowMs: Date.now(),
-            baseIntervalMs: BASE_INTERVAL_MS,
-            maxIntervalMs: MAX_INTERVAL_MS,
-            jitterRatio: JITTER_RATIO,
-            rand: Math.random()
-          })
+          watch.scheduleMs != null
+            ? Date.now() + watch.scheduleMs
+            : planNextPollAt({
+                rate: result.rate,
+                nowMs: Date.now(),
+                baseIntervalMs: BASE_INTERVAL_MS,
+                maxIntervalMs: MAX_INTERVAL_MS,
+                jitterRatio: JITTER_RATIO,
+                rand: Math.random()
+              })
         )
         // Await the full pipeline run before moving on. A successfully processed head has its
         // last_seen advanced (in `processDelta`) and its next poll scheduled ≥BASE out, so it
