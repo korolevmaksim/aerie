@@ -207,11 +207,22 @@ per-CLI enumerator roster is just a longer static list. Make it data-driven:
   agent editor prefilled with the candidate's command (via an imperative `AgentEditorHandle` —
   confirms before discarding an in-progress edit, moves focus into the form). No new privileged
   surface; nothing runs until the user saves + approves the agent. Frontend-review: APPROVED.
+- **`configFile` discovery kind — DOCUMENTED-DEFER (researched 2026-06-23, no actionable
+  consumer).** Checked whether qwen-code / continue (`cn`) / codex keep a user-pickable model list
+  in a readable local config file: **Continue** does (`~/.continue/config.yaml`, YAML, top-level
+  `models:` → per-entry `name`), but it's a non-consumer for Aerie because (a) it's YAML (a new
+  parser dependency) and (b) Aerie's `cn` template has **no `--model` flag** (cn uses Continue's own
+  configured model), so a discovered list would be non-actionable — a model dropdown that selects
+  nothing. **qwen-code** and **codex** were not confirmed to store a selectable model list on disk
+  (model passed via `--model`/env; codex's `debug models` JSON is Experimental). Shipping the
+  `configFile` kind now would add a `ModelDiscovery` variant with no real consumer, so it's deferred
+  until a confirmed agent exists (or Aerie wires `cn --model` + a YAML reader). The slice itself is
+  small once justified: `{kind:'configFile', path, jsonPath}` + an allow-listed `cloneModelDiscovery`
+  branch (read-only, never exec) + a pure file-content→`string[]` parse.
 - **Still TODO (M2):** **probe enrichment** for candidates (`--version`/`--help`/config globs —
   itself local exec, so exec-consent + timeout + killTree gated); the **signed-remote** catalog update
-  through `parseCatalog` (add a read size cap + signature verification before trust); the
-  `configFile` discovery kind (qwen/cn/codex — codex's `debug models` JSON is Experimental,
-  deferred; extend `cloneModelDiscovery`'s allow-list when it lands); and provenance layering.
+  through `parseCatalog` (add a read size cap + signature verification before trust); and provenance
+  layering.
 
 **Components:** `main/agentDiscovery.ts` (new), catalog files, `main/agentRunner.ts`,
 `shared/types.ts` (AgentInfo `version`/`modelsSource`), `shared/channels.ts` + `main/ipc.ts`
