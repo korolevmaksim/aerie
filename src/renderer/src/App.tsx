@@ -14,6 +14,10 @@ import MissionControlPanel from './components/MissionControlPanel'
 
 type View = 'cockpit' | 'repos' | 'accounts' | 'history' | 'tools' | 'automate' | 'settings'
 
+function accountSwitchView(view: View): View {
+  return view === 'history' || view === 'repos' || view === 'automate' ? view : 'cockpit'
+}
+
 function App(): React.JSX.Element {
   const [accounts, setAccounts] = useState<AccountSummary[]>([])
   const [selectedId, setSelectedId] = useState<number | null>(null)
@@ -129,7 +133,7 @@ function App(): React.JSX.Element {
         run: () => {
           setSelectedId(a.id)
           setOpenRepo(null)
-          setView('repos')
+          setView(accountSwitchView)
         }
       })
     }
@@ -207,9 +211,7 @@ function App(): React.JSX.Element {
               onChange={(e) => {
                 setSelectedId(Number(e.target.value))
                 setOpenRepo(null)
-                setView((v) =>
-                  v === 'history' || v === 'repos' || v === 'automate' ? v : 'cockpit'
-                )
+                setView(accountSwitchView)
               }}
             >
               {accounts.map((a) => (

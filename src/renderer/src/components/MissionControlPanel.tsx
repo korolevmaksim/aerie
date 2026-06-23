@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type {
   AgentInfo,
   PipelineWithRuns,
@@ -17,6 +17,12 @@ import { formatRelativeTime } from '../lib/format'
 import { formatPollerStatus } from '../lib/pollerStatus'
 
 type ViewTarget = 'repos' | 'history' | 'tools' | 'automate' | 'accounts' | 'settings'
+
+function loadErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim().length > 0) return error.message
+  if (typeof error === 'string' && error.trim().length > 0) return error
+  return 'Failed to load cockpit data.'
+}
 
 function RunRow({
   run,
@@ -110,33 +116,93 @@ function MissionControlPanel({
   const [loadedFor, setLoadedFor] = useState<number | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const activeAccountIdRef = useRef(accountId)
+  const mountedRef = useRef(true)
+  const loadIdRef = useRef(0)
+  const loadedForRef = useRef<number | null>(null)
   const loading = loadedFor !== accountId
+
+  useLayoutEffect(() => {
+    activeAccountIdRef.current = accountId
+  }, [accountId])
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
+
+  useEffect(() => {
+    loadedForRef.current = loadedFor
+  }, [loadedFor])
 
   const load = useCallback(
     async (isCancelled: () => boolean = () => false): Promise<void> => {
-      const [repoRes, runRes, agentRes, pipelineRes, pollerRes] = await Promise.all([
-        window.aerie.repos.list(accountId),
-        window.aerie.runner.listAllRuns(),
-        window.aerie.runner.listAgents(),
-        window.aerie.pipelines.list(),
-        window.aerie.pipelines.pollerStatus()
-      ])
-      if (isCancelled()) return
+      const loadAccountId = accountId
+      const loadId = loadIdRef.current + 1
+      loadIdRef.current = loadId
+      const canApply = (): boolean =>
+        mountedRef.current &&
+        !isCancelled() &&
+        activeAccountIdRef.current === loadAccountId &&
+        loadIdRef.current === loadId
 
-      const errors: string[] = []
-      if (repoRes.ok) setRepos(repoRes.value.repos)
-      else errors.push(repoRes.error)
-      if (runRes.ok) setRuns(runRes.value.filter((run) => run.accountId === accountId))
-      else errors.push(runRes.error)
-      if (agentRes.ok) setAgents(agentRes.value)
-      else errors.push(agentRes.error)
-      if (pipelineRes.ok) setPipelines(pipelineRes.value)
-      else errors.push(pipelineRes.error)
-      if (pollerRes.ok) setPoller(pollerRes.value)
-      else errors.push(pollerRes.error)
+      try {
+        const [repoRes, runRes, agentRes, pipelineRes, pollerRes] = await Promise.all([
+          window.aerie.repos.list(loadAccountId),
+          window.aerie.runner.listAllRuns(),
+          window.aerie.runner.listAgents(),
+          window.aerie.pipelines.list(),
+          window.aerie.pipelines.pollerStatus()
+        ])
+        if (!canApply()) return
 
-      setError(errors[0] ?? null)
-      setLoadedFor(accountId)
+        const alreadyLoaded = loadedForRef.current === loadAccountId
+        const errors: string[] = []
+        if (repoRes.ok) setRepos(repoRes.value.repos)
+        else {
+          errors.push(repoRes.error)
+          if (!alreadyLoaded) setRepos([])
+        }
+        if (runRes.ok) setRuns(runRes.value.filter((run) => run.accountId === loadAccountId))
+        else {
+          errors.push(runRes.error)
+          if (!alreadyLoaded) setRuns([])
+        }
+        if (agentRes.ok) setAgents(agentRes.value)
+        else {
+          errors.push(agentRes.error)
+          if (!alreadyLoaded) setAgents([])
+        }
+        if (pipelineRes.ok) setPipelines(pipelineRes.value)
+        else {
+          errors.push(pipelineRes.error)
+          if (!alreadyLoaded) setPipelines([])
+        }
+        if (pollerRes.ok) setPoller(pollerRes.value)
+        else {
+          errors.push(pollerRes.error)
+          if (!alreadyLoaded) setPoller(null)
+        }
+
+        setError(errors[0] ?? null)
+        loadedForRef.current = loadAccountId
+        setLoadedFor(loadAccountId)
+      } catch (err) {
+        if (!canApply()) return
+
+        if (loadedForRef.current !== loadAccountId) {
+          setRepos([])
+          setRuns([])
+          setAgents([])
+          setPipelines([])
+          setPoller(null)
+        }
+        setError(loadErrorMessage(err))
+        loadedForRef.current = loadAccountId
+        setLoadedFor(loadAccountId)
+      }
     },
     [accountId]
   )
@@ -190,9 +256,9 @@ function MissionControlPanel({
     setRefreshing(true)
     try {
       await load()
-      setNow(Date.now())
+      if (mountedRef.current && activeAccountIdRef.current === accountId) setNow(Date.now())
     } finally {
-      setRefreshing(false)
+      if (mountedRef.current) setRefreshing(false)
     }
   }
 

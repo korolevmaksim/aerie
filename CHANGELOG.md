@@ -160,6 +160,12 @@ same change set.
 
 ### Fixed
 
+- **Review cockpit refreshes no longer apply stale account data**: in-flight cockpit loads from a
+  previous account, polling tick, or manual refresh are ignored after an account switch or unmount;
+  rejected IPC calls now surface as a cockpit alert instead of leaving the screen in an endless
+  loading state; and command-palette account switching follows the same view-restoration behavior
+  as the sidebar account selector.
+
 - **Review checkout no longer fails when the app inherits `PAGER`**: Aerie's git preparation path
   now strips inherited pager/editor/git-control environment variables before giving an env to
   `simple-git`, instead of forwarding `PAGER=...` and hitting
