@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { BranchSummary, CommitSummary, PullRequestSummary, RepoSummary } from '@shared/types'
 import { formatRelativeTime } from '../lib/format'
-import { clickableRow } from '../lib/a11y'
 import CommitDetailView from './CommitDetailView'
 import PrDetailView from './PrDetailView'
 import RepoMappingPanel from './RepoMappingPanel'
@@ -107,17 +106,14 @@ function CommitsTab({
         <>
           <ul className="commits">
             {commits.map((c) => (
-              <li
-                key={c.sha}
-                className="commit-row"
-                aria-label={`Open commit ${c.sha.slice(0, 8)}`}
-                {...clickableRow(() => onOpenCommit(c.sha))}
-              >
-                <code className="sha">{c.sha.slice(0, 8)}</code>
-                <span className="commit-row__msg">{c.message.split('\n')[0]}</span>
-                <span className="muted">
-                  {c.authorLogin ?? c.authorName ?? ''} · {formatRelativeTime(c.authoredAt)}
-                </span>
+              <li key={c.sha}>
+                <button type="button" className="commit-row" onClick={() => onOpenCommit(c.sha)}>
+                  <code className="sha">{c.sha.slice(0, 8)}</code>
+                  <span className="commit-row__msg">{c.message.split('\n')[0]}</span>
+                  <span className="muted">
+                    {c.authorLogin ?? c.authorName ?? ''} · {formatRelativeTime(c.authoredAt)}
+                  </span>
+                </button>
               </li>
             ))}
           </ul>
@@ -197,17 +193,14 @@ function PullsTab({
     <>
       <ul className="commits">
         {pulls.map((p) => (
-          <li
-            key={p.number}
-            className="commit-row"
-            aria-label={`Open pull request #${p.number}`}
-            {...clickableRow(() => onOpenPull(p.number))}
-          >
-            <span className="muted">#{p.number}</span>
-            <span className="commit-row__msg">{p.title}</span>
-            <span className="muted">
-              {p.authorLogin ?? ''} · {formatRelativeTime(p.createdAt)}
-            </span>
+          <li key={p.number}>
+            <button type="button" className="commit-row" onClick={() => onOpenPull(p.number)}>
+              <span className="muted">#{p.number}</span>
+              <span className="commit-row__msg">{p.title}</span>
+              <span className="muted">
+                {p.authorLogin ?? ''} · {formatRelativeTime(p.createdAt)}
+              </span>
+            </button>
           </li>
         ))}
       </ul>

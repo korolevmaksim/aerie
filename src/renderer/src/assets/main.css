@@ -881,19 +881,31 @@ select.field {
   gap: 0.25rem;
 }
 
+/* The clickable commit/PR row is a native <button> inside a listitem (so the <ul> keeps its
+   list semantics). These resets make the button render like the old row; width:100% fills the
+   list, and font/color/text-align inherit so the content looks unchanged. */
 .commit-row {
   display: flex;
   align-items: center;
   gap: 0.7rem;
+  width: 100%;
   padding: 0.5rem 0.7rem;
   border: 1px solid var(--border);
   border-radius: 7px;
   background: var(--panel);
+  font: inherit;
+  color: inherit;
+  text-align: left;
   cursor: pointer;
 }
 
 .commit-row:hover {
   border-color: var(--accent);
+}
+
+/* Match the focus ring's corners to the row (the global :focus-visible uses 4px). */
+.commit-row:focus-visible {
+  border-radius: 7px;
 }
 
 .commit-row__msg {

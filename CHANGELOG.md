@@ -55,6 +55,12 @@ same change set.
 
 ### Changed
 
+- **Commit / PR lists keep proper list semantics** (ROADMAP M11): the clickable commit and
+  pull-request rows in the repo and PR views previously put `role="button"` on the `<li>` itself,
+  which overrode its list-item role (a screen reader announced "N buttons" instead of "list, N
+  items"). Each row is now a native `<button>` inside a plain `<li>`, so the list is announced as
+  a list and each row is still fully keyboard-operable (Tab + Enter/Space) with a focus ring.
+
 - **Accessible confirm dialogs** (ROADMAP M11): every confirmation (remove account, delete
   agent, discard an in-progress agent form, and the pipeline auto-post opt-in) now uses a shared,
   themed, focus-trapped `role="alertdialog"` behind a promise-based `useConfirm()` hook instead
