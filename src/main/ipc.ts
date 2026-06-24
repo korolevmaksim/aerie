@@ -89,6 +89,8 @@ import { planManualRun, toPipelineWithRuns, validateSaveRequest } from './pipeli
 import { getPollerStatus } from './poller'
 import { runPipelineForDelta } from './pipelines'
 import { buildCommitDelta, DELTA_META } from './pollerLogic'
+import { resolveRunPostTarget } from './postTarget'
+import { redactText } from './redact'
 import { isTrustedSender } from './security'
 import { isValidId, isValidSha } from '../shared/validators'
 import {
@@ -864,21 +866,16 @@ export function registerIpcHandlers(): void {
       if (!run || run.repo_id !== p.repoId) return fail('Run does not belong to that repository.')
 
       try {
+        const target = resolveRunPostTarget(run, { kind: p.kind, title: p.title })
+        if (!target.ok) return fail(target.error)
+
         let url: string
-        if (p.kind === 'commitComment') {
-          if (!isValidSha(p.sha)) return fail('Invalid SHA.')
-          url = await createCommitComment(accountId, repo.full_name, p.sha, body)
-        } else if (p.kind === 'prComment') {
-          if (typeof p.prNumber !== 'number' || !Number.isInteger(p.prNumber) || p.prNumber <= 0) {
-            return fail('Invalid pull request number.')
-          }
-          url = await createPrComment(accountId, repo.full_name, p.prNumber, body)
-        } else if (p.kind === 'issue') {
-          const title = typeof p.title === 'string' ? p.title.trim() : ''
-          if (!title) return fail('An issue title is required.')
-          url = await createIssue(accountId, repo.full_name, title, body)
+        if (target.target.kind === 'commitComment') {
+          url = await createCommitComment(accountId, repo.full_name, target.target.sha, body)
+        } else if (target.target.kind === 'prComment') {
+          url = await createPrComment(accountId, repo.full_name, target.target.prNumber, body)
         } else {
-          return fail('Unknown post kind.')
+          url = await createIssue(accountId, repo.full_name, target.target.title, body)
         }
         setRunPostedUrl(p.runId, url)
         return ok({ url })
@@ -1118,10 +1115,10 @@ function rowToMapping(row: RepoRow): RepoMapping {
   }
 }
 
-/** Concise, token-free message for a git failure (tokens never appear in git output). */
+/** Concise, token-free message for a git failure. */
 function describeGitError(error: unknown): string {
   const raw = error instanceof Error ? error.message : 'Git operation failed.'
-  return raw.split('\n')[0].slice(0, 300)
+  return redactText(raw).split('\n')[0].slice(0, 300)
 }
 
 /**

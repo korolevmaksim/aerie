@@ -8,6 +8,7 @@
 // webhook; every GitHub write stays behind the per-pipeline auto-post opt-in.
 
 import type { PollerStatus } from '../shared/types'
+import { parseScheduleMs } from '../shared/schedule'
 import { pollCommitHead } from './github'
 import { log } from './logger'
 import { buildEnginePorts, loadEnabledPipelines } from './pipelineEngine'
@@ -16,6 +17,7 @@ import { processDelta, type EnginePorts } from './pipelines'
 import {
   buildCommitDelta,
   deriveWatches,
+  dueSchedulePipelineIds,
   matchingPipelines,
   selectDueWatches,
   shouldProcessHead,
@@ -38,6 +40,7 @@ let engine: { ports: EnginePorts; dispose: () => void } | null = null
 let stopped = true
 /** watchKey → next-poll epoch ms; persists across ticks. */
 const schedule = new Map<string, number>()
+const pipelineSchedule = new Map<number, number>()
 // Read-only observability (M14): updated as a side effect of normal operation; never alters
 // pacing. `lastPolledAt`/`lastRate` are set after each GitHub poll, `nextPollAt` whenever a
 // timer is armed.
@@ -66,6 +69,7 @@ export function startPoller(): void {
   // nothing until this session actually polls (armTimer below sets nextPollAt).
   lastPolledAt = null
   lastRate = null
+  pipelineSchedule.clear()
   log.info('poller started')
   armTimer(0)
 }
@@ -125,6 +129,14 @@ async function tick(): Promise<void> {
     // Drop schedule entries for watches that no longer exist (pipeline removed/disabled).
     const liveKeys = new Set(watches.map(watchKey))
     for (const k of [...schedule.keys()]) if (!liveKeys.has(k)) schedule.delete(k)
+    const liveSchedulePipelineIds = new Set(
+      pipelines
+        .filter((p) => p.trigger === 'schedule' && parseScheduleMs(p.schedule) !== null)
+        .map((p) => p.id)
+    )
+    for (const id of [...pipelineSchedule.keys()]) {
+      if (!liveSchedulePipelineIds.has(id)) pipelineSchedule.delete(id)
+    }
 
     const due = selectDueWatches(watches, (k) => schedule.get(k), Date.now(), MAX_CONCURRENT_POLLS)
     for (const watch of due) {
@@ -132,6 +144,13 @@ async function tick(): Promise<void> {
       // throughput: due watches are processed serially (one long agent run blocks the rest);
       // parallelizing is a post-v1 follow-up — serial keeps the no-double-run guarantee simple.
       try {
+        const now = Date.now()
+        const dueScheduleIds = dueSchedulePipelineIds(
+          pipelines,
+          watch,
+          (id) => pipelineSchedule.get(id),
+          now
+        )
         const result = await pollCommitHead(
           watch.accountId,
           watch.repoId,
@@ -140,30 +159,42 @@ async function tick(): Promise<void> {
         )
         lastPolledAt = Date.now()
         lastRate = { remaining: result.rate.remaining, limit: result.rate.limit }
-        // A schedule-only watch polls at its fixed user cadence; a commit (or mixed) watch uses the
-        // rate-aware continuous cadence.
-        schedule.set(
-          watchKey(watch),
-          watch.scheduleMs != null
-            ? Date.now() + watch.scheduleMs
-            : planNextPollAt({
-                rate: result.rate,
-                nowMs: Date.now(),
-                baseIntervalMs: BASE_INTERVAL_MS,
-                maxIntervalMs: MAX_INTERVAL_MS,
-                jitterRatio: JITTER_RATIO,
-                rand: Math.random()
-              })
-        )
         // Await the full pipeline run before moving on. A successfully processed head has its
         // last_seen advanced (in `processDelta`) and its next poll scheduled ≥BASE out, so it
         // won't re-run. On a pipeline error `processDelta` deliberately does NOT advance
         // last_seen, so the same head is re-detected next cycle — that retry is safe because
         // the engine's dedupe gate skips any already-completed identical work (no double write).
-        const applicable = matchingPipelines(pipelines, watch)
+        const applicable = matchingPipelines(pipelines, watch, dueScheduleIds)
+        let advanced = true
         if (result.headSha && shouldProcessHead(applicable, result.changed) && !stopped) {
           const delta = buildCommitDelta(watch, result.headSha, DELTA_META)
-          await processDelta(applicable, delta, ports)
+          const processed = await processDelta(applicable, delta, ports)
+          advanced = processed.advanced
+        }
+        if (advanced) {
+          for (const pipelineId of dueScheduleIds) {
+            const pipeline = pipelines.find((p) => p.id === pipelineId)
+            const interval = pipeline ? parseScheduleMs(pipeline.schedule) : null
+            if (interval !== null) pipelineSchedule.set(pipelineId, Date.now() + interval)
+          }
+          // A schedule-only watch polls at its fixed user cadence; a commit (or mixed) watch uses the
+          // rate-aware continuous cadence. Individual schedule pipelines are filtered above, so a slow
+          // schedule sharing a faster watch does not run early.
+          schedule.set(
+            watchKey(watch),
+            watch.scheduleMs != null
+              ? Date.now() + watch.scheduleMs
+              : planNextPollAt({
+                  rate: result.rate,
+                  nowMs: Date.now(),
+                  baseIntervalMs: BASE_INTERVAL_MS,
+                  maxIntervalMs: MAX_INTERVAL_MS,
+                  jitterRatio: JITTER_RATIO,
+                  rand: Math.random()
+                })
+          )
+        } else {
+          schedule.set(watchKey(watch), Date.now() + BASE_INTERVAL_MS)
         }
       } catch (err) {
         log.warn('poller: poll failed', {

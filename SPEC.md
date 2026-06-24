@@ -60,7 +60,9 @@ If any fixed choice blocks you, STOP and flag it. Do not swap it on your own.
   in-flight stream is scrubbed per-chunk (best-effort, so the RunView doesn't show a key
   verbatim while the run is mid-flight).
 - Any GitHub **write** (post comment, create issue) requires an explicit in-app
-  confirmation step before it fires.
+  confirmation step before it fires. Main derives commit/PR post targets from the
+  stored finished run (`ref_type`, `ref_id`, `head_sha`), not renderer-supplied
+  SHA/PR parameters.
 - Data-entry dialogs never discard typed work through backdrop clicks. Pipeline creation/editing
   and editable GitHub-post confirmations close only through explicit Cancel/Escape/Post/Save
   controls; Cancel/Escape prompts before discarding dirty drafts. Inline long-form editors
@@ -327,7 +329,9 @@ settings(key, value)
 > lives in `src/shared/schedule.ts`, shared by the editor and the poller) — instead of the
 > rate-based continuous cadence. `deriveWatches` carries the interval as `WatchSpec.scheduleMs`
 > (a commit pipeline sharing the branch forces rate-based; two schedules merge to the
-> most-frequent), and the poller reschedules a schedule-only watch at `now + scheduleMs`. A
+> most-frequent), and the poller reschedules a schedule-only watch at `now + scheduleMs`.
+> Merged watches share the GitHub head probe only: each schedule pipeline also has its own
+> next-due timestamp, so a `6h` schedule sharing a `30m`/commit watch does not run early. A
 > scheduled run has a `reviewTarget`: `commit` reviews the latest commit diff when the head changes
 > (deduped exactly like a commit run), while `project` reviews the whole repository snapshot on every
 > due cadence even when the head SHA is unchanged. Both paths flow through the **identical gated

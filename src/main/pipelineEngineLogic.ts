@@ -34,7 +34,11 @@ export function stripDangerousKeys<T>(value: T): T {
  * The row id is authoritative (overrides any `id` the config carries), and dangerous
  * prototype keys are stripped during parse.
  */
-export function parsePipelineRow(row: { id: number; config: string }): Pipeline | null {
+export function parsePipelineRow(row: {
+  id: number
+  config: string
+  enabled?: number
+}): Pipeline | null {
   let parsed: unknown
   try {
     parsed = safeJsonParse(row.config)
@@ -42,7 +46,11 @@ export function parsePipelineRow(row: { id: number; config: string }): Pipeline 
     return null
   }
   if (!isPipelineDraft(parsed)) return null
-  return { ...parsed, id: row.id }
+  return {
+    ...parsed,
+    id: row.id,
+    enabled: row.enabled === undefined ? parsed.enabled : row.enabled === 1
+  }
 }
 
 /** Extracts a positive PR number from a watch ref (`pr:42` → 42); null otherwise. */

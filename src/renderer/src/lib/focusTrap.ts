@@ -12,6 +12,28 @@ export const FOCUSABLE_SELECTOR = [
   '[tabindex]:not([tabindex="-1"])'
 ].join(',')
 
+function firstSummary(details: HTMLElement): HTMLElement | null {
+  for (const child of Array.from(details.children)) {
+    if (child instanceof HTMLElement && child.tagName.toLowerCase() === 'summary') return child
+  }
+  return null
+}
+
+/** Whether `element` is a real tab stop inside this trap right now. */
+export function isFocusableInTrap(element: HTMLElement, container: HTMLElement): boolean {
+  if (element.hidden || element.getAttribute('aria-hidden') === 'true') return false
+  let node: HTMLElement | null = element
+  while (node && node !== container) {
+    if (node.inert || node.hidden || node.getAttribute('aria-hidden') === 'true') return false
+    if (node.tagName.toLowerCase() === 'details' && !node.hasAttribute('open')) {
+      const summary = firstSummary(node)
+      return summary !== null && (summary === element || summary.contains(element))
+    }
+    node = node.parentElement
+  }
+  return true
+}
+
 /**
  * The index to focus next inside a focus trap, given the currently-focused element's
  * index, the number of trappable elements, and whether Shift was held. Wraps around the

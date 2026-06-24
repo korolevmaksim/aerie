@@ -29,6 +29,7 @@ describe('isInternalUrl', () => {
   })
   it('in prod, only file:// is internal', () => {
     expect(isInternalUrl('file:///Applications/Aerie.app/index.html')).toBe(true)
+    expect(isInternalUrl('FILE:///Applications/Aerie.app/index.html')).toBe(true)
     expect(isInternalUrl('https://github.com/')).toBe(false)
   })
 })

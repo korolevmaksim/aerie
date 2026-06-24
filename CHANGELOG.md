@@ -197,6 +197,29 @@ same change set.
 
 ### Fixed
 
+- **GitHub post targets are derived in main from the stored run**: the `github:post` handler now
+  ignores renderer-supplied SHA/PR targets for privileged routing. Commit comments can only post to
+  a successful commit run's `head_sha`, PR comments can only post to a successful PR run's `ref_id`,
+  and issue creation still requires a successful finished run plus an explicit title.
+
+- **Pipeline toggles and scheduled cadence stay consistent**: enabling/disabling a pipeline now
+  keeps the promoted SQL column and persisted JSON config aligned, and the parser treats the SQL
+  column as authoritative for old stale rows. Merged poll watches still share one GitHub head probe,
+  but each schedule pipeline now has its own due timestamp, so slow schedules do not run at a faster
+  pipeline's cadence.
+
+- **Interrupted app-owned clones self-heal**: if a fresh clone fails, Aerie removes the partial
+  clone directory it created; if a later attempt finds stale non-git residue in the app-owned clone
+  path, it clears that residue before cloning again. Repository path validation also rejects null
+  bytes before constructing clone/worktree paths.
+
+- **Modal focus trapping skips hidden closed-details controls**: controls inside a collapsed
+  `<details>` section are no longer treated as tab stops, while the visible summary remains
+  keyboard-reachable.
+
+- **Renderer-facing git errors are redacted**: git failure messages shown through IPC now pass
+  through the same secret redactor before being truncated for display.
+
 - **Windows-only esbuild dev-server path traversal advisory remediated**: Vite's transitive
   `esbuild` is overridden to the patched `0.28.1` release for GHSA-g7r4-m6w7-qqqr, avoiding the
   vulnerable `0.27.3`–`0.28.0` range while keeping the current Vite 7 / electron-vite 5 stack.

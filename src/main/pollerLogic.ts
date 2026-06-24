@@ -126,16 +126,39 @@ export function buildCommitDelta(spec: WatchSpec, headSha: string, meta: DeltaMe
 }
 
 /**
- * The enabled pipelines a watch's delta applies to: its repo, triggered by a new commit on the
- * watched branch — both `commit` pipelines and `schedule` pipelines (with a valid cadence), since
- * a scheduled pipeline reviews the default-branch head when it changes, just at its own poll rate.
+ * The enabled pipelines a watch's delta applies to: its repo's `commit` pipelines plus due
+ * `schedule` pipelines. `dueScheduleIds` is optional for older tests/helpers; the live poller passes
+ * it so a slow schedule sharing a faster watch does not run early.
  */
-export function matchingPipelines(pipelines: Pipeline[], spec: WatchSpec): Pipeline[] {
+export function matchingPipelines(
+  pipelines: Pipeline[],
+  spec: WatchSpec,
+  dueScheduleIds?: ReadonlySet<number>
+): Pipeline[] {
   return pipelines.filter(
     (p) =>
       p.repoId === spec.repoId &&
-      (p.trigger === 'commit' || (p.trigger === 'schedule' && parseScheduleMs(p.schedule) !== null))
+      (p.trigger === 'commit' ||
+        (p.trigger === 'schedule' &&
+          parseScheduleMs(p.schedule) !== null &&
+          (dueScheduleIds === undefined || dueScheduleIds.has(p.id))))
   )
+}
+
+/** The schedule pipelines on this watch whose own cadence is due now. */
+export function dueSchedulePipelineIds(
+  pipelines: Pipeline[],
+  spec: WatchSpec,
+  scheduledAt: (pipelineId: number) => number | undefined,
+  now: number
+): Set<number> {
+  const due = new Set<number>()
+  for (const p of pipelines) {
+    if (p.repoId !== spec.repoId || p.trigger !== 'schedule') continue
+    if (parseScheduleMs(p.schedule) === null) continue
+    if ((scheduledAt(p.id) ?? 0) <= now) due.add(p.id)
+  }
+  return due
 }
 
 /**

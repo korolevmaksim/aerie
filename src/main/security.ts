@@ -19,7 +19,11 @@ export function isInternalUrl(url: string): boolean {
       return false
     }
   }
-  return url.startsWith('file://')
+  try {
+    return new URL(url).protocol === 'file:'
+  } catch {
+    return false
+  }
 }
 
 /** Only http(s) targets may be handed to the OS shell for opening externally. */

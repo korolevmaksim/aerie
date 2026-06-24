@@ -1064,12 +1064,34 @@ export function updatePipeline(id: number, draft: PipelineDraft, now: string): b
   )
 }
 
+function syncPipelineConfigEnabled(config: string, enabled: boolean): string {
+  try {
+    const parsed = JSON.parse(config) as unknown
+    if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+      return JSON.stringify({ ...parsed, enabled })
+    }
+  } catch {
+    // Leave malformed config untouched; parsePipelineRow will reject it on read.
+  }
+  return config
+}
+
 /** Toggles a pipeline's enabled flag; returns false if no such pipeline exists. */
 export function setPipelineEnabled(id: number, enabled: boolean): boolean {
+  const database = requireDb()
+  const row = database.prepare(`SELECT config FROM pipelines WHERE id = ?`).get(id) as
+    | { config: string }
+    | undefined
+  if (!row) return false
   return (
-    requireDb()
-      .prepare(`UPDATE pipelines SET enabled = ?, updated_at = ? WHERE id = ?`)
-      .run(enabled ? 1 : 0, new Date().toISOString(), id).changes > 0
+    database
+      .prepare(`UPDATE pipelines SET enabled = ?, config = ?, updated_at = ? WHERE id = ?`)
+      .run(
+        enabled ? 1 : 0,
+        syncPipelineConfigEnabled(row.config, enabled),
+        new Date().toISOString(),
+        id
+      ).changes > 0
   )
 }
 

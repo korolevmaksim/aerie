@@ -5,6 +5,7 @@ import simpleGit, { type SimpleGit } from 'simple-git'
 import type { PrepareMode, PrepareResult } from '../shared/types'
 import { reviewDiffArgs } from './gitDiff'
 import { createKeyedMutex } from './keyedMutex'
+import { log } from './logger'
 
 // Serializes ALL writes to a clone's git metadata (fetch / clone / PR-head fetch / worktree
 // add+remove) per clone path, so concurrent reviews on the SAME repo never race on its ref store
@@ -75,7 +76,7 @@ function splitFullName(fullName: string): { owner: string; name: string } {
   const name = slash > 0 ? fullName.slice(slash + 1) : ''
   // Repo identifiers from GitHub are a safe charset; reject anything that could
   // escape the data dir.
-  if (!owner || !name || /[/\\]|\.\./.test(`${owner}/${name}`.replace('/', ''))) {
+  if (!owner || !name || /[/\\]|\.\.|\0/.test(`${owner}/${name}`.replace('/', ''))) {
     throw new Error('Invalid repository name.')
   }
   return { owner, name }
@@ -150,8 +151,14 @@ async function ensureClone(fullName: string, remoteUrl: string, token?: string):
   if (existsSync(join(clonePath, '.git'))) {
     await fetchWithRefRecovery(clonePath, ['--prune', '--tags', 'origin'], token)
   } else {
+    if (existsSync(clonePath)) rmSync(clonePath, { recursive: true, force: true })
     mkdirSync(clonePath, { recursive: true })
-    await authedGit(undefined, token).clone(remoteUrl, clonePath)
+    try {
+      await authedGit(undefined, token).clone(remoteUrl, clonePath)
+    } catch (error) {
+      rmSync(clonePath, { recursive: true, force: true })
+      throw error
+    }
   }
   return clonePath
 }
@@ -170,7 +177,11 @@ async function fetchWithRefRecovery(
 ): Promise<void> {
   try {
     await authedGit(clonePath, token).fetch(fetchArgs)
-  } catch {
+  } catch (firstError) {
+    log.warn('git fetch failed; retrying after pack-refs', {
+      clonePath,
+      error: String(firstError)
+    })
     await localGit(clonePath)
       .raw(['pack-refs', '--all'])
       .catch(() => undefined)

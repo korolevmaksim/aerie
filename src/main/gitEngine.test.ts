@@ -125,6 +125,66 @@ describe('buildProjectReviewContext', () => {
 })
 
 describe('prepare cleanup', () => {
+  it('rejects repository names containing null bytes', async () => {
+    const { clonePathFor } = await loadGitEngine('/tmp/aerie-test-user-data')
+    expect(() => clonePathFor('octo/repo\0evil')).toThrow(/Invalid repository name/)
+  })
+
+  it('replaces stale failed-clone residue before cloning into the app-owned clone', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'aerie-git-engine-'))
+    try {
+      const userData = join(root, 'userData')
+      mkdirSync(userData, { recursive: true })
+      const { repoDir } = createCommittedRepo(root)
+      writeFileSync(join(repoDir, 'README.md'), 'hello\nagain\n', 'utf8')
+      git(repoDir, ['add', 'README.md'])
+      git(repoDir, ['commit', '-m', 'second'])
+      const sha = git(repoDir, ['rev-parse', 'HEAD']).trim()
+      const { clonePathFor, cleanupCheckout, prepareCheckout } = await loadGitEngine(userData)
+      const clonePath = clonePathFor('octo/repo')
+      mkdirSync(clonePath, { recursive: true })
+      writeFileSync(join(clonePath, 'partial.txt'), 'left by interrupted clone\n', 'utf8')
+
+      const prepared = await prepareCheckout({
+        fullName: 'octo/repo',
+        sha,
+        remoteUrl: repoDir,
+        runTag: 'stale',
+        useLocalWorktree: false
+      })
+
+      expect(existsSync(join(clonePath, '.git'))).toBe(true)
+      expect(existsSync(join(clonePath, 'partial.txt'))).toBe(false)
+      await cleanupCheckout(prepared)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('cleans the app-owned clone directory when a fresh clone fails', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'aerie-git-engine-'))
+    try {
+      const userData = join(root, 'userData')
+      mkdirSync(userData, { recursive: true })
+      const { clonePathFor, prepareCheckout } = await loadGitEngine(userData)
+      const clonePath = clonePathFor('octo/repo')
+
+      await expect(
+        prepareCheckout({
+          fullName: 'octo/repo',
+          sha: 'a'.repeat(40),
+          remoteUrl: join(root, 'missing-remote.git'),
+          runTag: 'failed',
+          useLocalWorktree: false
+        })
+      ).rejects.toThrow()
+
+      expect(existsSync(clonePath)).toBe(false)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('removes a user-local linked worktree when commit diff generation fails', async () => {
     const root = mkdtempSync(join(tmpdir(), 'aerie-git-engine-'))
     try {

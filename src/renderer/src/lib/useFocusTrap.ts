@@ -1,5 +1,5 @@
 import { useEffect, type RefObject } from 'react'
-import { FOCUSABLE_SELECTOR, nextFocusIndex } from './focusTrap'
+import { FOCUSABLE_SELECTOR, isFocusableInTrap, nextFocusIndex } from './focusTrap'
 
 /**
  * Traps Tab focus within `ref` (a modal/dialog) and restores focus to the element that
@@ -21,7 +21,9 @@ export function useFocusTrap(ref: RefObject<HTMLElement | null>): void {
 
     const onKeyDown = (e: KeyboardEvent): void => {
       if (e.key !== 'Tab') return
-      const focusables = Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
+      const focusables = Array.from(
+        container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)
+      ).filter((el) => isFocusableInTrap(el, container))
       if (focusables.length === 0) return
       const current = focusables.indexOf(document.activeElement as HTMLElement)
       const next = nextFocusIndex(current, focusables.length, e.shiftKey)

@@ -267,7 +267,10 @@ export function listCandidates(): AgentCandidate[] {
   return detectCandidates({
     known: KNOWN_CODING_CLIS,
     configuredBins,
-    locate: (bin) => whichOnPath(bin)
+    locate: (bin) => {
+      const path = whichOnPath(bin)
+      return path && existsSync(path) ? path : null
+    }
   })
 }
 
@@ -583,11 +586,10 @@ async function execute(
   // on finish it is persisted to <id>.log. The clean review goes to <id>.out.
   const emit = (stream: 'stdout' | 'stderr' | 'system', chunk: string): void => {
     const prev = liveTranscripts.get(runId) ?? ''
-    const next = prev + chunk
     // Keep the transcript RAW: the .log is scrubbed as a whole at finalize, which also catches a
     // secret split across chunk boundaries. The LIVE renderer chunk gets a best-effort per-chunk
     // scrub so a key an agent echoes isn't shown verbatim in the in-flight RunView.
-    liveTranscripts.set(runId, next.length > MAX_TRANSCRIPT ? next.slice(-MAX_TRANSCRIPT) : next)
+    liveTranscripts.set(runId, keepTail(prev, chunk, MAX_TRANSCRIPT))
     noteOutput({ runId, stream, chunk: redactText(chunk) })
   }
   const finish = (status: RunStatus, exitCode: number | null, outputPath: string | null): void => {

@@ -46,6 +46,12 @@ describe('parsePipelineRow', () => {
     expect(p!.id).toBe(99)
   })
 
+  it('treats the promoted enabled column as authoritative over stale JSON', () => {
+    const p = parsePipelineRow({ id: 1, enabled: 0, config: JSON.stringify(draft) })
+    expect(p).not.toBeNull()
+    expect(p!.enabled).toBe(false)
+  })
+
   it('strips a forged __proto__ own-key (no prototype pollution)', () => {
     // Hand-craft a config whose top-level object has an own __proto__ key.
     const malicious = `{"__proto__":{"polluted":true},${JSON.stringify(draft).slice(1)}`

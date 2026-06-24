@@ -3,6 +3,7 @@ import type { Pipeline } from '../shared/types'
 import {
   buildCommitDelta,
   deriveWatches,
+  dueSchedulePipelineIds,
   matchingPipelines,
   selectDueWatches,
   shouldProcessHead,
@@ -183,6 +184,31 @@ describe('matchingPipelines', () => {
       pipeline({ id: 6, repoId: 7, trigger: 'manual' }) // manual-only
     ]
     expect(matchingPipelines(ps, spec).map((p) => p.id)).toEqual([1, 4])
+  })
+
+  it('keeps only due schedule pipelines when a due set is supplied', () => {
+    const ps = [
+      pipeline({ id: 1, repoId: 7, trigger: 'commit' }),
+      pipeline({ id: 4, repoId: 7, trigger: 'schedule', schedule: '30m' }),
+      pipeline({ id: 5, repoId: 7, trigger: 'schedule', schedule: '6h' })
+    ]
+    expect(matchingPipelines(ps, spec, new Set([4])).map((p) => p.id)).toEqual([1, 4])
+  })
+})
+
+describe('dueSchedulePipelineIds', () => {
+  it('marks never-scheduled and elapsed schedule pipelines due, but not future ones', () => {
+    const ps = [
+      pipeline({ id: 4, trigger: 'schedule', schedule: '30m' }),
+      pipeline({ id: 5, trigger: 'schedule', schedule: '6h' }),
+      pipeline({ id: 6, trigger: 'schedule', schedule: 'bad' }),
+      pipeline({ id: 7, trigger: 'commit' })
+    ]
+    const next: Record<number, number> = {
+      4: 900,
+      5: 1_500
+    }
+    expect(dueSchedulePipelineIds(ps, spec, (id) => next[id], 1_000)).toEqual(new Set([4]))
   })
 })
 
