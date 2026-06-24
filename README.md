@@ -33,7 +33,9 @@ third-party service.
 - **Review cockpit** — after adding an account, Aerie opens on an account-scoped cockpit
   with active runs, attention-worthy reviews, ready-to-post results, favorite/recent repo
   targets, agent readiness, automation liveness, and the local trust boundary in one place.
-  The task sidebar can collapse to a compact rail when the review surface needs more room.
+  On macOS, the native traffic-light controls sit in a seamless draggable header that
+  reserves space above the UI; the task sidebar can collapse to a compact rail when the
+  review surface needs more room.
 - **Browse repos, commits, and PRs** — cached with conditional requests (ETags), so
   re-listing costs ~0 rate limit.
 - **Local checkout** — Aerie clones into an app-owned working copy (or, opt-in, a
@@ -99,14 +101,21 @@ third-party service.
   **`schedule`** pipeline polls the default branch on a cadence **you set** (every N minutes / hours
   / days). Scheduled pipelines can review either the latest commit diff when the head changes, or a
   whole-project snapshot on every due cadence using the same Project runner and repo clone/worktree
-  setting. **Create/edit pipelines** in-app (repo, trigger + schedule cadence, review target, agent
-  steps with model selection from the chosen agent/tool, scope filters, and the action) — choosing
-  **Post** reveals an explicit auto-post toggle gated behind a distinct danger confirm. Project
-  audits post as issues. The editor ignores backdrop clicks, and **Cancel** / **Esc** asks before
-  discarding unsaved pipeline changes. The list shows each pipeline's live run status, an enable
-  toggle, **Run now** / **Dry run** buttons, and an expandable **run history**; a dry run never
-  writes to GitHub regardless of the opt-in. A liveness line shows the poller's state — when it last
-  checked, when it'll next check, and the remaining GitHub API budget.
+  setting. Restarting Aerie, enabling a pipeline, or saving its config does not bypass that cadence;
+  the next automatic run is based on the latest pipeline run or config/enable update. **Run now**
+  and **Dry run** are the explicit immediate actions. **Create/edit pipelines** in-app (repo,
+  trigger + schedule cadence, review target, agent steps with model selection from the chosen
+  agent/tool, scope filters, and the action) — choosing **Post** reveals an explicit auto-post toggle
+  gated behind a distinct danger confirm. Multi-agent pipeline runs create the same consolidated
+  report as manual Panel review — consensus findings, single-source findings, and child agent
+  evidence — and the Automate run history links directly to it. Project audits post as issues. The
+  editor ignores backdrop clicks, and **Cancel** / **Esc** asks before discarding unsaved pipeline
+  changes. The list shows each pipeline's live run status, an enable
+  switch, trigger cadence (for example **Every 24 hours**), review target, action, **Run now** /
+  **Dry run** buttons, and an expandable **run history**; a dry run never writes to GitHub regardless
+  of the opt-in. A liveness line distinguishes the background poller from runnable automation: it
+  shows idle states when no pipeline is enabled, and otherwise shows when enabled watches last
+  checked, when they'll next check, and the remaining GitHub API budget.
   Auto-post is off by default and enforced in the main process.
 - **Post back to GitHub — behind a confirm** — every write (commit comment, PR comment, or
   new issue) requires an explicit in-app confirmation showing the exact body. If you edit that

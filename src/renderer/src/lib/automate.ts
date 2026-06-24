@@ -3,12 +3,15 @@
 // label/tone, so the component stays a thin render. Unit-tested.
 
 import type {
+  Pipeline,
+  PipelineAction,
   PipelineRunChange,
   PipelineRunOutcome,
   PipelineRunStatus,
   PipelineRunSummary,
   PipelineWithRuns
 } from '@shared/types'
+import { parseScheduleMs, parseScheduleParts, type ScheduleUnit } from '@shared/schedule'
 
 export type DisplayStatus = PipelineRunStatus | 'never'
 
@@ -90,6 +93,39 @@ export function formatRunLine(run: PipelineRunSummary): string {
   parts.push(run.refType === 'project' ? 'project audit' : run.trigger)
   if (run.headSha) parts.push(shortSha(run.headSha))
   return parts.join(' · ')
+}
+
+const SCHEDULE_LABELS: Record<ScheduleUnit, [string, string]> = {
+  m: ['minute', 'minutes'],
+  h: ['hour', 'hours'],
+  d: ['day', 'days']
+}
+
+function pluralScheduleUnit(value: number, unit: ScheduleUnit): string {
+  const [one, many] = SCHEDULE_LABELS[unit]
+  return value === 1 ? one : many
+}
+
+export function describePipelineCadence(pipeline: Pipeline): string {
+  if (pipeline.trigger === 'schedule') {
+    if (parseScheduleMs(pipeline.schedule) === null) return 'Schedule invalid'
+    const parts = parseScheduleParts(pipeline.schedule)
+    return `Every ${parts.every} ${pluralScheduleUnit(parts.every, parts.unit)}`
+  }
+  if (pipeline.trigger === 'commit') return 'On new default-branch commits'
+  if (pipeline.trigger === 'pr') return 'PR trigger'
+  return 'Manual only'
+}
+
+export function describePipelineTarget(pipeline: Pipeline): string {
+  return pipeline.reviewTarget === 'project' ? 'Project audit' : 'Commit diff'
+}
+
+export function describePipelineAction(action: PipelineAction): string {
+  if (action.kind === 'post' && action.autoPost) return 'Auto-post to GitHub'
+  if (action.kind === 'post') return 'Stage for manual post'
+  if (action.kind === 'stage') return 'Stage result'
+  return 'Notify only'
 }
 
 /** A short inline summary of a run-now / dry-run outcome for the row. */

@@ -5,6 +5,7 @@ import {
   deriveWatches,
   dueSchedulePipelineIds,
   matchingPipelines,
+  nextScheduleDueAt,
   selectDueWatches,
   shouldProcessHead,
   watchKey,
@@ -209,6 +210,26 @@ describe('dueSchedulePipelineIds', () => {
       5: 1_500
     }
     expect(dueSchedulePipelineIds(ps, spec, (id) => next[id], 1_000)).toEqual(new Set([4]))
+  })
+})
+
+describe('nextScheduleDueAt', () => {
+  it('uses the last persisted anchor plus the cadence', () => {
+    expect(
+      nextScheduleDueAt(
+        '2026-06-24T10:00:00.000Z',
+        24 * 3_600_000,
+        Date.parse('2026-06-24T10:10:00.000Z')
+      )
+    ).toBe(Date.parse('2026-06-25T10:00:00.000Z'))
+  })
+
+  it('does not make missing or malformed history immediately due on startup', () => {
+    const now = Date.parse('2026-06-24T10:10:00.000Z')
+    expect(nextScheduleDueAt(null, 24 * 3_600_000, now)).toBe(
+      Date.parse('2026-06-25T10:10:00.000Z')
+    )
+    expect(nextScheduleDueAt('not-a-date', 60_000, now)).toBe(now + 60_000)
   })
 })
 

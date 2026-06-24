@@ -43,6 +43,10 @@ interface Recorder {
   startedSteps: Array<{ id: string; model?: string; reviewTarget: string }>
   inserted: number
   inserts: Array<{ trigger: string; refType: string; action: string; dedupeKey: string }>
+  runGroups: Array<{ id: number; refType: string; refId: string }>
+  groupLinks: Array<{ pipelineRunId: number; groupId: number }>
+  groupItems: Array<{ groupId: number; runId: number; agentId: string; position: number }>
+  postedGroups: Array<{ groupId: number; url: string }>
   statusUpdates: Array<{ id: number; status: string }>
   postedFlags: number[]
   advanced: number
@@ -57,6 +61,10 @@ function fakePorts(
     startedSteps: [],
     inserted: 0,
     inserts: [],
+    runGroups: [],
+    groupLinks: [],
+    groupItems: [],
+    postedGroups: [],
     statusUpdates: [],
     postedFlags: [],
     advanced: 0,
@@ -84,6 +92,21 @@ function fakePorts(
     },
     setPipelineRunPosted: (id) => {
       rec.postedFlags.push(id)
+    },
+    setPipelineRunGroup: (pipelineRunId, groupId) => {
+      rec.groupLinks.push({ pipelineRunId, groupId })
+    },
+    createRunGroup: (input) => {
+      const id = 800 + rec.runGroups.length
+      rec.runGroups.push({ id, refType: input.refType, refId: input.refId })
+      return id
+    },
+    addRunToGroup: (input) => {
+      rec.groupItems.push(input)
+    },
+    renderRunGroupReport: (groupId) => `# Aerie panel review\n\ngroup ${groupId}`,
+    setRunGroupPosted: (groupId, url) => {
+      rec.postedGroups.push({ groupId, url })
     },
     guardrailState: (): GuardrailState => ({
       nowMs: 1_000_000,
@@ -305,6 +328,52 @@ describe('runPipelineForDelta — wave barrier + error handling', () => {
     await runPipelineForDelta(pipeline({ steps }), delta(), ports)
     // s2 must not start until s1's wait has resolved (the barrier).
     expect(rec.events).toEqual(['start:s1', 'wait:s1', 'start:s2', 'wait:s2'])
+  })
+
+  it('persists a multi-step pipeline as one consolidated run group', async () => {
+    const { ports, rec } = fakePorts()
+    const steps: PipelineStep[] = [
+      { id: 's1', kind: 'agent', ref: 'codex' },
+      { id: 's2', kind: 'agent', ref: 'claude-code' }
+    ]
+    const out = await runPipelineForDelta(pipeline({ steps }), delta(), ports)
+
+    expect(out).toMatchObject({ ran: true, runGroupId: 800 })
+    expect(rec.runGroups).toEqual([{ id: 800, refType: 'commit', refId: 'a'.repeat(40) }])
+    expect(rec.groupLinks).toEqual([{ pipelineRunId: 501, groupId: 800 }])
+    expect(rec.groupItems).toEqual([
+      { groupId: 800, runId: 101, agentId: 'codex', position: 0 },
+      { groupId: 800, runId: 102, agentId: 'claude-code', position: 1 }
+    ])
+    expect(rec.notifies[0]).toContain('# Aerie panel review')
+  })
+
+  it('mirrors an auto-post URL onto the consolidated run group', async () => {
+    const { ports, rec } = fakePorts()
+    const out = await runPipelineForDelta(
+      pipeline({
+        steps: [
+          { id: 's1', kind: 'agent', ref: 'codex' },
+          { id: 's2', kind: 'agent', ref: 'claude-code' }
+        ],
+        action: action({ kind: 'post', autoPost: true, target: 'commit' })
+      }),
+      delta(),
+      ports
+    )
+
+    expect(out).toMatchObject({ ran: true, posted: true, runGroupId: 800 })
+    expect(rec.posts[0].body).toContain('# Aerie panel review')
+    expect(rec.postedGroups).toEqual([{ groupId: 800, url: 'https://github.test/comment/1' }])
+  })
+
+  it('does not create a run group for a single-step pipeline', async () => {
+    const { ports, rec } = fakePorts()
+    const out = await runPipelineForDelta(pipeline(), delta(), ports)
+
+    expect(out).toMatchObject({ ran: true, runGroupId: null })
+    expect(rec.runGroups).toHaveLength(0)
+    expect(rec.groupLinks).toHaveLength(0)
   })
 
   it('marks the run error and does not advance/post when a step throws', async () => {

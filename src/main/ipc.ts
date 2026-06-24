@@ -90,7 +90,7 @@ import { clonePathFor, headShaOf, prepareCheckout } from './gitEngine'
 import { parsePipelineRow } from './pipelineEngineLogic'
 import { buildEnginePorts } from './pipelineEngine'
 import { planManualRun, toPipelineWithRuns, validateSaveRequest } from './pipelineIpc'
-import { getPollerStatus } from './poller'
+import { getPollerStatus, wakePoller } from './poller'
 import { runPipelineForDelta } from './pipelines'
 import { buildCommitDelta, DELTA_META } from './pollerLogic'
 import { resolveRunPostTarget } from './postTarget'
@@ -994,9 +994,9 @@ export function registerIpcHandlers(): void {
     }
   })
 
-  // --- automation pipelines (M9a). Config CRUD only; the poller picks up changes on its
-  //     next tick (it reloads the enabled set each cycle). Every GitHub write still goes
-  //     through the engine's auto-post gate — these handlers never write to GitHub.
+  // --- automation pipelines (M9a). Config CRUD only; after each change the poller wakes and
+  //     reloads the enabled set. Every GitHub write still goes through the engine's auto-post
+  //     gate — these handlers never write to GitHub.
   // Read-only poller liveness for the Automate view (M14). No token/secret in the payload.
   ipcMain.handle(CHANNELS.pipelinesPollerStatus, (event): ApiResult<PollerStatus> => {
     if (!isTrustedSender(event)) return fail('Untrusted sender.')
@@ -1044,6 +1044,7 @@ export function registerIpcHandlers(): void {
         listPipelineRunsForPipeline(row.id, 20),
         getRepoById(row.repo_id)?.full_name ?? null
       )
+      wakePoller()
       return item ? ok(item) : fail('Saved pipeline could not be loaded.')
     } catch (error) {
       return fail(error instanceof Error ? error.message : 'Could not save the pipeline.')
@@ -1054,7 +1055,9 @@ export function registerIpcHandlers(): void {
     if (!isTrustedSender(event)) return fail('Untrusted sender.')
     if (!isValidId(id)) return fail('Invalid pipeline id.')
     try {
-      return deletePipeline(id) ? ok(true) : fail('Pipeline not found.')
+      const deleted = deletePipeline(id)
+      if (deleted) wakePoller()
+      return deleted ? ok(true) : fail('Pipeline not found.')
     } catch (error) {
       return fail(error instanceof Error ? error.message : 'Could not delete the pipeline.')
     }
@@ -1067,7 +1070,9 @@ export function registerIpcHandlers(): void {
       if (!isValidId(id)) return fail('Invalid pipeline id.')
       if (typeof enabled !== 'boolean') return fail('Invalid enabled flag.')
       try {
-        return setPipelineEnabled(id, enabled) ? ok(true) : fail('Pipeline not found.')
+        const updated = setPipelineEnabled(id, enabled)
+        if (updated) wakePoller()
+        return updated ? ok(true) : fail('Pipeline not found.')
       } catch (error) {
         return fail(error instanceof Error ? error.message : 'Could not update the pipeline.')
       }

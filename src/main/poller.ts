@@ -19,6 +19,7 @@ import {
   deriveWatches,
   dueSchedulePipelineIds,
   matchingPipelines,
+  nextScheduleDueAt,
   selectDueWatches,
   shouldProcessHead,
   watchKey,
@@ -26,7 +27,7 @@ import {
   type RepoInfo,
   type WatchSpec
 } from './pollerLogic'
-import { getRepoById } from './store'
+import { getRepoById, pipelineScheduleAnchor } from './store'
 
 const BASE_INTERVAL_MS = 60_000
 const MAX_INTERVAL_MS = 15 * 60_000
@@ -38,6 +39,8 @@ const JITTER_RATIO = 0.1
 let timer: NodeJS.Timeout | null = null
 let engine: { ports: EnginePorts; dispose: () => void } | null = null
 let stopped = true
+let ticking = false
+let wakeRequested = false
 /** watchKey → next-poll epoch ms; persists across ticks. */
 const schedule = new Map<string, number>()
 const pipelineSchedule = new Map<number, number>()
@@ -91,12 +94,35 @@ export function stopPoller(): void {
 
 /** Read-only liveness snapshot for the Automate view (M14). No token/secret in the payload. */
 export function getPollerStatus(): PollerStatus {
+  let enabledPipelineCount = 0
+  let activeWatchCount = 0
+  try {
+    const pipelines = loadEnabledPipelines()
+    enabledPipelineCount = pipelines.length
+    activeWatchCount = deriveWatches(pipelines, repoInfo).length
+  } catch (err) {
+    log.warn('poller: failed to observe enabled pipelines', { error: String(err) })
+  }
   return {
     running: !stopped,
+    enabledPipelineCount,
+    activeWatchCount,
     lastPolledAt: lastPolledAt === null ? null : new Date(lastPolledAt).toISOString(),
     nextPollAt: stopped || nextPollAt === null ? null : new Date(nextPollAt).toISOString(),
     rate: lastRate
   }
+}
+
+/** Re-check pipeline configuration immediately after a user changes automation state. */
+export function wakePoller(): void {
+  if (stopped) return
+  schedule.clear()
+  pipelineSchedule.clear()
+  if (ticking) {
+    wakeRequested = true
+    return
+  }
+  armTimer(0)
 }
 
 function armTimer(delayMs: number): void {
@@ -109,23 +135,27 @@ function armTimer(delayMs: number): void {
 
 async function tick(): Promise<void> {
   if (stopped || !engine) return
-  const ports = engine.ports
-
-  let pipelines: ReturnType<typeof loadEnabledPipelines>
-  let watches: WatchSpec[]
-  try {
-    pipelines = loadEnabledPipelines()
-    watches = deriveWatches(pipelines, repoInfo)
-  } catch (err) {
-    log.error('poller: failed to derive watches', { error: String(err) })
-    armTimer(IDLE_INTERVAL_MS)
+  if (ticking) {
+    wakeRequested = true
     return
   }
+  ticking = true
+  const ports = engine.ports
+  let watches: WatchSpec[] = []
 
-  // Everything after the (already-guarded) derive runs in a try/finally so the loop is
-  // STRUCTURALLY self-healing: `armNextTick` always re-arms, even if a future edit makes the
-  // prune/select section throw — the loop can never silently die.
   try {
+    let pipelines: ReturnType<typeof loadEnabledPipelines>
+    try {
+      pipelines = loadEnabledPipelines()
+      watches = deriveWatches(pipelines, repoInfo)
+    } catch (err) {
+      log.error('poller: failed to derive watches', { error: String(err) })
+      return
+    }
+
+    // Everything after the (already-guarded) derive runs in a try/finally so the loop is
+    // STRUCTURALLY self-healing: `armNextTick` always re-arms, even if a future edit makes the
+    // prune/select section throw — the loop can never silently die.
     // Drop schedule entries for watches that no longer exist (pipeline removed/disabled).
     const liveKeys = new Set(watches.map(watchKey))
     for (const k of [...schedule.keys()]) if (!liveKeys.has(k)) schedule.delete(k)
@@ -138,7 +168,9 @@ async function tick(): Promise<void> {
       if (!liveSchedulePipelineIds.has(id)) pipelineSchedule.delete(id)
     }
 
-    const due = selectDueWatches(watches, (k) => schedule.get(k), Date.now(), MAX_CONCURRENT_POLLS)
+    const now = Date.now()
+    seedSchedules(pipelines, watches, now)
+    const due = selectDueWatches(watches, (k) => schedule.get(k), now, MAX_CONCURRENT_POLLS)
     for (const watch of due) {
       if (stopped) return // a quit during the tick: do not start new work
       // throughput: due watches are processed serially (one long agent run blocks the rest);
@@ -208,7 +240,44 @@ async function tick(): Promise<void> {
   } catch (err) {
     log.error('poller: tick failed', { error: String(err) })
   } finally {
-    armNextTick(watches)
+    ticking = false
+    if (!stopped) {
+      if (wakeRequested) {
+        wakeRequested = false
+        armTimer(0)
+      } else {
+        armNextTick(watches)
+      }
+    }
+  }
+}
+
+function seedSchedules(
+  pipelines: ReturnType<typeof loadEnabledPipelines>,
+  watches: WatchSpec[],
+  now: number
+): void {
+  for (const pipeline of pipelines) {
+    if (pipeline.trigger !== 'schedule') continue
+    const interval = parseScheduleMs(pipeline.schedule)
+    if (interval === null || pipelineSchedule.has(pipeline.id)) continue
+    pipelineSchedule.set(
+      pipeline.id,
+      nextScheduleDueAt(pipelineScheduleAnchor(pipeline.id), interval, now)
+    )
+  }
+
+  for (const watch of watches) {
+    if (watch.scheduleMs === null) continue
+    const key = watchKey(watch)
+    if (schedule.has(key)) continue
+    let next = Infinity
+    for (const pipeline of pipelines) {
+      if (pipeline.repoId !== watch.repoId || pipeline.trigger !== 'schedule') continue
+      if (parseScheduleMs(pipeline.schedule) === null) continue
+      next = Math.min(next, pipelineSchedule.get(pipeline.id) ?? now + watch.scheduleMs)
+    }
+    schedule.set(key, Number.isFinite(next) ? next : now + watch.scheduleMs)
   }
 }
 

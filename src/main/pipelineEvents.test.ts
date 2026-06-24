@@ -5,6 +5,7 @@ import { emitPipelineRunChange, onPipelineRunChange, resetPipelineEvents } from 
 const change = (over: Partial<PipelineRunChange> = {}): PipelineRunChange => ({
   pipelineId: 1,
   pipelineRunId: 10,
+  runGroupId: null,
   status: 'pending',
   action: 'notify',
   posted: false,

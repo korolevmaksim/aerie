@@ -1,4 +1,11 @@
-import { app, dialog, shell, BrowserWindow, safeStorage } from 'electron'
+import {
+  app,
+  dialog,
+  shell,
+  BrowserWindow,
+  safeStorage,
+  type BrowserWindowConstructorOptions
+} from 'electron'
 import { existsSync } from 'fs'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
@@ -26,12 +33,21 @@ let mainWindow: BrowserWindow | null = null
 let isQuitting = false
 
 function createWindow(): void {
+  const macWindowOptions: BrowserWindowConstructorOptions =
+    process.platform === 'darwin'
+      ? {
+          titleBarStyle: 'hidden',
+          trafficLightPosition: { x: 16, y: 18 }
+        }
+      : {}
+
   mainWindow = new BrowserWindow({
     width: 1100,
     height: 760,
     show: false,
     autoHideMenuBar: true,
     title: 'Aerie',
+    ...macWindowOptions,
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),

@@ -6,7 +6,7 @@
 // gate before any write. Verified by the build smoke (it compiles against the real signatures).
 
 import type { Pipeline, PipelineReviewTarget, PipelineStep } from '../shared/types'
-import { aggregateRunFindings, startRun } from './agentRunner'
+import { aggregateRunFindings, getRunGroupReport, startRun } from './agentRunner'
 import { createCommitComment, createIssue, createPrComment } from './github'
 import { log } from './logger'
 import {
@@ -21,15 +21,19 @@ import { createRunWaiter } from './runWaiter'
 import { emitPipelineRunChange } from './pipelineEvents'
 import {
   countActivePipelineRuns,
+  addRunToGroup,
   findCompletedPipelineRunByDedupe,
   getPipelineRun,
   getRepoById,
   insertPipelineRun,
+  insertRunGroup,
   lastRepoPipelineRunStart,
   listEnabledPipelineRows,
   markWatchSeen,
   recentPipelineRunStarts,
+  setPipelineRunGroup as linkPipelineRunGroup,
   setPipelineRunPosted,
+  setRunGroupPostedUrl,
   updatePipelineRunStatus
 } from './store'
 
@@ -106,6 +110,7 @@ export function buildEnginePorts(): { ports: EnginePorts; dispose: () => void } 
       emitPipelineRunChange({
         pipelineId: input.pipelineId,
         pipelineRunId: id,
+        runGroupId: null,
         status: 'pending',
         action: input.action,
         posted: false
@@ -119,6 +124,7 @@ export function buildEnginePorts(): { ports: EnginePorts; dispose: () => void } 
         emitPipelineRunChange({
           pipelineId: row.pipeline_id,
           pipelineRunId: id,
+          runGroupId: row.run_group_id,
           status,
           action: row.action,
           posted: row.posted === 1
@@ -132,12 +138,40 @@ export function buildEnginePorts(): { ports: EnginePorts; dispose: () => void } 
         emitPipelineRunChange({
           pipelineId: row.pipeline_id,
           pipelineRunId: id,
+          runGroupId: row.run_group_id,
           status: row.status,
           action: row.action,
           posted: true
         })
       }
     },
+    setPipelineRunGroup: (id, groupId) => {
+      linkPipelineRunGroup(id, groupId)
+      const row = getPipelineRun(id)
+      if (row) {
+        emitPipelineRunChange({
+          pipelineId: row.pipeline_id,
+          pipelineRunId: id,
+          runGroupId: row.run_group_id,
+          status: row.status,
+          action: row.action,
+          posted: row.posted === 1
+        })
+      }
+    },
+    createRunGroup: (input) =>
+      insertRunGroup({
+        repoId: input.repoId,
+        refType: input.refType,
+        refId: input.refId,
+        headSha: input.headSha,
+        startedAt: input.startedAt,
+        authorLogin: input.authorLogin
+      }).id,
+    addRunToGroup: (input) =>
+      addRunToGroup(input.groupId, input.runId, input.agentId, input.position),
+    renderRunGroupReport: (groupId) => getRunGroupReport(groupId).markdown,
+    setRunGroupPosted: (groupId, url) => setRunGroupPostedUrl(groupId, url),
     guardrailState: (pipeline) => {
       const now = Date.now()
       const sinceIso = new Date(now - HOUR_MS).toISOString()

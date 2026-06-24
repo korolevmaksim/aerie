@@ -8,6 +8,9 @@ import type {
 } from '@shared/types'
 import {
   applyLiveChange,
+  describePipelineAction,
+  describePipelineCadence,
+  describePipelineTarget,
   describeOutcome,
   displayRunStatus,
   formatRunLine,
@@ -31,7 +34,8 @@ function PipelineRow({
   message,
   onToggle,
   onRun,
-  onEdit
+  onEdit,
+  onOpenRunGroup
 }: {
   item: PipelineWithRuns
   live: PipelineRunChange | undefined
@@ -40,31 +44,51 @@ function PipelineRow({
   onToggle: (id: number, enabled: boolean) => void
   onRun: (id: number, dryRun: boolean) => void
   onEdit: (item: PipelineWithRuns) => void
+  onOpenRunGroup: (groupId: number) => void
 }): React.JSX.Element {
   const { pipeline, repoFullName } = item
   const view = displayRunStatus(item, live)
+  const latestRun = item.runs[0]
   return (
     <li className="pipeline">
       <div className="pipeline__head">
-        <span className="pipeline__name">{pipeline.name}</span>
-        <code className="pipeline__repo">{repoFullName ?? `repo #${pipeline.repoId}`}</code>
-        <span className="pipeline__trigger badge">{pipeline.trigger}</span>
-        <span className="pipeline__trigger badge">
-          {pipeline.reviewTarget === 'project' ? 'project audit' : 'commit diff'}
-        </span>
-        <span className={`status-pill status-pill--${statusTone(view.status)}`} aria-live="polite">
-          {statusLabel(view.status)}
-          {view.posted ? ' · posted' : ''}
-        </span>
+        <div className="pipeline__identity">
+          <span className="pipeline__name">{pipeline.name}</span>
+          <code className="pipeline__repo">{repoFullName ?? `repo #${pipeline.repoId}`}</code>
+        </div>
+        <div className="pipeline__state" aria-live="polite">
+          <span className="pipeline__state-label">Last run</span>
+          <span className={`status-pill status-pill--${statusTone(view.status)}`}>
+            {statusLabel(view.status)}
+            {view.posted ? ' · posted' : ''}
+          </span>
+          {latestRun && (
+            <span className="pipeline__state-time muted">
+              {formatRelativeTime(latestRun.startedAt)}
+            </span>
+          )}
+        </div>
+      </div>
+      <div className="pipeline__meta" aria-label="Pipeline schedule and action">
+        <span className="badge">{pipeline.trigger}</span>
+        <span className="badge">{describePipelineCadence(pipeline)}</span>
+        <span className="badge">{describePipelineTarget(pipeline)}</span>
+        <span className="badge">{describePipelineAction(pipeline.action)}</span>
       </div>
       <div className="pipeline__actions">
-        <button
-          className="btn btn--ghost"
-          aria-pressed={pipeline.enabled}
-          onClick={() => onToggle(pipeline.id, !pipeline.enabled)}
-        >
-          {pipeline.enabled ? 'Enabled' : 'Disabled'}
-        </button>
+        <label className="switch-control">
+          <input
+            type="checkbox"
+            role="switch"
+            checked={pipeline.enabled}
+            disabled={busy}
+            onChange={(e) => onToggle(pipeline.id, e.currentTarget.checked)}
+          />
+          <span className="switch-control__track" aria-hidden="true">
+            <span className="switch-control__thumb" />
+          </span>
+          <span className="switch-control__text">{pipeline.enabled ? 'Enabled' : 'Disabled'}</span>
+        </label>
         <button className="btn" disabled={busy} onClick={() => onRun(pipeline.id, false)}>
           Run now
         </button>
@@ -93,6 +117,15 @@ function PipelineRow({
                   {statusLabel(r.status)}
                 </span>
                 <span className="muted run-line__detail">{formatRunLine(r)}</span>
+                {r.runGroupId !== null && (
+                  <button
+                    type="button"
+                    className="link link--button run-line__report"
+                    onClick={() => onOpenRunGroup(r.runGroupId!)}
+                  >
+                    Open report
+                  </button>
+                )}
                 <span className="muted run-line__time">{formatRelativeTime(r.startedAt)}</span>
               </li>
             ))}
@@ -103,7 +136,13 @@ function PipelineRow({
   )
 }
 
-function AutomatePanel({ accountId }: { accountId: number | null }): React.JSX.Element {
+function AutomatePanel({
+  accountId,
+  onOpenRunGroup
+}: {
+  accountId: number | null
+  onOpenRunGroup?: (groupId: number) => void
+}): React.JSX.Element {
   const [items, setItems] = useState<PipelineWithRuns[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [live, setLive] = useState<Record<number, PipelineRunChange>>({})
@@ -116,6 +155,17 @@ function AutomatePanel({ accountId }: { accountId: number | null }): React.JSX.E
   // Poller liveness (M14): re-fetched periodically so the relative "next check in …" stays fresh.
   const [poller, setPoller] = useState<PollerStatus | null>(null)
   const [now, setNow] = useState(() => Date.now())
+  const pollerTone =
+    poller && poller.running && poller.enabledPipelineCount > 0 && poller.activeWatchCount > 0
+      ? 'on'
+      : poller && poller.running
+        ? 'idle'
+        : 'off'
+
+  const loadPoller = useCallback(async (): Promise<void> => {
+    const res = await window.aerie.pipelines.pollerStatus()
+    if (res.ok) setPoller(res.value)
+  }, [])
 
   const load = useCallback(async (): Promise<void> => {
     const res = await window.aerie.pipelines.list()
@@ -185,10 +235,12 @@ function AutomatePanel({ accountId }: { accountId: number | null }): React.JSX.E
     async (id: number, enabled: boolean): Promise<void> => {
       setError(null)
       const res = await window.aerie.pipelines.setEnabled(id, enabled)
-      if (res.ok) void load()
-      else setError(res.error)
+      if (res.ok) {
+        void load()
+        void loadPoller()
+      } else setError(res.error)
     },
-    [load]
+    [load, loadPoller]
   )
 
   const run = useCallback(
@@ -200,9 +252,12 @@ function AutomatePanel({ accountId }: { accountId: number | null }): React.JSX.E
         : await window.aerie.pipelines.runNow(id)
       setBusyId(null)
       setMessages((m) => ({ ...m, [id]: res.ok ? describeOutcome(res.value, dryRun) : res.error }))
-      if (res.ok) void load()
+      if (res.ok) {
+        void load()
+        void loadPoller()
+      }
     },
-    [load]
+    [load, loadPoller]
   )
 
   // The repo picker shows the selected account's repos; when editing a pipeline whose repo
@@ -252,10 +307,7 @@ function AutomatePanel({ accountId }: { accountId: number | null }): React.JSX.E
         // Ambient liveness — deliberately NOT an aria-live region: the relative countdown
         // re-renders every 15s and would otherwise spam a screen reader with no actionable change.
         <p className="poller-status">
-          <span
-            className={`poller-dot poller-dot--${poller.running ? 'on' : 'off'}`}
-            aria-hidden="true"
-          />
+          <span className={`poller-dot poller-dot--${pollerTone}`} aria-hidden="true" />
           {formatPollerStatus(poller, now)}
         </p>
       )}
@@ -293,6 +345,7 @@ function AutomatePanel({ accountId }: { accountId: number | null }): React.JSX.E
               onToggle={toggle}
               onRun={run}
               onEdit={onEdit}
+              onOpenRunGroup={onOpenRunGroup ?? (() => {})}
             />
           ))}
         </ul>
@@ -304,7 +357,10 @@ function AutomatePanel({ accountId }: { accountId: number | null }): React.JSX.E
           repos={editorRepos}
           agents={agents}
           onClose={() => setEditing(undefined)}
-          onSaved={() => void load()}
+          onSaved={() => {
+            void load()
+            void loadPoller()
+          }}
         />
       )}
     </section>

@@ -405,6 +405,16 @@ const MIGRATIONS: ReadonlyArray<(db: Database.Database) => void> = [
       );
       CREATE INDEX idx_run_group_items_group ON run_group_items (group_id, position);
     `)
+  },
+  // v19 — connect automation pipeline runs to persisted panel reports. Pipeline steps still
+  // run as normal child `runs`, but a multi-step pipeline can now own a `run_groups` report
+  // just like a manual Panel review; `pipeline_runs.run_group_id` lets Automate jump to it.
+  (db) => {
+    db.exec(`
+      ALTER TABLE pipeline_runs
+        ADD COLUMN run_group_id INTEGER REFERENCES run_groups(id) ON DELETE SET NULL;
+      CREATE INDEX idx_pipeline_runs_group ON pipeline_runs (run_group_id);
+    `)
   }
 ]
 
@@ -1319,6 +1329,7 @@ export function listEnabledPipelineRows(): PipelineRow[] {
 export interface PipelineRunRow {
   id: number
   pipeline_id: number
+  run_group_id: number | null
   trigger: PipelineTrigger
   ref_type: RefType
   ref: string
@@ -1372,6 +1383,11 @@ export function setPipelineRunPosted(id: number): void {
   requireDb().prepare(`UPDATE pipeline_runs SET posted = 1 WHERE id = ?`).run(id)
 }
 
+/** Links a pipeline execution to the consolidated panel report created from its child runs. */
+export function setPipelineRunGroup(id: number, groupId: number): void {
+  requireDb().prepare(`UPDATE pipeline_runs SET run_group_id = ? WHERE id = ?`).run(groupId, id)
+}
+
 export function getPipelineRun(id: number): PipelineRunRow | undefined {
   return requireDb().prepare(`SELECT * FROM pipeline_runs WHERE id = ?`).get(id) as
     | PipelineRunRow
@@ -1384,6 +1400,27 @@ export function listPipelineRunsForPipeline(pipelineId: number, limit = 100): Pi
       `SELECT * FROM pipeline_runs WHERE pipeline_id = ? ORDER BY started_at DESC, id DESC LIMIT ?`
     )
     .all(pipelineId, limit) as PipelineRunRow[]
+}
+
+/**
+ * Anchor for a scheduled pipeline's next due time. A recent explicit run or config/enable
+ * change should reset the cadence; a never-run pipeline starts from its last config change,
+ * not from app startup.
+ */
+export function pipelineScheduleAnchor(pipelineId: number): string | null {
+  const row = requireDb()
+    .prepare(
+      `SELECT anchor FROM (
+         SELECT updated_at AS anchor FROM pipelines WHERE id = ?
+         UNION ALL
+         SELECT started_at AS anchor FROM pipeline_runs WHERE pipeline_id = ?
+       )
+       WHERE anchor IS NOT NULL
+       ORDER BY anchor DESC
+       LIMIT 1`
+    )
+    .get(pipelineId, pipelineId) as { anchor: string | null } | undefined
+  return row?.anchor ?? null
 }
 
 /**

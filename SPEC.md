@@ -115,6 +115,11 @@ the preference is stored in renderer-local storage and adds no IPC surface. It i
 renderer-only composition layer: it adds no privileged IPC, GitHub write, token, git, or
 agent execution surface.
 
+On macOS the main window uses Electron's hidden native titlebar with native traffic-light
+controls positioned inside a renderer-reserved drag band. The renderer owns an explicit
+macOS-only drag row above the app content, marks that row as draggable, and marks interactive
+controls as non-draggable. No token, git, GitHub, IPC, or agent capability is added.
+
 Runs also carry a private local disposition (`open` / `handled` / `verified`) so a solo
 operator can clear an audit from the attention queue after handling it locally instead of
 posting a public GitHub comment. This metadata is local-only and never substitutes for
@@ -276,7 +281,7 @@ http_cache(key, etag, payload, updated_at)   -- conditional-request (ETag) cache
 watches(id, repo_id, ref_type['commit'|'pr'], ref, last_seen_sha, last_polled_at)  -- M8
 pipelines(id, repo_id, name, trigger['commit'|'pr'|'schedule'|'manual'], enabled,
           action_kind['notify'|'stage'|'post'], auto_post, config, created_at, updated_at)  -- M9a
-pipeline_runs(id, pipeline_id, trigger, ref_type['commit'|'pr'|'working-tree'|'project'], ref, head_sha,
+pipeline_runs(id, pipeline_id, run_group_id, trigger, ref_type['commit'|'pr'|'working-tree'|'project'], ref, head_sha,
               status['pending'|'running'|'done'|'error'|'skipped'], action, posted,
               dedupe_key, started_at, finished_at)  -- M9a
 settings(key, value)
@@ -322,8 +327,8 @@ settings(key, value)
 > with `isPipelineDraft`, and calls `assertMayPost` on the parsed `action` before any write; the
 > promoted `auto_post` column (with its `CHECK (auto_post = 0 OR action_kind = 'post')`) is a
 > belt-and-suspenders filter, never the sole guard. `pipeline_runs` records each execution with
-> its `dedupe_key` (indexed), the action
-> actually taken, and a `posted` flag; `reconcileInterruptedPipelineRuns` flips any
+> its `dedupe_key` (indexed), optional `run_group_id` for the consolidated report created by a
+> multi-step run, the action actually taken, and a `posted` flag; `reconcileInterruptedPipelineRuns` flips any
 > pending/running row to `error` on startup WITHOUT advancing watch state, so an interrupted
 > delta is re-detected and never skipped. The pure orchestration logic also lands here, in
 > `pipelinePlan.ts`: `planWaves` (resolve step `dependsOn` into ordered parallel waves — the
@@ -343,6 +348,11 @@ settings(key, value)
 > rate-based continuous cadence. `deriveWatches` carries the interval as `WatchSpec.scheduleMs`
 > (a commit pipeline sharing the branch forces rate-based; two schedules merge to the
 > most-frequent), and the poller reschedules a schedule-only watch at `now + scheduleMs`.
+> On startup and after config changes, the poller seeds each schedule pipeline's next-due timestamp
+> from persisted state: the latest of `pipeline_runs.started_at` and `pipelines.updated_at`.
+> A missing or malformed anchor becomes `now + scheduleMs`, never "due immediately." This means
+> restarting the app, enabling a pipeline, or saving a pipeline cannot bypass the selected cadence;
+> users must choose **Run now** / **Dry run** for an immediate explicit check.
 > Merged watches share the GitHub head probe only: each schedule pipeline also has its own
 > next-due timestamp, so a `6h` schedule sharing a `30m`/commit watch does not run early. A
 > scheduled run has a `reviewTarget`: `commit` reviews the latest commit diff when the head changes
@@ -357,7 +367,11 @@ settings(key, value)
 > electron-free engine. `runPipelineForDelta(pipeline, delta, ports)` drives one pipeline:
 > trigger/scope filter (`matchesScope`) → `planWaves`/`checkGuardrails`/dedupe gates → insert a
 > `pipeline_run` → run the step waves (`ports.startStep` then await-all per wave = the wait-for-all
-> barrier) → M6 `aggregate` → the actioner. It never throws — a failure marks the run `error` and
+> barrier) → M6 `aggregate` → the actioner. For pipelines with two or more agent steps, the engine
+> creates a normal persisted `run_groups` record, attaches every child run to it in step order, and
+> links `pipeline_runs.run_group_id` so Automate can open the same consolidated Panel report shown in
+> History/Cockpit. The action body for those runs is the consolidated Markdown report (consensus,
+> single-source findings, and child-agent evidence), bounded before any GitHub write. The engine never throws — a failure marks the run `error` and
 > returns `{ran:false,reason:'error'}`. The **auto-post gate** is the structural crux: the sole
 > GitHub-write port (`ports.post`) is reachable ONLY inside the `effective==='post'` branch, which
 > `effectiveAction` enters only for an enabled post and which calls `assertMayPost` immediately
@@ -403,10 +417,15 @@ settings(key, value)
 > (pipelineId/runId/status/action/posted) after each `pipeline_run` write, `main` broadcasts it, and
 > `aerie.pipelines.onStatus` delivers it. It is an outbound push — no new renderer→main surface.
 > A read-only `pipelines:pollerStatus` handler (M14) returns a `PollerStatus`
-> (`{ running, lastPolledAt, nextPollAt, rate: { remaining, limit } }`) so the Automate view can
-> show poller liveness. It is `isTrustedSender`-guarded, mutates nothing (cannot start/stop the
-> poller or trigger a poll), and carries **no token/secret** — only timing + the public rate
-> budget the poller last observed (the token and `resetAt` are never included).
+> (`{ running, enabledPipelineCount, activeWatchCount, lastPolledAt, nextPollAt,
+> rate: { remaining, limit } }`) so the Automate view can show poller liveness without implying
+> disabled automation is running. It is `isTrustedSender`-guarded, mutates nothing by itself, and
+> carries **no token/secret** — only eligible pipeline/watch counts, timing, and the public rate
+> budget the poller last observed (the token and `resetAt` are never included). Pipeline config
+> changes wake the local poller immediately so status/due times do not wait for a stale idle timer,
+> but the wake only recomputes persisted cadence anchors; it never makes a scheduled pipeline due
+> early, and all execution still flows through the same enabled-pipeline derivation and gated engine
+> path.
 
 > **ETag-cached polling foundation (ROADMAP M8).** The automation engine needs to detect a
 > new commit/PR head cheaply. `listCommits`/`listPullRequests` now mirror `listRepos`' ETag

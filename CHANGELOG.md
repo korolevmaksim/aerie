@@ -13,6 +13,23 @@ same change set.
 
 ### Added
 
+- **Seamless macOS window chrome**: the desktop shell now uses Electron's hidden native
+  titlebar on macOS, keeps the native close/minimize/zoom traffic lights, reserves a
+  top drag region so controls do not overlap the Aerie UI, and leaves non-macOS window
+  chrome unchanged.
+
+- **Automation state clarity**: the Automate list now uses a real on/off switch for each pipeline,
+  shows the schedule cadence next to `schedule` triggers, labels the floating run badge as
+  **Last run**, and stops calling the poller "Watching" when there are no enabled pipelines. Saving,
+  deleting, or enabling/disabling a pipeline also wakes the local poller immediately instead of
+  waiting for the previous idle/scheduled timer; the wake only recomputes due times and does not
+  bypass a schedule cadence.
+
+- **Automation consolidated reports**: multi-agent pipeline runs now create a persisted
+  `run_groups` report, link it from `pipeline_runs.run_group_id`, and use the same consolidated
+  Markdown body as manual Panel review for staged/notify/auto-post actions. Automate run history
+  shows an **Open report** action for those runs, jumping straight into History's panel report view.
+
 - **Persisted panel review reports**: multi-agent panel reviews now create a durable
   `run_groups` record over their child runs, so Cockpit and History show one consolidated
   review instead of three loose agent rows. Opening the panel shows consensus findings,
@@ -73,11 +90,24 @@ same change set.
   **Run every N minutes / hours / days** in the pipeline editor, and a commit-target scheduled
   pipeline polls its repo's default branch on that cadence (instead of the continuous commit
   cadence), reviewing the latest commit when it changes — lighter on API budget for a periodic check.
-  It runs once right after you enable it (so it's testable), and **Run now** works on it too. The
+  **Run now** works on scheduled pipelines for an explicit immediate check. The
   cadence is stored as a compact `<N><unit>` string (`src/shared/schedule.ts`, shared by the editor +
   poller and unit-tested); a scheduled run flows through the **same gated path** as a commit run
   (scope → guardrails → dedupe → the `assertMayPost` auto-post gate), so it adds no new write/exec
   surface. `pr` remains manual-only.
+
+### Fixed
+
+- **macOS seamless header no longer overlaps the app UI**: the hidden-titlebar shell now renders
+  a real empty drag row above the sidebar/workspace instead of relying on a preload-set CSS flag.
+  Native traffic-light controls sit in that reserved row, and the row itself is the window drag
+  target.
+
+- **Scheduled automation no longer fires on app restart**: the poller now seeds every schedule
+  pipeline's next due time from persisted history — the latest pipeline run or config/enable
+  update — instead of treating an empty in-memory timer as "due now." Schedule-only watches also
+  wait until that persisted due time before polling the branch, so reopening Aerie cannot relaunch
+  a 24-hour project audit ten minutes after it last ran.
 
 - **Pick model & thinking level in the agent editor** (ROADMAP M12): the custom-agent form no
   longer forces hand-typing raw flags. It is restructured into **Identity** · **Basics** ·

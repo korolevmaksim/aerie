@@ -3,6 +3,9 @@ import type { PipelineRunChange, PipelineWithRuns } from '@shared/types'
 import {
   applyLiveChange,
   describeOutcome,
+  describePipelineAction,
+  describePipelineCadence,
+  describePipelineTarget,
   displayRunStatus,
   formatRunLine,
   shortSha,
@@ -33,6 +36,7 @@ const run = (
 ): PipelineWithRuns['runs'][number] => ({
   id: 10,
   pipelineId: 1,
+  runGroupId: null,
   trigger: 'commit',
   refType: 'commit',
   ref: 'main',
@@ -49,6 +53,7 @@ const run = (
 const change = (over: Partial<PipelineRunChange> = {}): PipelineRunChange => ({
   pipelineId: 1,
   pipelineRunId: 11,
+  runGroupId: null,
   status: 'running',
   action: 'notify',
   posted: false,
@@ -128,17 +133,44 @@ describe('shortSha / formatRunLine', () => {
   })
 })
 
+describe('pipeline description helpers', () => {
+  it('describes trigger cadence, target, and action without hiding schedule periods', () => {
+    const scheduled = item().pipeline
+    scheduled.trigger = 'schedule'
+    scheduled.schedule = '24h'
+    scheduled.reviewTarget = 'project'
+    scheduled.action = { kind: 'post', autoPost: true, target: 'issue' }
+    expect(describePipelineCadence(scheduled)).toBe('Every 24 hours')
+    expect(describePipelineTarget(scheduled)).toBe('Project audit')
+    expect(describePipelineAction(scheduled.action)).toBe('Auto-post to GitHub')
+  })
+
+  it('labels non-schedule cadences and staged post actions clearly', () => {
+    const p = item().pipeline
+    expect(describePipelineCadence(p)).toBe('On new default-branch commits')
+    expect(describePipelineTarget(p)).toBe('Commit diff')
+    expect(describePipelineAction({ kind: 'post', autoPost: false })).toBe('Stage for manual post')
+  })
+})
+
 describe('describeOutcome', () => {
   it('summarizes a successful run (and notes a real post)', () => {
     expect(
       describeOutcome(
-        { ran: true, pipelineRunId: 1, action: 'notify', posted: false, findings: 3 },
+        {
+          ran: true,
+          pipelineRunId: 1,
+          runGroupId: null,
+          action: 'notify',
+          posted: false,
+          findings: 3
+        },
         false
       )
     ).toBe('Run done — notify, 3 findings.')
     expect(
       describeOutcome(
-        { ran: true, pipelineRunId: 1, action: 'post', posted: true, findings: 1 },
+        { ran: true, pipelineRunId: 1, runGroupId: 8, action: 'post', posted: true, findings: 1 },
         false
       )
     ).toBe('Run done — post, 1 finding, posted to GitHub.')
@@ -147,7 +179,14 @@ describe('describeOutcome', () => {
   it('labels a dry run and a skip reason', () => {
     expect(
       describeOutcome(
-        { ran: true, pipelineRunId: 1, action: 'stage', posted: false, findings: 0 },
+        {
+          ran: true,
+          pipelineRunId: 1,
+          runGroupId: null,
+          action: 'stage',
+          posted: false,
+          findings: 0
+        },
         true
       )
     ).toBe('Dry run done — stage, 0 findings.')

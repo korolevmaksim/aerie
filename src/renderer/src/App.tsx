@@ -16,6 +16,8 @@ type View = 'cockpit' | 'repos' | 'accounts' | 'history' | 'tools' | 'automate' 
 type HistoryOpenTarget = { kind: 'run' | 'group'; id: number }
 
 const SIDEBAR_COLLAPSED_STORAGE_KEY = 'aerie.sidebarCollapsed'
+const IS_MACOS =
+  /\bMac\b/.test(navigator.platform) || /\bMacintosh\b|\bMac OS X\b/.test(navigator.userAgent)
 
 function readInitialSidebarCollapsed(): boolean {
   try {
@@ -27,6 +29,86 @@ function readInitialSidebarCollapsed(): boolean {
 
 function accountSwitchView(view: View): View {
   return view === 'history' || view === 'repos' || view === 'automate' ? view : 'cockpit'
+}
+
+function renderNavIcon(id: View): React.JSX.Element | null {
+  const props = {
+    className: 'sidebar-nav__icon',
+    width: 18,
+    height: 18,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 2,
+    strokeLinecap: 'round',
+    strokeLinejoin: 'round'
+  } as const
+
+  switch (id) {
+    case 'cockpit':
+      return (
+        <svg {...props}>
+          <rect width="7" height="9" x="3" y="3" rx="1" />
+          <rect width="7" height="5" x="14" y="3" rx="1" />
+          <rect width="7" height="9" x="14" y="12" rx="1" />
+          <rect width="7" height="5" x="3" y="16" rx="1" />
+        </svg>
+      )
+    case 'repos':
+      return (
+        <svg {...props}>
+          <line x1="6" x2="6" y1="3" y2="15" />
+          <circle cx="18" cy="6" r="3" />
+          <circle cx="6" cy="18" r="3" />
+          <path d="M18 9a9 9 0 0 1-9 9" />
+        </svg>
+      )
+    case 'history':
+      return (
+        <svg {...props}>
+          <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+          <path d="M3 3v5h5" />
+          <path d="M12 7v5l4 2" />
+        </svg>
+      )
+    case 'automate':
+      return (
+        <svg {...props}>
+          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+        </svg>
+      )
+    case 'tools':
+      return (
+        <svg {...props}>
+          <rect width="16" height="16" x="4" y="4" rx="2" />
+          <rect width="6" height="6" x="9" y="9" rx="1" />
+          <path d="M9 1v3" />
+          <path d="M15 1v3" />
+          <path d="M9 20v3" />
+          <path d="M15 20v3" />
+          <path d="M20 9h3" />
+          <path d="M20 15h3" />
+          <path d="M1 9h3" />
+          <path d="M1 15h3" />
+        </svg>
+      )
+    case 'accounts':
+      return (
+        <svg {...props}>
+          <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+          <circle cx="12" cy="7" r="4" />
+        </svg>
+      )
+    case 'settings':
+      return (
+        <svg {...props}>
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+        </svg>
+      )
+    default:
+      return null
+  }
 }
 
 function App(): React.JSX.Element {
@@ -178,6 +260,12 @@ function App(): React.JSX.Element {
     setPendingHistoryTarget({ kind: item.kind, id: item.id })
   }
 
+  const openRunGroupFromAutomate = (groupId: number): void => {
+    setOpenRepo(null)
+    setView('history')
+    setPendingHistoryTarget({ kind: 'group', id: groupId })
+  }
+
   const openRepoFromCockpit = (repo: RepoSummary): void => {
     setOpenRepo(repo)
     setView('repos')
@@ -189,6 +277,14 @@ function App(): React.JSX.Element {
   }
 
   const sidebarToggleLabel = sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'
+  const shellClassName = [
+    'app',
+    'app-shell',
+    IS_MACOS ? 'app-shell--mac' : '',
+    sidebarCollapsed ? 'app-shell--sidebar-collapsed' : ''
+  ]
+    .filter(Boolean)
+    .join(' ')
 
   const navItems: {
     id: View
@@ -234,7 +330,8 @@ function App(): React.JSX.Element {
   ]
 
   return (
-    <div className={`app app-shell ${sidebarCollapsed ? 'app-shell--sidebar-collapsed' : ''}`}>
+    <div className={shellClassName}>
+      <div className="window-drag-region" aria-hidden="true" />
       <aside id="aerie-sidebar" className="sidebar" aria-label="Aerie workspace navigation">
         <div className="sidebar__top">
           <div className="brand">
@@ -295,11 +392,13 @@ function App(): React.JSX.Element {
               aria-label={`${item.label}: ${item.hint}`}
               title={`${item.label} — ${item.hint}`}
             >
-              <span className="sidebar-nav__short" aria-hidden="true">
-                {item.shortLabel}
+              <span className="sidebar-nav__icon-wrapper" aria-hidden="true">
+                {renderNavIcon(item.id)}
               </span>
-              <span className="sidebar-nav__text">{item.label}</span>
-              <small>{item.hint}</small>
+              <span className="sidebar-nav__info">
+                <span className="sidebar-nav__text">{item.label}</span>
+                <small className="sidebar-nav__hint">{item.hint}</small>
+              </span>
             </button>
           ))}
         </nav>
@@ -310,8 +409,24 @@ function App(): React.JSX.Element {
           aria-label="Open command palette"
           title="Open command palette"
         >
-          <span className="sidebar-command__label">Command palette</span>
-          <kbd>Cmd K</kbd>
+          <span className="sidebar-command__inner">
+            <svg
+              className="sidebar-command__icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              width="14"
+              height="14"
+            >
+              <circle cx="11" cy="11" r="8" />
+              <path d="m21 21-4.3-4.3" />
+            </svg>
+            <span className="sidebar-command__label">Command palette</span>
+          </span>
+          <kbd className="sidebar-command__kbd">⌘K</kbd>
         </button>
       </aside>
       <main className="content workspace">
@@ -325,7 +440,7 @@ function App(): React.JSX.Element {
         ) : view === 'tools' ? (
           <ToolsPanel />
         ) : view === 'automate' ? (
-          <AutomatePanel accountId={selectedId} />
+          <AutomatePanel accountId={selectedId} onOpenRunGroup={openRunGroupFromAutomate} />
         ) : view === 'accounts' || !reposReady ? (
           <AccountsPanel onAccountsChanged={reloadAccounts} />
         ) : view === 'history' ? (

@@ -7,6 +7,8 @@ const iso = (deltaMs: number): string => new Date(NOW + deltaMs).toISOString()
 
 const status = (over: Partial<PollerStatus> = {}): PollerStatus => ({
   running: true,
+  enabledPipelineCount: 2,
+  activeWatchCount: 1,
   lastPolledAt: iso(-30_000), // 30s ago
   nextPollAt: iso(120_000), // in 2m
   rate: { remaining: 4800, limit: 5000 },
@@ -16,12 +18,24 @@ const status = (over: Partial<PollerStatus> = {}): PollerStatus => ({
 describe('formatPollerStatus', () => {
   it('renders the full watching line', () => {
     expect(formatPollerStatus(status(), NOW)).toBe(
-      'Watching · next check in ~2m · last checked 30s ago · API 4800/5000'
+      'Watching 2 pipelines · next check in ~2m · last checked 30s ago · API 4800/5000'
     )
   })
 
   it('says paused when not running', () => {
     expect(formatPollerStatus(status({ running: false }), NOW)).toBe('Automation paused')
+  })
+
+  it('does not call the idle timer watching when no pipeline is enabled', () => {
+    expect(formatPollerStatus(status({ enabledPipelineCount: 0 }), NOW)).toBe(
+      'Idle · no enabled pipelines'
+    )
+  })
+
+  it('flags enabled pipelines that cannot produce a watch', () => {
+    expect(formatPollerStatus(status({ activeWatchCount: 0 }), NOW)).toBe(
+      'Idle · no runnable watches'
+    )
   })
 
   it('shows "checking now" when the next poll is due/overdue', () => {
@@ -30,7 +44,7 @@ describe('formatPollerStatus', () => {
 
   it('omits last-checked when there was no poll yet', () => {
     const s = formatPollerStatus(status({ lastPolledAt: null }), NOW)
-    expect(s).toContain('Watching')
+    expect(s).toContain('Watching 2 pipelines')
     expect(s).not.toContain('last checked')
   })
 
@@ -55,7 +69,30 @@ describe('formatPollerStatus', () => {
 
   it('a bare running poller with no timing is just "Watching"', () => {
     expect(
-      formatPollerStatus({ running: true, lastPolledAt: null, nextPollAt: null, rate: null }, NOW)
-    ).toBe('Watching')
+      formatPollerStatus(
+        {
+          running: true,
+          enabledPipelineCount: 0,
+          activeWatchCount: 0,
+          lastPolledAt: null,
+          nextPollAt: null,
+          rate: null
+        },
+        NOW
+      )
+    ).toBe('Idle · no enabled pipelines')
+    expect(
+      formatPollerStatus(
+        {
+          running: true,
+          enabledPipelineCount: 1,
+          activeWatchCount: 1,
+          lastPolledAt: null,
+          nextPollAt: null,
+          rate: null
+        },
+        NOW
+      )
+    ).toBe('Watching 1 pipeline')
   })
 })

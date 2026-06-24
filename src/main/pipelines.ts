@@ -76,6 +76,23 @@ export interface EnginePorts {
   updatePipelineRunStatus(id: number, status: PipelineRunStatus, finishedAt?: string): void
   /** Flags a pipeline_run as having actually written to GitHub. */
   setPipelineRunPosted(id: number): void
+  /** Links a pipeline_run to the consolidated panel report created for its child runs. */
+  setPipelineRunGroup(id: number, groupId: number): void
+  /** Creates a persisted run group so automation can expose the same report as Panel review. */
+  createRunGroup(input: {
+    repoId: number
+    refType: RefType
+    refId: string
+    headSha: string
+    startedAt: string
+    authorLogin: string | null
+  }): number
+  /** Adds a child agent run to that persisted report. */
+  addRunToGroup(input: { groupId: number; runId: number; agentId: string; position: number }): void
+  /** Renders the consolidated Markdown report for the finished group. */
+  renderRunGroupReport(groupId: number): string
+  /** Mirrors an automation auto-post URL onto its consolidated report. */
+  setRunGroupPosted(groupId: number, url: string): void
   /** Recent-activity snapshot for guardrail checks. */
   guardrailState(pipeline: Pipeline): GuardrailState
   /** Starts one step's run; returns the runId. Agent steps map to `startRun`. */
@@ -111,6 +128,8 @@ export interface RunOptions {
   dryRun?: boolean
 }
 
+const MAX_ACTION_BODY_CHARS = 65_000
+
 function triggerMatches(pipeline: Pipeline, delta: DeltaContext): boolean {
   if (pipeline.repoId !== delta.repoId) return false
   // Commit and schedule pipelines are both driven by the default-branch watch. The pipeline's
@@ -133,6 +152,21 @@ export function formatActionBody(name: string, agg: ConsensusResult): string {
     return `- [${f.severity}] ${loc} — ${f.message} (${f.agreement}×)`
   })
   return `Aerie pipeline "${name}" — ${agg.findings.length} consensus finding(s) of ${agg.total}:\n${lines.join('\n')}`
+}
+
+function boundActionBody(body: string): string {
+  const trimmed = body.trim()
+  if (trimmed.length <= MAX_ACTION_BODY_CHARS) return trimmed
+  return `${trimmed.slice(0, MAX_ACTION_BODY_CHARS).trimEnd()}\n\n[aerie] pipeline report truncated before posting`
+}
+
+function groupRefId(delta: DeltaContext, reviewTarget: PipelineReviewTarget): string {
+  if (reviewTarget === 'project') return delta.ref
+  if (delta.refType === 'pr') {
+    const m = /^pr:(\d+)$/.exec(delta.ref)
+    return m?.[1] ?? delta.ref
+  }
+  return delta.headSha
 }
 
 /**
@@ -200,6 +234,7 @@ export async function runPipelineForDelta(
     // real auto run on the same head. A non-dry MANUAL run (run-now) keeps the CANONICAL key on
     // purpose — it did the real work (and posted, if opted in), so a later auto run on the same
     // head SHOULD dedupe-skip it rather than redo/re-post identical work.
+    const startedAt = ports.nowIso()
     pipelineRunId = ports.insertPipelineRun({
       pipelineId: pipeline.id,
       trigger: opts.manual ? 'manual' : pipeline.trigger,
@@ -208,25 +243,53 @@ export async function runPipelineForDelta(
       headSha: delta.headSha,
       action: effective,
       dedupeKey: opts.dryRun ? `dryrun:${key}` : key,
-      startedAt: ports.nowIso()
+      startedAt
     })
     // Mark running so the live status push shows a run in progress (not just pending→done).
     ports.updatePipelineRunStatus(pipelineRunId, 'running')
 
+    const runGroupId =
+      pipeline.steps.length > 1
+        ? ports.createRunGroup({
+            repoId: delta.repoId,
+            refType: runRefType,
+            refId: groupRefId(delta, reviewTarget),
+            headSha: delta.headSha,
+            startedAt,
+            authorLogin: delta.scope.author ?? null
+          })
+        : null
+    if (runGroupId !== null) ports.setPipelineRunGroup(pipelineRunId, runGroupId)
+
     // Run each wave fully before the next — the wait-for-all-steps barrier. A failed step
     // doesn't abort the wave; it simply contributes no findings to the aggregate.
     const runIds: number[] = []
+    let groupPosition = 0
     for (const wave of plan.waves) {
       const started = wave.map((stepId) => {
         const step = pipeline.steps.find((s) => s.id === stepId)!
-        return ports.startStep(step, delta, reviewTarget)
+        const runId = ports.startStep(step, delta, reviewTarget)
+        if (runGroupId !== null) {
+          ports.addRunToGroup({
+            groupId: runGroupId,
+            runId,
+            agentId: step.ref,
+            position: groupPosition
+          })
+          groupPosition += 1
+        }
+        return runId
       })
       runIds.push(...started)
       await Promise.all(started.map((runId) => ports.waitForRun(runId)))
     }
 
     const agg = ports.aggregate(runIds)
-    const body = formatActionBody(pipeline.name, agg)
+    const body = boundActionBody(
+      runGroupId !== null
+        ? ports.renderRunGroupReport(runGroupId)
+        : formatActionBody(pipeline.name, agg)
+    )
 
     let posted = false
     if (effective === 'post') {
@@ -238,8 +301,9 @@ export async function runPipelineForDelta(
         reviewTarget === 'project'
           ? 'issue'
           : (action.target ?? (delta.refType === 'pr' ? 'pr' : 'commit'))
-      await ports.post(action, target, delta, body)
+      const url = await ports.post(action, target, delta, body)
       ports.setPipelineRunPosted(pipelineRunId)
+      if (runGroupId !== null) ports.setRunGroupPosted(runGroupId, url)
       posted = true
     } else {
       // notify or stage (a disabled post degrades to stage) — held for the manual confirm.
@@ -248,7 +312,14 @@ export async function runPipelineForDelta(
 
     ports.updatePipelineRunStatus(pipelineRunId, 'done', ports.nowIso())
     ports.log('pipeline run done', { pipelineId: pipeline.id, action: effective, posted })
-    return { ran: true, pipelineRunId, action: effective, posted, findings: agg.findings.length }
+    return {
+      ran: true,
+      pipelineRunId,
+      runGroupId,
+      action: effective,
+      posted,
+      findings: agg.findings.length
+    }
   } catch (err) {
     if (pipelineRunId !== null)
       ports.updatePipelineRunStatus(pipelineRunId, 'error', ports.nowIso())

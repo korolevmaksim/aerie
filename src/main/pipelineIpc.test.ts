@@ -22,6 +22,7 @@ const draft: PipelineDraft = {
 const runRow = (over: Partial<PipelineRunRow> = {}): PipelineRunRow => ({
   id: 10,
   pipeline_id: 3,
+  run_group_id: null,
   trigger: 'commit',
   ref_type: 'commit',
   ref: 'main',
@@ -113,6 +114,7 @@ describe('rowToRunSummary', () => {
     expect(rowToRunSummary(runRow({ posted: 1 }))).toEqual({
       id: 10,
       pipelineId: 3,
+      runGroupId: null,
       trigger: 'commit',
       refType: 'commit',
       ref: 'main',

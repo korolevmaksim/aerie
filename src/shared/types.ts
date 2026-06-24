@@ -19,6 +19,10 @@ export interface RateLimitInfo {
 export interface PollerStatus {
   /** Whether the poll loop is running (it runs while the app is open). */
   running: boolean
+  /** Enabled, valid pipeline configs currently eligible for the poller. */
+  enabledPipelineCount: number
+  /** Distinct repo/default-branch watches derived from those enabled pipelines. */
+  activeWatchCount: number
   /** ISO timestamp of the last actual GitHub poll, or null if none yet this session. */
   lastPolledAt: string | null
   /** ISO timestamp of the next scheduled tick, or null when not running. */
@@ -243,6 +247,8 @@ export type PipelineRunStatus = 'pending' | 'running' | 'done' | 'error' | 'skip
 export interface PipelineRunSummary {
   id: number
   pipelineId: number
+  /** Consolidated panel report created for this pipeline run, when it launched 2+ child runs. */
+  runGroupId: number | null
   trigger: PipelineTrigger
   refType: RefType
   ref: string
@@ -269,6 +275,7 @@ export interface PipelineWithRuns {
 export interface PipelineRunChange {
   pipelineId: number
   pipelineRunId: number
+  runGroupId: number | null
   status: PipelineRunStatus
   /** The action this run takes (notify/stage/post). */
   action: PipelineActionKind
@@ -286,6 +293,7 @@ export type PipelineRunOutcome =
   | {
       ran: true
       pipelineRunId: number
+      runGroupId: number | null
       action: PipelineActionKind
       posted: boolean
       findings: number

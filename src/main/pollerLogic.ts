@@ -79,7 +79,8 @@ export function deriveWatches(
 
 /**
  * The watches due to poll now: scheduled time `<= now` (a never-scheduled watch defaults to
- * due), soonest first, capped at `maxConcurrent` (the global poll budget; `<=0` = no cap).
+ * due; the live poller seeds schedule-only watches from persisted cadence anchors), soonest
+ * first, capped at `maxConcurrent` (the global poll budget; `<=0` = no cap).
  */
 export function selectDueWatches(
   watches: WatchSpec[],
@@ -93,6 +94,20 @@ export function selectDueWatches(
     .sort((a, b) => a.at - b.at)
     .map((x) => x.w)
   return maxConcurrent > 0 ? due.slice(0, maxConcurrent) : due
+}
+
+/**
+ * Calculates the next due time for a scheduled pipeline from a persisted anchor
+ * (last run start, else the pipeline's last config update). Invalid/missing anchors
+ * start one full interval from `now`, never immediately on process start.
+ */
+export function nextScheduleDueAt(
+  anchorIso: string | null,
+  intervalMs: number,
+  now: number
+): number {
+  const anchor = anchorIso === null ? NaN : Date.parse(anchorIso)
+  return (Number.isFinite(anchor) ? anchor : now) + intervalMs
 }
 
 export interface DeltaMeta {

@@ -48,6 +48,7 @@ export function rowToRunSummary(row: PipelineRunRow): PipelineRunSummary {
   return {
     id: row.id,
     pipelineId: row.pipeline_id,
+    runGroupId: row.run_group_id,
     trigger: row.trigger,
     refType: row.ref_type,
     ref: row.ref,
