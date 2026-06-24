@@ -14,6 +14,7 @@ import type {
   Paginated,
   OpenTarget,
   PostResult,
+  PostRunGroupParams,
   PostRunParams,
   PrepareResult,
   PipelineRunChange,
@@ -29,7 +30,8 @@ import type {
   ConsensusParams,
   ConsensusResult,
   RunFinding,
-  RunHistoryItem,
+  RunGroupReport,
+  ReviewHistoryItem,
   RunLocalStatus,
   RunOutputChunk,
   RunRecord,
@@ -155,7 +157,7 @@ const api = {
       ipcRenderer.invoke(CHANNELS.runnerKill, runId),
     listRuns: (repoId: number): Promise<ApiResult<RunRecord[]>> =>
       ipcRenderer.invoke(CHANNELS.runnerListRuns, repoId),
-    listAllRuns: (): Promise<ApiResult<RunHistoryItem[]>> =>
+    listAllRuns: (): Promise<ApiResult<ReviewHistoryItem[]>> =>
       ipcRenderer.invoke(CHANNELS.runsListAll),
     readOutput: (runId: number): Promise<ApiResult<string>> =>
       ipcRenderer.invoke(CHANNELS.runnerReadOutput, runId),
@@ -163,13 +165,23 @@ const api = {
       ipcRenderer.invoke(CHANNELS.runnerFindings, runId),
     consensus: (params: ConsensusParams): Promise<ApiResult<ConsensusResult>> =>
       ipcRenderer.invoke(CHANNELS.runnerConsensus, params),
+    groupReport: (groupId: number, consensusMin?: number): Promise<ApiResult<RunGroupReport>> =>
+      ipcRenderer.invoke(CHANNELS.runnerGroupReport, { groupId, consensusMin }),
     transcript: (runId: number): Promise<ApiResult<string>> =>
       ipcRenderer.invoke(CHANNELS.runnerTranscript, runId),
     setLocalStatus: (runId: number, localStatus: RunLocalStatus): Promise<ApiResult<RunRecord>> =>
       ipcRenderer.invoke(CHANNELS.runnerSetLocalStatus, { runId, localStatus }),
+    setGroupLocalStatus: (
+      groupId: number,
+      localStatus: RunLocalStatus
+    ): Promise<ApiResult<RunGroupReport>> =>
+      ipcRenderer.invoke(CHANNELS.runnerSetGroupLocalStatus, { groupId, localStatus }),
     /** Post a finished run's output to GitHub. Gated by the in-app confirm UI. */
     post: (params: PostRunParams): Promise<ApiResult<PostResult>> =>
       ipcRenderer.invoke(CHANNELS.githubPost, params),
+    /** Post a consolidated panel report to GitHub. Gated by the same in-app confirm UI. */
+    postGroup: (params: PostRunGroupParams): Promise<ApiResult<PostResult>> =>
+      ipcRenderer.invoke(CHANNELS.githubPostGroup, params),
     onOutput: (cb: (payload: RunOutputChunk) => void): (() => void) => {
       const listener = (_e: IpcRendererEvent, payload: RunOutputChunk): void => cb(payload)
       ipcRenderer.on(CHANNELS.runnerOutput, listener)

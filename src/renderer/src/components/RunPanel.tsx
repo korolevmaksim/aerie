@@ -5,11 +5,13 @@ import type {
   Preset,
   Prompt,
   RefType,
+  RunGroupHistoryItem,
   RunRecord,
   RunStatus,
   StartBatchResult
 } from '@shared/types'
 import { copyForTarget, defaultPromptId } from '../lib/reviewLauncher'
+import PanelReportView from './PanelReportView'
 import RunView from './RunView'
 
 function ReviewField({
@@ -59,6 +61,7 @@ function RunPanel({
   const [prompts, setPrompts] = useState<Prompt[]>([])
   const [promptId, setPromptId] = useState<number | null>(null)
   const [currentRun, setCurrentRun] = useState<RunRecord | null>(null)
+  const [currentGroup, setCurrentGroup] = useState<RunGroupHistoryItem | null>(null)
   const [currentStatus, setCurrentStatus] = useState<RunStatus | null>(null)
   const [starting, setStarting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -105,13 +108,31 @@ function RunPanel({
   useEffect(() => {
     let cancelled = false
     void (async () => {
-      const res = await window.aerie.runner.listRuns(repoId)
+      const [res, history] = await Promise.all([
+        window.aerie.runner.listRuns(repoId),
+        window.aerie.runner.listAllRuns()
+      ])
       if (cancelled) return
-      // Panel runs are session-only (not rehydrated), so clear them when the ref changes —
-      // otherwise commit A's panel reviews would linger when navigating to commit B.
       setBatchRuns([])
       setBatchSkipped([])
       setConsensus(null)
+      setCurrentGroup(null)
+      if (history.ok) {
+        const group = history.value.find(
+          (item): item is RunGroupHistoryItem =>
+            item.kind === 'group' &&
+            item.repoId === repoId &&
+            item.refType === refType &&
+            (refType === 'commit' ? item.headSha === sha : item.refId === refId)
+        )
+        if (group) {
+          setPanelMode(true)
+          setCurrentGroup(group)
+          setCurrentRun(null)
+          setCurrentStatus(group.status)
+          return
+        }
+      }
       if (!res.ok) return
       // commit runs are keyed by head SHA; PR and working-tree runs by refId
       // (the PR number, or the working-tree mode), since their head SHA varies.
@@ -230,6 +251,10 @@ function RunPanel({
       if (res.ok) {
         setBatchRuns(res.value.runs)
         setBatchSkipped(res.value.skipped)
+        if (res.value.group) {
+          const report = await window.aerie.runner.groupReport(res.value.group.id)
+          if (report.ok) setCurrentGroup(report.value.group)
+        }
         if (res.value.runs.length === 0) setError('No agents could be started for this review.')
       } else {
         setError(res.error)
@@ -501,6 +526,7 @@ function RunPanel({
             {panelIds.size}/{runnableAgents.length} ready agents selected; up to 3 run at once.
           </p>
           {error && <p className="alert">{error}</p>}
+          {currentGroup && <PanelReportView group={currentGroup} onGroupUpdate={setCurrentGroup} />}
           {batchSkipped.length > 0 && (
             <p className="hint">
               Skipped:{' '}
@@ -510,7 +536,7 @@ function RunPanel({
               .
             </p>
           )}
-          {batchRuns.length > 1 && (
+          {!currentGroup && batchRuns.length > 1 && (
             <div className="run__consensus">
               <div className="run__consensus-controls">
                 <strong>Consensus</strong>
@@ -567,12 +593,13 @@ function RunPanel({
             </div>
           )}
 
-          {batchRuns.map((r) => (
-            <div key={r.id} className="run__batch-item">
-              <h4 className="run__batch-agent">{labelFor(r.agentId)}</h4>
-              <RunView run={r} />
-            </div>
-          ))}
+          {!currentGroup &&
+            batchRuns.map((r) => (
+              <div key={r.id} className="run__batch-item">
+                <h4 className="run__batch-agent">{labelFor(r.agentId)}</h4>
+                <RunView run={r} />
+              </div>
+            ))}
         </>
       )}
     </div>

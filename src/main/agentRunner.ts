@@ -8,6 +8,9 @@ import type {
   ConsensusParams,
   ConsensusResult,
   RunFinding,
+  RunGroupHistoryItem,
+  RunGroupRecord,
+  RunGroupReport,
   RunHistoryItem,
   RunLocalStatus,
   RunRecord,
@@ -57,6 +60,12 @@ import {
 } from './gitEngine'
 import { gatherGroundTruth } from './grounding'
 import { log } from './logger'
+import {
+  derivePanelFinishedAt,
+  derivePanelStatus,
+  renderPanelReportMarkdown,
+  sortPanelRuns
+} from './panelReport'
 import { whichOnPath } from './pathLookup'
 import { redactText } from './redact'
 import { formatMissingOutputError, keepTail } from './runOutput'
@@ -66,19 +75,28 @@ import { TOOL_CATALOG } from './toolCatalog'
 import {
   getAccount,
   getRun,
+  getRunGroup,
+  getRunGroupWithRepo,
   getPrompt,
   getRepoById,
   deleteSetting,
   getSetting,
   hasActiveRun,
+  addRunToGroup,
   insertFindings,
+  insertRunGroup,
   insertRun,
-  listAllRuns,
+  listAllRunGroups,
+  listAllUngroupedRuns,
   listFindingsForRun,
+  listRunsForGroupWithRepo,
   listRunsForRepo,
   setSetting,
+  updateRunGroupLocalStatus,
   updateRunLocalStatus,
   updateRunStatus,
+  type RunGroupRow,
+  type RunGroupRowWithRepo,
   type RepoRow,
   type RunRow
 } from './store'
@@ -427,6 +445,45 @@ function rowToRecord(row: RunRow): RunRecord {
   }
 }
 
+function rowToHistory(row: RunRow & { full_name: string; account_id: number }): RunHistoryItem {
+  return {
+    ...rowToRecord(row),
+    kind: 'run',
+    repoFullName: row.full_name,
+    accountId: row.account_id
+  }
+}
+
+function rowToGroupRecord(row: RunGroupRow, runs: RunHistoryItem[]): RunGroupRecord {
+  const sorted = sortPanelRuns(runs)
+  return {
+    id: row.id,
+    repoId: row.repo_id,
+    refType: row.ref_type,
+    refId: row.ref_id,
+    headSha: row.head_sha,
+    status: derivePanelStatus(sorted),
+    startedAt: row.started_at,
+    finishedAt: derivePanelFinishedAt(sorted),
+    postedUrl: row.posted_url,
+    localStatus: row.local_status,
+    localStatusAt: row.local_status_at,
+    authorLogin: row.author_login,
+    runIds: sorted.map((r) => r.id),
+    agentIds: sorted.map((r) => r.agentId)
+  }
+}
+
+function rowToGroupHistory(row: RunGroupRowWithRepo): RunGroupHistoryItem {
+  const runs = listRunsForGroupWithRepo(row.id).map(rowToHistory)
+  return {
+    ...rowToGroupRecord(row, runs),
+    kind: 'group',
+    repoFullName: row.full_name,
+    accountId: row.account_id
+  }
+}
+
 function isTerminalStatus(status: RunStatus): boolean {
   return status === 'done' || status === 'error' || status === 'killed'
 }
@@ -444,6 +501,30 @@ export function setRunLocalStatus(runId: number, localStatus: RunLocalStatus): R
   const updated = getRun(runId)
   if (!updated) throw new Error('Run not found.')
   return rowToRecord(updated)
+}
+
+export function setRunGroupLocalStatus(
+  groupId: number,
+  localStatus: RunLocalStatus
+): RunGroupRecord {
+  const current = getRunGroup(groupId)
+  if (!current) throw new Error('Panel review not found.')
+  const runs = listRunsForGroupWithRepo(groupId).map(rowToHistory)
+  const status = derivePanelStatus(runs)
+  if (localStatus !== 'open' && !isTerminalStatus(status)) {
+    throw new Error('Only finished panel reviews can be marked handled or verified.')
+  }
+  if (localStatus === 'verified' && status !== 'done') {
+    throw new Error('Only successful panel reviews can be marked verified.')
+  }
+  updateRunGroupLocalStatus(
+    groupId,
+    localStatus,
+    localStatus === 'open' ? null : new Date().toISOString()
+  )
+  const updated = getRunGroup(groupId)
+  if (!updated) throw new Error('Panel review not found.')
+  return rowToGroupRecord(updated, runs)
 }
 
 /**
@@ -505,8 +586,8 @@ export function startBatch(params: StartBatchParams): StartBatchResult {
       .map((a) => a.id)
   )
   const plan = planBatch(params.agentIds, installed)
-  const runs: RunRecord[] = []
   const skipped: StartBatchResult['skipped'] = [...plan.skipped]
+  const runnable: string[] = []
   for (const agentId of plan.run) {
     // Skip an agent already running for this exact ref (mirrors the single-run guard) —
     // and report it, so the UI explains why no RunView appeared for that agent.
@@ -514,20 +595,40 @@ export function startBatch(params: StartBatchParams): StartBatchResult {
       skipped.push({ id: agentId, reason: 'already-running' })
       continue
     }
-    runs.push(
-      startRun({
-        accountId: params.accountId,
-        repoId: params.repoId,
-        sha: params.sha,
-        refType: params.refType,
-        refId: params.refId,
-        agentId,
-        promptId: params.promptId,
-        authorLogin: params.authorLogin
-      })
-    )
+    runnable.push(agentId)
   }
-  return { runs, skipped }
+  if (runnable.length === 0) return { group: null, runs: [], skipped }
+
+  const group = insertRunGroup({
+    repoId: params.repoId,
+    refType: params.refType,
+    refId: params.refId,
+    headSha: params.sha,
+    startedAt: new Date().toISOString(),
+    authorLogin: params.authorLogin ?? null
+  })
+  const runs: RunRecord[] = []
+  runnable.forEach((agentId, position) => {
+    const run = startRun({
+      accountId: params.accountId,
+      repoId: params.repoId,
+      sha: params.sha,
+      refType: params.refType,
+      refId: params.refId,
+      agentId,
+      promptId: params.promptId,
+      authorLogin: params.authorLogin
+    })
+    addRunToGroup(group.id, run.id, agentId, position)
+    runs.push(run)
+  })
+  const groupRuns: RunHistoryItem[] = runs.map((run) => ({
+    ...run,
+    kind: 'run',
+    repoFullName: '',
+    accountId: params.accountId
+  }))
+  return { group: rowToGroupRecord(group, groupRuns), runs, skipped }
 }
 
 // Cap the in-memory capture so a runaway agent can't bloat the main process or
@@ -1113,10 +1214,49 @@ export function aggregateRunFindings(params: ConsensusParams): ConsensusResult {
   }
 }
 
-export function listAllRunHistory(): RunHistoryItem[] {
-  return listAllRuns().map((r) => ({
-    ...rowToRecord(r),
-    repoFullName: r.full_name,
-    accountId: r.account_id
-  }))
+export function getRunGroupReport(groupId: number, consensusMin = 2): RunGroupReport {
+  const groupRow = getRunGroupWithRepo(groupId)
+  if (!groupRow) throw new Error('Panel review not found.')
+  const runs = listRunsForGroupWithRepo(groupId).map(rowToHistory)
+  const group = rowToGroupHistory(groupRow)
+  const threshold = Math.max(1, Math.floor(consensusMin))
+  const allFindings = aggregateRunFindings({
+    runIds: runs.map((r) => r.id),
+    consensusMin: 1,
+    groupBy: 'location'
+  })
+  const consensusFindings = allFindings.findings.filter((f) => f.agreement >= threshold)
+  const singleSourceFindings = allFindings.findings.filter((f) => f.agreement < threshold)
+  const outputs = new Map<number, string>()
+  for (const run of runs) {
+    outputs.set(run.id, run.outputPath ? readRunOutput(run.outputPath) : '')
+  }
+  const markdown = renderPanelReportMarkdown({
+    group,
+    runs,
+    consensusFindings,
+    singleSourceFindings,
+    consensusMin: threshold,
+    totalFindings: allFindings.total,
+    outputs
+  })
+  return {
+    group,
+    runs,
+    consensusFindings,
+    singleSourceFindings,
+    totalFindings: allFindings.total,
+    markdown
+  }
+}
+
+export function listAllRunHistory(): (RunHistoryItem | RunGroupHistoryItem)[] {
+  const runs = listAllUngroupedRuns().map(rowToHistory)
+  const groups = listAllRunGroups().map(rowToGroupHistory)
+  return [...runs, ...groups].sort((a, b) => {
+    const time = Date.parse(b.startedAt) - Date.parse(a.startedAt)
+    if (time !== 0) return time
+    if (a.kind === b.kind) return b.id - a.id
+    return a.kind === 'group' ? -1 : 1
+  })
 }

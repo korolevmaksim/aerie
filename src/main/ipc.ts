@@ -15,12 +15,14 @@ import type {
   Paginated,
   PrepareResult,
   OpenTarget,
+  PostRunGroupParams,
   PostResult,
   PostRunParams,
   Preset,
   Prompt,
   ConsensusParams,
   ConsensusResult,
+  RunGroupReport,
   PipelineRunOutcome,
   PipelineWithRuns,
   PollerStatus,
@@ -29,8 +31,8 @@ import type {
   RefType,
   RepoMapping,
   ReposResult,
+  ReviewHistoryItem,
   RunFinding,
-  RunHistoryItem,
   RunLocalStatus,
   RunRecord,
   SettingKey,
@@ -46,6 +48,7 @@ import {
   deleteUserAgentById,
   discoverAgentModels,
   getAgentById,
+  getRunGroupReport,
   getRunTranscript,
   killRun,
   listAgentInfos,
@@ -57,6 +60,7 @@ import {
   saveUserAgent,
   setAgentModel,
   setAgentReasoning,
+  setRunGroupLocalStatus,
   setRunLocalStatus,
   startBatch,
   startRun
@@ -105,6 +109,7 @@ import {
   getPipelineRow,
   getRepoById,
   getRun,
+  getRunGroup,
   hasActiveRun,
   insertAccount,
   insertPipeline,
@@ -124,6 +129,7 @@ import {
   setRepoLocalPath,
   setRepoUseLocalWorktree,
   setRunPostedUrl,
+  setRunGroupPostedUrl,
   updateAccountToken,
   updatePrompt,
   type AccountRow,
@@ -810,6 +816,26 @@ export function registerIpcHandlers(): void {
     }
   })
 
+  ipcMain.handle(
+    CHANNELS.runnerGroupReport,
+    (event, params: unknown): ApiResult<RunGroupReport> => {
+      if (!isTrustedSender(event)) return fail('Untrusted sender.')
+      const p = params as { groupId?: unknown; consensusMin?: unknown }
+      if (!isValidId(p?.groupId)) return fail('Invalid panel review id.')
+      const consensusMin =
+        typeof p.consensusMin === 'number' &&
+        Number.isInteger(p.consensusMin) &&
+        p.consensusMin >= 1
+          ? p.consensusMin
+          : 2
+      try {
+        return ok(getRunGroupReport(p.groupId, consensusMin))
+      } catch (error) {
+        return fail(error instanceof Error ? error.message : 'Could not build panel report.')
+      }
+    }
+  )
+
   // The full console transcript (live for a running run, recorded for a finished
   // one) — for showing progress/logs incl. from History.
   ipcMain.handle(CHANNELS.runnerTranscript, (event, runId: unknown): ApiResult<string> => {
@@ -836,6 +862,27 @@ export function registerIpcHandlers(): void {
       return fail(error instanceof Error ? error.message : 'Failed to update run status.')
     }
   })
+
+  ipcMain.handle(
+    CHANNELS.runnerSetGroupLocalStatus,
+    (event, params: unknown): ApiResult<RunGroupReport> => {
+      if (!isTrustedSender(event)) return fail('Untrusted sender.')
+      const p = params as { groupId?: unknown; localStatus?: unknown }
+      if (!isValidId(p?.groupId)) return fail('Invalid panel review id.')
+      if (
+        typeof p.localStatus !== 'string' ||
+        !RUN_LOCAL_STATUS_VALUES.has(p.localStatus as RunLocalStatus)
+      ) {
+        return fail('Invalid local panel status.')
+      }
+      try {
+        setRunGroupLocalStatus(p.groupId, p.localStatus as RunLocalStatus)
+        return ok(getRunGroupReport(p.groupId))
+      } catch (error) {
+        return fail(error instanceof Error ? error.message : 'Failed to update panel status.')
+      }
+    }
+  )
 
   // --- post results to GitHub (Stage 6) — write, gated by the in-app confirm --
   // The explicit confirmation is a renderer-side contract (PostConfirmModal):
@@ -885,9 +932,60 @@ export function registerIpcHandlers(): void {
     }
   )
 
+  ipcMain.handle(
+    CHANNELS.githubPostGroup,
+    async (event, params: unknown): Promise<ApiResult<PostResult>> => {
+      if (!isTrustedSender(event)) return fail('Untrusted sender.')
+      const p = params as Partial<PostRunGroupParams>
+      if (!p || typeof p !== 'object') return fail('Invalid post parameters.')
+      if (!isValidId(p.groupId) || !isValidId(p.repoId)) {
+        return fail('Invalid panel review or repo id.')
+      }
+      const body = typeof p.body === 'string' ? p.body.trim() : ''
+      if (!body) return fail('The comment body is empty.')
+      if (body.length > 65536) return fail('The comment body is too long (max 65536 characters).')
+
+      const repo = getRepoById(p.repoId)
+      if (!repo) return fail('Repository not found.')
+      const accountId = repo.account_id
+      if (!getAccount(accountId)) return fail('Account not found.')
+      const groupRow = getRunGroup(p.groupId)
+      if (!groupRow || groupRow.repo_id !== p.repoId) {
+        return fail('Panel review does not belong to that repository.')
+      }
+
+      try {
+        const report = getRunGroupReport(p.groupId)
+        const target = resolveRunPostTarget(
+          {
+            ref_type: report.group.refType,
+            ref_id: report.group.refId,
+            head_sha: report.group.headSha,
+            status: report.group.status
+          },
+          { kind: p.kind, title: p.title }
+        )
+        if (!target.ok) return fail(target.error)
+
+        let url: string
+        if (target.target.kind === 'commitComment') {
+          url = await createCommitComment(accountId, repo.full_name, target.target.sha, body)
+        } else if (target.target.kind === 'prComment') {
+          url = await createPrComment(accountId, repo.full_name, target.target.prNumber, body)
+        } else {
+          url = await createIssue(accountId, repo.full_name, target.target.title, body)
+        }
+        setRunGroupPostedUrl(p.groupId, url)
+        return ok({ url })
+      } catch (error) {
+        return fail(describeAuthError(error))
+      }
+    }
+  )
+
   // --- hardening: history & settings (Stage 7) -------------------------------
 
-  ipcMain.handle(CHANNELS.runsListAll, (event): ApiResult<RunHistoryItem[]> => {
+  ipcMain.handle(CHANNELS.runsListAll, (event): ApiResult<ReviewHistoryItem[]> => {
     if (!isTrustedSender(event)) return fail('Untrusted sender.')
     try {
       return ok(listAllRunHistory())

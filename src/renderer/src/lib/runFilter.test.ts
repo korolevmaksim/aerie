@@ -20,7 +20,8 @@ const run = (over: Partial<RunHistoryItem> = {}): RunHistoryItem => ({
   localStatus: 'open',
   localStatusAt: null,
   authorLogin: 'monalisa',
-  ...over
+  ...over,
+  kind: 'run'
 })
 
 describe('matchesRunQuery', () => {
@@ -48,6 +49,33 @@ describe('matchesRunQuery', () => {
     const project = run({ refType: 'project', refId: 'main' })
     expect(matchesRunQuery(project, 'project')).toBe(true)
     expect(matchesRunQuery(project, 'main')).toBe(true)
+  })
+
+  it('matches a consolidated panel by panel vocabulary and child agents', () => {
+    expect(
+      matchesRunQuery(
+        {
+          kind: 'group',
+          id: 9,
+          repoId: 7,
+          accountId: 3,
+          repoFullName: 'octocat/hello-world',
+          refType: 'commit',
+          refId: 'main',
+          headSha: 'abcdef1234567890',
+          status: 'done',
+          startedAt: '2026-06-23T00:00:00Z',
+          finishedAt: '2026-06-23T00:05:00Z',
+          postedUrl: null,
+          localStatus: 'open',
+          localStatusAt: null,
+          authorLogin: 'monalisa',
+          runIds: [1, 2, 3],
+          agentIds: ['codex', 'claude-code', 'agy']
+        },
+        'panel claude-code'
+      )
+    ).toBe(true)
   })
 
   it('requires ALL tokens to match (AND)', () => {

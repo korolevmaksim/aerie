@@ -87,3 +87,51 @@ operator's attention, not around implementation modules.
 - Added review target shortcuts for favorite/recent repositories.
 - Added right-rail readiness cards for agents, automation, and trust boundaries.
 - Kept all data access on existing renderer-safe IPC calls.
+
+---
+
+Date: 2026-06-24
+
+## Product Question: Panel Review Consolidation
+
+The next failure was not visual polish: three simultaneous agents produced three separate
+History rows and no durable combined report. The operator had to copy each agent result into
+another tool manually. For a local agent mission-control app, that breaks the core promise.
+
+## External Patterns Reviewed
+
+- [GitHub Copilot code review](https://docs.github.com/en/copilot/how-tos/use-copilot-agents/request-a-code-review/use-code-review)
+  behaves like a reviewer inside the pull request: comments are readable, resolvable, and
+  can include suggested fixes. Takeaway: the user should receive review objects, not raw
+  model transcripts.
+- [GitHub Copilot PR summary](https://docs.github.com/en/copilot/how-tos/copilot-on-github/copilot-for-github-tasks/create-a-pr-summary)
+  generates a summary in a PR description/comment, but asks the user to review it before
+  publishing. Takeaway: consolidated output should be copy/post-ready but still editable and
+  confirm-gated.
+- [CodeRabbit review overview](https://docs.coderabbit.ai/guides/code-review-overview)
+  combines multiple AI models and static analysis, then publishes summaries, security
+  findings, improvement suggestions, and continuous incremental updates. Takeaway: aggregate
+  findings by priority and keep the evidence trail.
+- [CodeRabbit command controls](https://docs.coderabbit.ai/guides/commands) distinguish full
+  review, incremental review, summary updates, and resolve/approval actions. Takeaway:
+  review history needs durable state and explicit controls, not session-only buttons.
+- [Qodo code review](https://docs.qodo.ai/code-review) describes specialized review agents,
+  shared context, rule enforcement, and low-noise prioritization. Takeaway: panel review
+  should surface consensus/noise information before raw per-agent logs.
+- [Cursor Bugbot](https://cursor.com/bugbot) emphasizes real bugs directly in GitHub, custom
+  rules, and fixes from the review surface. Takeaway: the useful unit is an actionable
+  finding tied to code, with child evidence available when needed.
+
+## Aerie Decision
+
+Panel review is now a persisted group over normal child runs:
+
+- History and Cockpit show one **panel** row for the target, not one row per agent.
+- The panel report survives navigation and app restarts because `run_groups` /
+  `run_group_items` persist the grouping.
+- The default reading order is consolidated: status/progress, consensus findings,
+  single-source findings to triage, then child agent reports as expandable evidence.
+- Copy and GitHub posting use one consolidated Markdown report. Posting is still
+  confirm-gated, and main derives the commit/PR/issue target from the stored group target.
+- Child runs remain visible inside the panel for logs, kill/status handling, and debugging,
+  but they are no longer the top-level UX artifact.

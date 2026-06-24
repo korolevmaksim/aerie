@@ -27,7 +27,8 @@ function run(partial: Partial<RunHistoryItem>): RunHistoryItem {
     postedUrl: partial.postedUrl ?? null,
     localStatus: partial.localStatus ?? 'open',
     localStatusAt: partial.localStatusAt ?? null,
-    authorLogin: partial.authorLogin ?? null
+    authorLogin: partial.authorLogin ?? null,
+    kind: 'run'
   }
 }
 

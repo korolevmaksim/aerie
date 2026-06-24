@@ -1,27 +1,41 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { RunHistoryItem, RunRecord } from '@shared/types'
+import type {
+  ReviewHistoryItem,
+  RunGroupHistoryItem,
+  RunHistoryItem,
+  RunRecord
+} from '@shared/types'
 import { formatRelativeTime } from '../lib/format'
 import { filterRuns } from '../lib/runFilter'
 import { runsToJson, runsToMarkdown } from '../lib/runExport'
 import { runRefLabel } from '../lib/runConsole'
+import PanelReportView from './PanelReportView'
 import RunView from './RunView'
+
+type HistoryOpenTarget = { kind: 'run' | 'group'; id: number }
+
+function historyTargetMatches(item: ReviewHistoryItem, target: HistoryOpenTarget): boolean {
+  if (target.kind === 'group') return item.kind === 'group' && item.id === target.id
+  if (item.kind === 'run') return item.id === target.id
+  return item.runIds.includes(target.id)
+}
 
 function HistoryPanel({
   accountId = null,
-  externalRunId = null,
+  externalTarget = null,
   onConsumed
 }: {
   /** Scope the list to this account; runs from other accounts are hidden. */
   accountId?: number | null
-  /** A run the tray asked to open; selected automatically when present. */
-  externalRunId?: number | null
-  /** Called once the external run id has been handled (found or not). */
+  /** A run/group the tray or cockpit asked to open; selected automatically when present. */
+  externalTarget?: HistoryOpenTarget | null
+  /** Called once the external target has been handled (found or not). */
   onConsumed?: () => void
 } = {}): React.JSX.Element {
-  const [runs, setRuns] = useState<RunHistoryItem[]>([])
+  const [runs, setRuns] = useState<ReviewHistoryItem[]>([])
   const [loaded, setLoaded] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
-  const [selected, setSelected] = useState<RunHistoryItem | null>(null)
+  const [selected, setSelected] = useState<ReviewHistoryItem | null>(null)
   // Repo sub-filter: a repo id, or 'all'. Options are built from the runs that
   // actually exist for this account (never the full repo list).
   const [repoFilter, setRepoFilter] = useState<number | 'all'>('all')
@@ -33,7 +47,7 @@ function HistoryPanel({
   const [error, setError] = useState<string | null>(null)
   // Remember which external id we've already acted on, so a not-yet-loaded (or
   // pruned) run never drives an endless reload loop.
-  const handledRunIdRef = useRef<number | null>(null)
+  const handledTargetRef = useRef<string | null>(null)
 
   const reload = useCallback(async (): Promise<void> => {
     const res = await window.aerie.runner.listAllRuns()
@@ -69,7 +83,7 @@ function HistoryPanel({
     return window.aerie.runner.onStatus((p) => {
       setRuns((prev) =>
         prev.map((r) =>
-          r.id === p.runId
+          r.kind === 'run' && r.id === p.runId
             ? {
                 ...r,
                 status: p.status,
@@ -82,36 +96,34 @@ function HistoryPanel({
     })
   }, [])
 
-  // Open-from-tray: select the requested run. Try the loaded list first; if it
-  // isn't there yet, reload once and select if it appears. Either way mark the id
-  // handled (single attempt) and notify the parent so it can clear pending state.
-  // Note: this matches against the FULL run list, so a tray run from another
-  // account still opens even though the visible list is scoped to one account.
+  // Open-from-tray/cockpit: select the requested run or panel. A tray opens a child run id;
+  // if that run belongs to a panel, open the consolidated panel report instead.
   useEffect(() => {
-    if (externalRunId == null) {
-      // Reset so re-opening the SAME run from the tray (id goes N → null → N) is
+    if (externalTarget == null) {
+      // Reset so re-opening the SAME target (id goes N → null → N) is
       // handled again rather than ignored as already-seen.
-      handledRunIdRef.current = null
+      handledTargetRef.current = null
       return
     }
-    if (handledRunIdRef.current === externalRunId) return
+    const key = `${externalTarget.kind}:${externalTarget.id}`
+    if (handledTargetRef.current === key) return
     // Wait for the initial load before deciding a missing run needs a refetch.
-    if (!loaded && !runs.some((r) => r.id === externalRunId)) return
+    if (!loaded && !runs.some((r) => historyTargetMatches(r, externalTarget))) return
 
-    handledRunIdRef.current = externalRunId
+    handledTargetRef.current = key
     void (async () => {
-      let match = runs.find((r) => r.id === externalRunId)
+      let match = runs.find((r) => historyTargetMatches(r, externalTarget))
       if (!match) {
         const res = await window.aerie.runner.listAllRuns()
         if (res.ok) {
           setRuns(res.value)
-          match = res.value.find((r) => r.id === externalRunId)
+          match = res.value.find((r) => historyTargetMatches(r, externalTarget))
         }
       }
       if (match) setSelected(match)
       onConsumed?.()
     })()
-  }, [externalRunId, runs, loaded, onConsumed])
+  }, [externalTarget, runs, loaded, onConsumed])
 
   // Runs for the active account only — the spine the visible list and the repo
   // dropdown are both built from.
@@ -184,7 +196,12 @@ function HistoryPanel({
       authorLogin: item.authorLogin
     })
     if (res.ok) {
-      setSelected({ ...res.value, repoFullName: item.repoFullName, accountId: item.accountId })
+      setSelected({
+        ...res.value,
+        kind: 'run',
+        repoFullName: item.repoFullName,
+        accountId: item.accountId
+      })
     } else {
       setError(res.error)
     }
@@ -193,15 +210,24 @@ function HistoryPanel({
   const applyRunUpdate = useCallback((updated: RunRecord): void => {
     setRuns((prev) =>
       prev.map((run) =>
-        run.id === updated.id
-          ? { ...updated, repoFullName: run.repoFullName, accountId: run.accountId }
+        run.kind === 'run' && run.id === updated.id
+          ? { ...updated, kind: 'run', repoFullName: run.repoFullName, accountId: run.accountId }
           : run
       )
     )
     setSelected((prev) =>
-      prev && prev.id === updated.id
-        ? { ...updated, repoFullName: prev.repoFullName, accountId: prev.accountId }
+      prev && prev.kind === 'run' && prev.id === updated.id
+        ? { ...updated, kind: 'run', repoFullName: prev.repoFullName, accountId: prev.accountId }
         : prev
+    )
+  }, [])
+
+  const applyGroupUpdate = useCallback((updated: RunGroupHistoryItem): void => {
+    setRuns((prev) =>
+      prev.map((item) => (item.kind === 'group' && item.id === updated.id ? updated : item))
+    )
+    setSelected((prev) =>
+      prev && prev.kind === 'group' && prev.id === updated.id ? updated : prev
     )
   }, [])
 
@@ -232,7 +258,11 @@ function HistoryPanel({
             </button>
             {selected.repoFullName}{' '}
             <span className="muted">
-              · {selected.agentId} · {runRefLabel(selected)}
+              ·{' '}
+              {selected.kind === 'group'
+                ? `panel · ${selected.agentIds.length} agents`
+                : selected.agentId}{' '}
+              · {runRefLabel(selected)}
             </span>
           </h2>
         </div>
@@ -241,12 +271,20 @@ function HistoryPanel({
             {error}
           </p>
         )}
-        <RunView
-          key={selected.id}
-          run={selected}
-          onRunUpdate={applyRunUpdate}
-          onRerun={() => void rerunSelected(selected)}
-        />
+        {selected.kind === 'group' ? (
+          <PanelReportView
+            key={`group:${selected.id}`}
+            group={selected}
+            onGroupUpdate={applyGroupUpdate}
+          />
+        ) : (
+          <RunView
+            key={`run:${selected.id}`}
+            run={selected}
+            onRunUpdate={applyRunUpdate}
+            onRerun={() => void rerunSelected(selected)}
+          />
+        )}
       </section>
     )
   }
@@ -332,12 +370,14 @@ function HistoryPanel({
             // The row stays a listitem; the open action is a real <button> (keyboard-operable,
             // its text content is the accessible name) and the optional "posted" link is a
             // SIBLING control — never nested inside the button (no interactive-in-interactive).
-            <li key={r.id} className="history-row">
+            <li key={`${r.kind}:${r.id}`} className="history-row">
               <button type="button" className="history-row__open" onClick={() => setSelected(r)}>
                 <span className={`chip run__status run__status--${r.status}`}>{r.status}</span>
                 <span className="commit-row__msg">{r.repoFullName}</span>
                 <code className="sha">{runRefLabel(r)}</code>
-                <span className="muted">{r.agentId}</span>
+                <span className="muted">
+                  {r.kind === 'group' ? `panel · ${r.agentIds.length} agents` : r.agentId}
+                </span>
                 <span className="muted">{formatRelativeTime(r.startedAt)}</span>
               </button>
               {r.postedUrl && (

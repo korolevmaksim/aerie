@@ -470,6 +470,8 @@ export interface StartBatchParams {
 
 /** Result of a fan-out: the runs that started, and any requested agents that didn't. */
 export interface StartBatchResult {
+  /** The persisted panel review that owns the started runs, or null when nothing started. */
+  group: RunGroupRecord | null
   runs: RunRecord[]
   skipped: { id: string; reason: 'not-eligible' | 'over-cap' | 'already-running' }[]
 }
@@ -516,6 +518,23 @@ export interface ConsensusResult {
   findings: ConsensusFinding[]
   /** Total raw findings across the runs, before aggregation. */
   total: number
+}
+
+export interface RunGroupRecord {
+  id: number
+  repoId: number
+  refType: RefType
+  refId: string
+  headSha: string
+  status: RunStatus
+  startedAt: string
+  finishedAt: string | null
+  postedUrl: string | null
+  localStatus: RunLocalStatus
+  localStatusAt: string | null
+  authorLogin: string | null
+  runIds: number[]
+  agentIds: string[]
 }
 
 export interface RunRecord {
@@ -590,6 +609,16 @@ export interface PostRunParams {
   title?: string
 }
 
+export interface PostRunGroupParams {
+  groupId: number
+  repoId: number
+  kind: PostKind
+  body: string
+  sha?: string
+  prNumber?: number
+  title?: string
+}
+
 export interface PostResult {
   url: string
 }
@@ -597,9 +626,31 @@ export interface PostResult {
 // --- hardening: history & settings (Stage 7) ---------------------------------
 
 export interface RunHistoryItem extends RunRecord {
+  kind: 'run'
   repoFullName: string
   /** Owning account, derived from the run's repo — lets History scope per account. */
   accountId: number
+}
+
+export interface RunGroupHistoryItem extends RunGroupRecord {
+  kind: 'group'
+  repoFullName: string
+  accountId: number
+}
+
+export type ReviewHistoryItem = RunHistoryItem | RunGroupHistoryItem
+
+export interface RunGroupReport {
+  group: RunGroupHistoryItem
+  runs: RunHistoryItem[]
+  /** Findings that reached the chosen consensus threshold. */
+  consensusFindings: ConsensusFinding[]
+  /** Deduped findings below the consensus threshold, still useful for triage. */
+  singleSourceFindings: ConsensusFinding[]
+  /** Total raw structured findings across child runs. */
+  totalFindings: number
+  /** Ready-to-copy consolidated Markdown report. */
+  markdown: string
 }
 
 export interface SystemInfo {

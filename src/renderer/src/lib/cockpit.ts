@@ -1,4 +1,4 @@
-import type { RunHistoryItem, RunStatus } from '@shared/types'
+import type { ReviewHistoryItem, RunStatus } from '@shared/types'
 
 const ACTIVE_STATUSES = new Set<RunStatus>(['queued', 'running'])
 
@@ -11,31 +11,31 @@ export interface CockpitSummary {
   completed: number
 }
 
-export function isActiveRun(run: RunHistoryItem): boolean {
+export function isActiveRun(run: ReviewHistoryItem): boolean {
   return ACTIVE_STATUSES.has(run.status)
 }
 
-export function isReadyToPost(run: RunHistoryItem): boolean {
+export function isReadyToPost(run: ReviewHistoryItem): boolean {
   return run.status === 'done' && !run.postedUrl && run.localStatus === 'open'
 }
 
-export function needsHumanAttention(run: RunHistoryItem): boolean {
+export function needsHumanAttention(run: ReviewHistoryItem): boolean {
   return (
     run.localStatus === 'open' &&
     (run.status === 'error' || run.status === 'killed' || isReadyToPost(run))
   )
 }
 
-export function startedAtMs(run: RunHistoryItem): number {
+export function startedAtMs(run: ReviewHistoryItem): number {
   const ms = Date.parse(run.startedAt)
   return Number.isFinite(ms) ? ms : 0
 }
 
-export function newestRuns(runs: RunHistoryItem[]): RunHistoryItem[] {
+export function newestRuns(runs: ReviewHistoryItem[]): ReviewHistoryItem[] {
   return [...runs].sort((a, b) => startedAtMs(b) - startedAtMs(a))
 }
 
-export function cockpitSummary(runs: RunHistoryItem[]): CockpitSummary {
+export function cockpitSummary(runs: ReviewHistoryItem[]): CockpitSummary {
   let active = 0
   let attention = 0
   let readyToPost = 0
@@ -55,7 +55,7 @@ export function cockpitSummary(runs: RunHistoryItem[]): CockpitSummary {
   return { active, attention, readyToPost, handled, posted, completed }
 }
 
-export function runAttentionLabel(run: RunHistoryItem): string {
+export function runAttentionLabel(run: ReviewHistoryItem): string {
   if (run.postedUrl) return 'Posted'
   if (run.localStatus === 'verified') return 'Verified locally'
   if (run.localStatus === 'handled') return 'Handled locally'

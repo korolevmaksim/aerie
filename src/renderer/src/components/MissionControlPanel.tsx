@@ -4,7 +4,7 @@ import type {
   PipelineWithRuns,
   PollerStatus,
   RepoSummary,
-  RunHistoryItem
+  ReviewHistoryItem
 } from '@shared/types'
 import {
   cockpitSummary,
@@ -29,17 +29,18 @@ function RunRow({
   run,
   onOpenRun
 }: {
-  run: RunHistoryItem
-  onOpenRun: (runId: number) => void
+  run: ReviewHistoryItem
+  onOpenRun: (run: ReviewHistoryItem) => void
 }): React.JSX.Element {
+  const agentLabel = run.kind === 'group' ? `panel · ${run.agentIds.length} agents` : run.agentId
   return (
     <li>
-      <button type="button" className="cockpit-run-row" onClick={() => onOpenRun(run.id)}>
+      <button type="button" className="cockpit-run-row" onClick={() => onOpenRun(run)}>
         <span className={`chip run__status run__status--${run.status}`}>{run.status}</span>
         <span className="cockpit-run-row__target">
           <strong>{run.repoFullName}</strong>
           <span className="cockpit-run-row__meta">
-            <span className="cockpit-run-row__agent">{run.agentId}</span>
+            <span className="cockpit-run-row__agent">{agentLabel}</span>
             <span aria-hidden="true">·</span>
             <span className="cockpit-run-row__ref">{runRefLabel(run)}</span>
           </span>
@@ -99,10 +100,10 @@ function MissionControlPanel({
   accountId: number
   onNavigate: (view: ViewTarget) => void
   onOpenRepo: (repo: RepoSummary) => void
-  onOpenRun: (runId: number) => void
+  onOpenRun: (run: ReviewHistoryItem) => void
 }): React.JSX.Element {
   const [repos, setRepos] = useState<RepoSummary[]>([])
-  const [runs, setRuns] = useState<RunHistoryItem[]>([])
+  const [runs, setRuns] = useState<ReviewHistoryItem[]>([])
   const [agents, setAgents] = useState<AgentInfo[]>([])
   const [pipelines, setPipelines] = useState<PipelineWithRuns[]>([])
   const [poller, setPoller] = useState<PollerStatus | null>(null)
@@ -215,7 +216,7 @@ function MissionControlPanel({
     return window.aerie.runner.onStatus((payload) => {
       setRuns((prev) =>
         prev.map((run) =>
-          run.id === payload.runId
+          run.kind === 'run' && run.id === payload.runId
             ? {
                 ...run,
                 status: payload.status,

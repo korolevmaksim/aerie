@@ -1,4 +1,4 @@
-import type { RunHistoryItem } from '@shared/types'
+import type { ReviewHistoryItem } from '@shared/types'
 import { runRefLabel } from './runConsole'
 
 /**
@@ -7,10 +7,12 @@ import { runRefLabel } from './runConsole'
  * and ALL must match (case-insensitive substring) across the run's searchable fields, so e.g.
  * "codex error" finds error runs by the codex agent. A blank query passes everything through.
  */
-function searchableText(run: RunHistoryItem): string {
+function searchableText(run: ReviewHistoryItem): string {
+  const agents = run.kind === 'group' ? run.agentIds.join(' ') : run.agentId
   return [
     run.repoFullName,
-    run.agentId,
+    agents,
+    run.kind === 'group' ? 'panel group consolidated consensus multi-agent' : 'single agent',
     run.headSha,
     // For a PR, "pr #42" already contains the bare number, so "42" or "pr #42" matches.
     runRefLabel(run),
@@ -25,7 +27,7 @@ function searchableText(run: RunHistoryItem): string {
 }
 
 /** True if `run` matches every token in `query` (case-insensitive); a blank query matches all. */
-export function matchesRunQuery(run: RunHistoryItem, query: string): boolean {
+export function matchesRunQuery(run: ReviewHistoryItem, query: string): boolean {
   const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean)
   if (tokens.length === 0) return true
   const text = searchableText(run)
@@ -33,7 +35,7 @@ export function matchesRunQuery(run: RunHistoryItem, query: string): boolean {
 }
 
 /** Filter runs by a free-text query (blank = passthrough). Pure. */
-export function filterRuns(runs: RunHistoryItem[], query: string): RunHistoryItem[] {
+export function filterRuns(runs: ReviewHistoryItem[], query: string): ReviewHistoryItem[] {
   if (query.trim() === '') return runs
   return runs.filter((r) => matchesRunQuery(r, query))
 }

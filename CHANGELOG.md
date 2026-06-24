@@ -13,6 +13,13 @@ same change set.
 
 ### Added
 
+- **Persisted panel review reports**: multi-agent panel reviews now create a durable
+  `run_groups` record over their child runs, so Cockpit and History show one consolidated
+  review instead of three loose agent rows. Opening the panel shows consensus findings,
+  single-source findings to triage, copy-ready Markdown, confirm-gated consolidated GitHub
+  posting, and each child agent report preserved as evidence. Tray/history deep links to a
+  child run now open the owning panel report when one exists.
+
 - **Collapsible task sidebar**: the review shell now has an icon-only sidebar toggle. The
   collapsed state uses compact view labels with tooltips/ARIA labels, persists locally in the
   renderer, and adds no IPC or privileged main-process surface.

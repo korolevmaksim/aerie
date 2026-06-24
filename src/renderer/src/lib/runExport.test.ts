@@ -20,7 +20,8 @@ const run = (over: Partial<RunHistoryItem> = {}): RunHistoryItem => ({
   localStatus: 'handled',
   localStatusAt: '2026-06-23T00:06:00Z',
   authorLogin: 'monalisa',
-  ...over
+  ...over,
+  kind: 'run'
 })
 
 describe('toExportRun', () => {
@@ -28,7 +29,7 @@ describe('toExportRun', () => {
     const e = toExportRun(run())
     expect(e).toEqual({
       repo: 'octocat/hello-world',
-      agent: 'codex',
+      agents: 'codex',
       ref: 'commit abcdef12',
       sha: 'abcdef1234567890',
       status: 'done',
@@ -76,11 +77,36 @@ describe('runsToMarkdown', () => {
   it('renders a header + separator + one row per run', () => {
     const md = runsToMarkdown([run()])
     const lines = md.split('\n')
-    expect(lines[0]).toContain('| Repo | Agent | Ref |')
+    expect(lines[0]).toContain('| Repo | Agents | Ref |')
     expect(lines[1]).toMatch(/^\| --- \| --- \|/)
     expect(lines[2]).toContain('octocat/hello-world')
     expect(lines[2]).toContain('codex')
     expect(lines[2]).toContain('abcdef12') // sha sliced to 8
+  })
+
+  it('exports a panel as one consolidated row with all agents', () => {
+    const md = runsToMarkdown([
+      {
+        kind: 'group',
+        id: 3,
+        repoId: 7,
+        accountId: 3,
+        repoFullName: 'octocat/hello-world',
+        refType: 'commit',
+        refId: 'main',
+        headSha: 'abcdef1234567890',
+        status: 'done',
+        startedAt: '2026-06-23T00:00:00Z',
+        finishedAt: '2026-06-23T00:05:00Z',
+        postedUrl: null,
+        localStatus: 'open',
+        localStatusAt: null,
+        authorLogin: null,
+        runIds: [1, 2, 3],
+        agentIds: ['codex', 'claude-code', 'agy']
+      }
+    ])
+    expect(md).toContain('codex, claude-code, agy')
   })
 
   it('empty list → a friendly placeholder', () => {

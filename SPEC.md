@@ -120,6 +120,15 @@ operator can clear an audit from the attention queue after handling it locally i
 posting a public GitHub comment. This metadata is local-only and never substitutes for
 `posted_url`: GitHub writes still require the existing explicit confirmation path.
 
+Multi-agent panel reviews are persisted as first-class `run_groups` over normal child
+`runs`. A child run still owns its process lifecycle, transcript, clean output, structured
+findings, and kill/status events; the group owns the operator-facing review object shown in
+Cockpit and History. The group report is deterministic: it aggregates persisted findings by
+location for consensus, keeps single-source findings for triage, and renders a copy-ready
+Markdown report with child agent outputs as evidence. Group posting uses the same explicit
+confirmation rule as a single run, and main derives commit/PR/issue targets from the stored
+group target, never from renderer-supplied routing.
+
 ## 6. Repo mapping & local execution
 
 Each repo carries: `remote_url` (from GitHub), optional `user_local_path` (his
@@ -258,6 +267,10 @@ runs(id, repo_id, ref_type['commit'|'pr'|'working-tree'|'project'], ref_id, head
      status['queued'|'running'|'done'|'error'|'killed'],
      exit_code, started_at, finished_at, output_path, posted_url,
      local_status['open'|'handled'|'verified'], local_status_at)
+run_groups(id, repo_id, ref_type['commit'|'pr'|'working-tree'|'project'], ref_id, head_sha,
+           started_at, posted_url, local_status['open'|'handled'|'verified'],
+           local_status_at, author_login)
+run_group_items(group_id, run_id, agent_id, position)
 http_cache(key, etag, payload, updated_at)   -- conditional-request (ETag) cache; payload
                                              -- holds the body to replay on a 304 (M8)
 watches(id, repo_id, ref_type['commit'|'pr'], ref, last_seen_sha, last_polled_at)  -- M8

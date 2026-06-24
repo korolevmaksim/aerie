@@ -1,4 +1,4 @@
-import type { RunHistoryItem } from '@shared/types'
+import type { ReviewHistoryItem } from '@shared/types'
 import { runRefLabel } from './runConsole'
 
 /**
@@ -10,7 +10,7 @@ import { runRefLabel } from './runConsole'
  */
 export interface ExportedRun {
   repo: string
-  agent: string
+  agents: string
   ref: string
   sha: string
   status: string
@@ -23,14 +23,14 @@ export interface ExportedRun {
   postedUrl: string | null
 }
 
-export function toExportRun(run: RunHistoryItem): ExportedRun {
+export function toExportRun(run: ReviewHistoryItem): ExportedRun {
   return {
     repo: run.repoFullName,
-    agent: run.agentId,
+    agents: run.kind === 'group' ? run.agentIds.join(', ') : run.agentId,
     ref: runRefLabel(run),
     sha: run.headSha,
     status: run.status,
-    exitCode: run.exitCode,
+    exitCode: run.kind === 'run' ? run.exitCode : null,
     startedAt: run.startedAt,
     finishedAt: run.finishedAt,
     localStatus: run.localStatus,
@@ -41,13 +41,13 @@ export function toExportRun(run: RunHistoryItem): ExportedRun {
 }
 
 /** The visible runs as a pretty-printed JSON array of the safe subset. */
-export function runsToJson(runs: RunHistoryItem[]): string {
+export function runsToJson(runs: ReviewHistoryItem[]): string {
   return JSON.stringify(runs.map(toExportRun), null, 2)
 }
 
 const MD_COLUMNS: { header: string; cell: (r: ExportedRun) => string }[] = [
   { header: 'Repo', cell: (r) => r.repo },
-  { header: 'Agent', cell: (r) => r.agent },
+  { header: 'Agents', cell: (r) => r.agents },
   { header: 'Ref', cell: (r) => r.ref },
   { header: 'SHA', cell: (r) => r.sha.slice(0, 8) },
   { header: 'Status', cell: (r) => r.status },
@@ -65,7 +65,7 @@ function mdCell(value: string): string {
 }
 
 /** The visible runs as a GitHub-flavored Markdown table (header + separator + one row each). */
-export function runsToMarkdown(runs: RunHistoryItem[]): string {
+export function runsToMarkdown(runs: ReviewHistoryItem[]): string {
   if (runs.length === 0) return '_No runs._'
   const header = `| ${MD_COLUMNS.map((c) => c.header).join(' | ')} |`
   const separator = `| ${MD_COLUMNS.map(() => '---').join(' | ')} |`

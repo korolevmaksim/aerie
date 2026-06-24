@@ -736,6 +736,81 @@ select.field {
   font-size: 0.9rem;
 }
 
+.panel-report {
+  display: grid;
+  gap: 18px;
+}
+
+.panel-report__bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.panel-report__spacer {
+  flex: 1 1 auto;
+}
+
+.panel-report__summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
+  gap: 10px;
+}
+
+.panel-report__summary > div {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  display: grid;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.panel-report__summary strong {
+  font-size: 24px;
+}
+
+.panel-report__controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.panel-report__section {
+  display: grid;
+  gap: 10px;
+}
+
+.panel-report__section h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.panel-report__agents {
+  display: grid;
+  gap: 10px;
+}
+
+.panel-report__agent {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.panel-report__agent > summary {
+  cursor: pointer;
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.panel-report__agent > .runview {
+  padding: 0 12px 12px;
+}
+
 .account__main {
   display: flex;
   align-items: baseline;

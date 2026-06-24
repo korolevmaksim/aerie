@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { AccountSummary, RepoSummary } from '@shared/types'
+import type { AccountSummary, RepoSummary, ReviewHistoryItem } from '@shared/types'
 import { clickableRow } from './lib/a11y'
 import type { PaletteCommand } from './lib/palette'
 import AccountsPanel from './components/AccountsPanel'
@@ -13,6 +13,7 @@ import AutomatePanel from './components/AutomatePanel'
 import MissionControlPanel from './components/MissionControlPanel'
 
 type View = 'cockpit' | 'repos' | 'accounts' | 'history' | 'tools' | 'automate' | 'settings'
+type HistoryOpenTarget = { kind: 'run' | 'group'; id: number }
 
 const SIDEBAR_COLLAPSED_STORAGE_KEY = 'aerie.sidebarCollapsed'
 
@@ -33,8 +34,8 @@ function App(): React.JSX.Element {
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [view, setView] = useState<View>('accounts')
   const [openRepo, setOpenRepo] = useState<RepoSummary | null>(null)
-  // A run the tray (or a finish notification) asked us to open; consumed by History.
-  const [pendingRunId, setPendingRunId] = useState<number | null>(null)
+  // A run/group the tray, notification, or cockpit asked us to open; consumed by History.
+  const [pendingHistoryTarget, setPendingHistoryTarget] = useState<HistoryOpenTarget | null>(null)
   // Command palette (M14): Cmd/Ctrl-K opens it; repos are loaded lazily for "jump to repo".
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [paletteRepos, setPaletteRepos] = useState<RepoSummary[]>([])
@@ -68,7 +69,7 @@ function App(): React.JSX.Element {
     return window.aerie.onTrayOpenRun((payload) => {
       if (typeof payload?.runId !== 'number') return
       setView('history')
-      setPendingRunId(payload.runId)
+      setPendingHistoryTarget({ kind: 'run', id: payload.runId })
     })
   }, [])
 
@@ -171,10 +172,10 @@ function App(): React.JSX.Element {
     return cmds
   }, [accounts, paletteRepos, reposReady])
 
-  const openHistoryRun = (runId: number): void => {
+  const openHistoryItem = (item: ReviewHistoryItem): void => {
     setOpenRepo(null)
     setView('history')
-    setPendingRunId(runId)
+    setPendingHistoryTarget({ kind: item.kind, id: item.id })
   }
 
   const openRepoFromCockpit = (repo: RepoSummary): void => {
@@ -319,7 +320,7 @@ function App(): React.JSX.Element {
             accountId={selectedId}
             onNavigate={navigate}
             onOpenRepo={openRepoFromCockpit}
-            onOpenRun={openHistoryRun}
+            onOpenRun={openHistoryItem}
           />
         ) : view === 'tools' ? (
           <ToolsPanel />
@@ -331,8 +332,8 @@ function App(): React.JSX.Element {
           <HistoryPanel
             key={selectedId}
             accountId={selectedId}
-            externalRunId={pendingRunId}
-            onConsumed={() => setPendingRunId(null)}
+            externalTarget={pendingHistoryTarget}
+            onConsumed={() => setPendingHistoryTarget(null)}
           />
         ) : view === 'settings' ? (
           <SettingsPanel />

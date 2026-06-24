@@ -372,6 +372,39 @@ const MIGRATIONS: ReadonlyArray<(db: Database.Database) => void> = [
     if (Array.isArray(violations) && violations.length > 0) {
       throw new Error('v17 migration left dangling foreign keys')
     }
+  },
+  // v18 — persisted panel reviews. A panel owns several normal child runs on the
+  // same target, so History/Cockpit can show one consolidated review while each
+  // child still keeps its transcript, output, findings, kill/status lifecycle, and
+  // GitHub-write safety boundaries.
+  (db) => {
+    db.exec(`
+      CREATE TABLE run_groups (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        repo_id         INTEGER NOT NULL REFERENCES repos(id) ON DELETE CASCADE,
+        ref_type        TEXT    NOT NULL CHECK (ref_type IN ('commit','pr','working-tree','project')),
+        ref_id          TEXT    NOT NULL,
+        head_sha        TEXT    NOT NULL,
+        started_at      TEXT    NOT NULL,
+        posted_url      TEXT,
+        local_status    TEXT    NOT NULL DEFAULT 'open'
+          CHECK (local_status IN ('open','handled','verified')),
+        local_status_at TEXT,
+        author_login    TEXT
+      );
+      CREATE INDEX idx_run_groups_repo ON run_groups (repo_id);
+      CREATE INDEX idx_run_groups_target ON run_groups (repo_id, ref_type, ref_id, head_sha);
+
+      CREATE TABLE run_group_items (
+        group_id INTEGER NOT NULL REFERENCES run_groups(id) ON DELETE CASCADE,
+        run_id   INTEGER NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+        agent_id TEXT    NOT NULL,
+        position INTEGER NOT NULL,
+        PRIMARY KEY (group_id, run_id),
+        UNIQUE (run_id)
+      );
+      CREATE INDEX idx_run_group_items_group ON run_group_items (group_id, position);
+    `)
   }
 ]
 
@@ -749,6 +782,40 @@ export interface NewRun {
   authorLogin?: string | null
 }
 
+export interface RunGroupRow {
+  id: number
+  repo_id: number
+  ref_type: RefType
+  ref_id: string
+  head_sha: string
+  started_at: string
+  posted_url: string | null
+  local_status: RunLocalStatus
+  local_status_at: string | null
+  author_login: string | null
+}
+
+export interface RunGroupRowWithRepo extends RunGroupRow {
+  full_name: string
+  account_id: number
+}
+
+export interface RunGroupItemRow {
+  group_id: number
+  run_id: number
+  agent_id: string
+  position: number
+}
+
+export interface NewRunGroup {
+  repoId: number
+  refType: RefType
+  refId: string
+  headSha: string
+  startedAt: string
+  authorLogin?: string | null
+}
+
 export function insertRun(run: NewRun): RunRow {
   const result = requireDb()
     .prepare(
@@ -757,6 +824,30 @@ export function insertRun(run: NewRun): RunRow {
     )
     .run({ ...run, authorLogin: run.authorLogin ?? null })
   return getRun(Number(result.lastInsertRowid))!
+}
+
+export function insertRunGroup(group: NewRunGroup): RunGroupRow {
+  const result = requireDb()
+    .prepare(
+      `INSERT INTO run_groups (repo_id, ref_type, ref_id, head_sha, started_at, author_login)
+       VALUES (@repoId, @refType, @refId, @headSha, @startedAt, @authorLogin)`
+    )
+    .run({ ...group, authorLogin: group.authorLogin ?? null })
+  return getRunGroup(Number(result.lastInsertRowid))!
+}
+
+export function addRunToGroup(
+  groupId: number,
+  runId: number,
+  agentId: string,
+  position: number
+): void {
+  requireDb()
+    .prepare(
+      `INSERT INTO run_group_items (group_id, run_id, agent_id, position)
+       VALUES (?, ?, ?, ?)`
+    )
+    .run(groupId, runId, agentId, position)
 }
 
 export function updateRunStatus(
@@ -790,6 +881,10 @@ export function setRunPostedUrl(id: number, url: string): void {
   requireDb().prepare(`UPDATE runs SET posted_url = ? WHERE id = ?`).run(url, id)
 }
 
+export function setRunGroupPostedUrl(id: number, url: string): void {
+  requireDb().prepare(`UPDATE run_groups SET posted_url = ? WHERE id = ?`).run(url, id)
+}
+
 export function updateRunLocalStatus(
   id: number,
   localStatus: RunLocalStatus,
@@ -800,14 +895,85 @@ export function updateRunLocalStatus(
     .run(localStatus, localStatusAt, id)
 }
 
+export function updateRunGroupLocalStatus(
+  id: number,
+  localStatus: RunLocalStatus,
+  localStatusAt: string | null
+): void {
+  requireDb()
+    .prepare(`UPDATE run_groups SET local_status = ?, local_status_at = ? WHERE id = ?`)
+    .run(localStatus, localStatusAt, id)
+}
+
 export function getRun(id: number): RunRow | undefined {
   return requireDb().prepare(`SELECT * FROM runs WHERE id = ?`).get(id) as RunRow | undefined
+}
+
+export function getRunGroup(id: number): RunGroupRow | undefined {
+  return requireDb().prepare(`SELECT * FROM run_groups WHERE id = ?`).get(id) as
+    | RunGroupRow
+    | undefined
+}
+
+export function getRunGroupWithRepo(id: number): RunGroupRowWithRepo | undefined {
+  return requireDb()
+    .prepare(
+      `SELECT run_groups.*, repos.full_name, repos.account_id FROM run_groups
+       JOIN repos ON repos.id = run_groups.repo_id
+       WHERE run_groups.id = ?`
+    )
+    .get(id) as RunGroupRowWithRepo | undefined
 }
 
 export function listRunsForRepo(repoId: number): RunRow[] {
   return requireDb()
     .prepare(`SELECT * FROM runs WHERE repo_id = ? ORDER BY started_at DESC, id DESC`)
     .all(repoId) as RunRow[]
+}
+
+export function listRunGroupsForRepo(repoId: number): RunGroupRow[] {
+  return requireDb()
+    .prepare(`SELECT * FROM run_groups WHERE repo_id = ? ORDER BY started_at DESC, id DESC`)
+    .all(repoId) as RunGroupRow[]
+}
+
+export function listRunGroupItems(groupId: number): RunGroupItemRow[] {
+  return requireDb()
+    .prepare(`SELECT * FROM run_group_items WHERE group_id = ? ORDER BY position ASC, run_id ASC`)
+    .all(groupId) as RunGroupItemRow[]
+}
+
+export function listRunsForGroup(groupId: number): RunRow[] {
+  return requireDb()
+    .prepare(
+      `SELECT runs.* FROM run_group_items
+       JOIN runs ON runs.id = run_group_items.run_id
+       WHERE run_group_items.group_id = ?
+       ORDER BY run_group_items.position ASC, runs.id ASC`
+    )
+    .all(groupId) as RunRow[]
+}
+
+export function listRunsForGroupWithRepo(groupId: number): RunRowWithRepo[] {
+  return requireDb()
+    .prepare(
+      `SELECT runs.*, repos.full_name, repos.account_id FROM run_group_items
+       JOIN runs ON runs.id = run_group_items.run_id
+       JOIN repos ON repos.id = runs.repo_id
+       WHERE run_group_items.group_id = ?
+       ORDER BY run_group_items.position ASC, runs.id ASC`
+    )
+    .all(groupId) as RunRowWithRepo[]
+}
+
+export function getRunGroupForRun(runId: number): RunGroupRow | undefined {
+  return requireDb()
+    .prepare(
+      `SELECT run_groups.* FROM run_group_items
+       JOIN run_groups ON run_groups.id = run_group_items.group_id
+       WHERE run_group_items.run_id = ?`
+    )
+    .get(runId) as RunGroupRow | undefined
 }
 
 export interface RunRowWithRepo extends RunRow {
@@ -849,6 +1015,30 @@ export function listAllRuns(limit = 200): RunRowWithRepo[] {
        LIMIT ?`
     )
     .all(limit) as RunRowWithRepo[]
+}
+
+export function listAllUngroupedRuns(limit = 200): RunRowWithRepo[] {
+  return requireDb()
+    .prepare(
+      `SELECT runs.*, repos.full_name, repos.account_id FROM runs
+       JOIN repos ON repos.id = runs.repo_id
+       LEFT JOIN run_group_items ON run_group_items.run_id = runs.id
+       WHERE run_group_items.group_id IS NULL
+       ORDER BY runs.started_at DESC, runs.id DESC
+       LIMIT ?`
+    )
+    .all(limit) as RunRowWithRepo[]
+}
+
+export function listAllRunGroups(limit = 200): RunGroupRowWithRepo[] {
+  return requireDb()
+    .prepare(
+      `SELECT run_groups.*, repos.full_name, repos.account_id FROM run_groups
+       JOIN repos ON repos.id = run_groups.repo_id
+       ORDER BY run_groups.started_at DESC, run_groups.id DESC
+       LIMIT ?`
+    )
+    .all(limit) as RunGroupRowWithRepo[]
 }
 
 // --- structured findings (M4) ------------------------------------------------
