@@ -187,9 +187,11 @@ function agentBlocked(agent: Agent): boolean {
 export function loadAgents(): Agent[] {
   const path = agentsPath()
   let userAgents: Agent[] = []
+  let existingRaw: string | null = null
   if (existsSync(path)) {
     try {
-      const parsed = JSON.parse(readFileSync(path, 'utf8'))
+      existingRaw = readFileSync(path, 'utf8')
+      const parsed = JSON.parse(existingRaw)
       userAgents = (Array.isArray(parsed) ? parsed : []).filter(isAgent)
     } catch (e) {
       log.warn('agents.json could not be parsed — using defaults', {
@@ -210,7 +212,8 @@ export function loadAgents(): Agent[] {
     isDetected: (a) => whichOnPath(a.detect ?? a.command) !== null
   })
   try {
-    writeFileSync(path, JSON.stringify(persist, null, 2), 'utf8')
+    const nextRaw = JSON.stringify(persist, null, 2)
+    if (existingRaw !== nextRaw) writeFileSync(path, nextRaw, 'utf8')
   } catch {
     /* registry is best-effort to persist */
   }
@@ -413,6 +416,7 @@ export async function discoverAgentModels(): Promise<AgentInfo[]> {
 }
 
 const running = new Map<number, ChildProcess>()
+const runCancels = new Map<number, AbortController>()
 
 // Cap concurrent agent processes so a burst — or, later, an automation pipeline
 // (ROADMAP M9) — can't exhaust memory/disk by cloning + spawning unbounded runs.
@@ -566,6 +570,9 @@ export function startRun(params: StartRunParams): RunRecord {
     startedAt: run.started_at
   })
 
+  const cancel = new AbortController()
+  runCancels.set(run.id, cancel)
+
   // Defer one tick so the caller receives the runId (and the renderer wires its
   // output listener) before the first status/output events are emitted.
   setImmediate(() => void execute(run.id, params, agent, repo, account.token_blob, agents))
@@ -671,6 +678,11 @@ async function execute(
   tokenBlob: Buffer,
   agents: Agent[]
 ): Promise<void> {
+  const cancel = runCancels.get(runId)
+  if (cancel?.signal.aborted) {
+    runCancels.delete(runId)
+    return
+  }
   // The concurrency slot acquired below (before any heavy work) is released exactly
   // once on every terminal path via this guard. `slotAcquired` guards against an early
   // terminal path (e.g. the exec-consent refusal) releasing a slot it never took.
@@ -800,6 +812,7 @@ async function execute(
       }
     }
     liveTranscripts.delete(runId)
+    runCancels.delete(runId)
     finish(status, exitCode, outputPath)
     cleanup()
     releaseSlot()
@@ -828,10 +841,22 @@ async function execute(
   if (runSlots.active() >= MAX_CONCURRENT_RUNS) {
     emit('system', '[aerie] waiting for a free run slot…\n')
   }
-  await runSlots.acquire()
+  const acquired = await runSlots.acquire(cancel?.signal)
+  if (!acquired) {
+    liveTranscripts.delete(runId)
+    runCancels.delete(runId)
+    return
+  }
   slotAcquired = true
 
   try {
+    if (cancel?.signal.aborted) {
+      cleanup()
+      releaseSlot()
+      liveTranscripts.delete(runId)
+      runCancels.delete(runId)
+      return
+    }
     updateRunStatus(runId, { status: 'running' })
     noteStatus(runId, 'running')
 
@@ -1004,6 +1029,14 @@ async function execute(
     for (const [k, v] of Object.entries(agent.env)) env[k] = substitute(v, vars)
     // The GitHub token is never exposed to the agent process.
 
+    if (cancel?.signal.aborted) {
+      cleanup()
+      releaseSlot()
+      liveTranscripts.delete(runId)
+      runCancels.delete(runId)
+      return
+    }
+
     emit('system', `[aerie] running: ${agent.command} (agent "${agent.id}")\n`)
 
     // detached → the child leads its own process group so killTree reaches its
@@ -1101,6 +1134,7 @@ async function execute(
     const message = err instanceof Error ? err.message : 'Run failed.'
     emit('system', `\n[aerie] error: ${message}\n`)
     finish('error', null, null)
+    runCancels.delete(runId)
     cleanup()
     releaseSlot()
   }
@@ -1109,7 +1143,23 @@ async function execute(
 /** Kills a running agent (whole process group). Returns true if one was signalled. */
 export function killRun(runId: number): boolean {
   const child = running.get(runId)
-  if (!child) return false
+  const cancel = runCancels.get(runId)
+  if (!child) {
+    if (!cancel) return false
+    cancel.abort()
+    runCancels.delete(runId)
+    updateRunStatus(runId, {
+      status: 'killed',
+      exitCode: null,
+      finishedAt: new Date().toISOString(),
+      outputPath: null
+    })
+    noteOutput({ runId, stream: 'system', chunk: '[aerie] queued run cancelled before spawn.\n' })
+    noteStatus(runId, 'killed', { exitCode: null, outputPath: null })
+    liveTranscripts.delete(runId)
+    return true
+  }
+  cancel?.abort()
   killTree(child, 'SIGTERM')
   setTimeout(() => killTree(child, 'SIGKILL'), 3000)
   return true
@@ -1214,21 +1264,29 @@ export function aggregateRunFindings(params: ConsensusParams): ConsensusResult {
   }
 }
 
+function isRunReportable(run: RunHistoryItem): boolean {
+  if (run.status !== 'done') return false
+  const output = run.outputPath ? readRunOutput(run.outputPath) : ''
+  const quality = assessReviewQuality(output, { kind: 'agent' })
+  return quality.level === 'ok' || listFindingsForRun(run.id).length > 0
+}
+
 export function getRunGroupReport(groupId: number, consensusMin = 2): RunGroupReport {
   const groupRow = getRunGroupWithRepo(groupId)
   if (!groupRow) throw new Error('Panel review not found.')
   const runs = listRunsForGroupWithRepo(groupId).map(rowToHistory)
+  const successfulRuns = runs.filter(isRunReportable)
   const group = rowToGroupHistory(groupRow)
   const threshold = Math.max(1, Math.floor(consensusMin))
   const allFindings = aggregateRunFindings({
-    runIds: runs.map((r) => r.id),
+    runIds: successfulRuns.map((r) => r.id),
     consensusMin: 1,
     groupBy: 'location'
   })
   const consensusFindings = allFindings.findings.filter((f) => f.agreement >= threshold)
   const singleSourceFindings = allFindings.findings.filter((f) => f.agreement < threshold)
   const outputs = new Map<number, string>()
-  for (const run of runs) {
+  for (const run of successfulRuns) {
     outputs.set(run.id, run.outputPath ? readRunOutput(run.outputPath) : '')
   }
   const markdown = renderPanelReportMarkdown({

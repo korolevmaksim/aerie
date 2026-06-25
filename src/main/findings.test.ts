@@ -127,6 +127,31 @@ describe('extractSecrets', () => {
   })
 })
 
+describe('parseChangedLineRanges', () => {
+  it('normalizes quoted git paths before stripping the b/ prefix', () => {
+    const ranges = parseChangedLineRanges(
+      [
+        'diff --git "a/src/file with spaces.ts" "b/src/file with spaces.ts"',
+        '--- "a/src/file with spaces.ts"',
+        '+++ "b/src/file with spaces.ts"',
+        '@@ -1,2 +3,4 @@',
+        '+changed'
+      ].join('\n')
+    )
+
+    expect([...ranges.keys()]).toEqual(['src/file with spaces.ts'])
+    expect(inChangedRange('/tmp/repo/src/file with spaces.ts', 4, ranges)).toBe(true)
+  })
+
+  it('keeps /dev/null as a deleted-file sentinel even when parsing quoted paths nearby', () => {
+    const ranges = parseChangedLineRanges(
+      ['--- "a/src/deleted file.ts"', '+++ /dev/null', '@@ -1,2 +0,0 @@'].join('\n')
+    )
+
+    expect(ranges.size).toBe(0)
+  })
+})
+
 describe('parseRuff', () => {
   const sample = JSON.stringify([
     {

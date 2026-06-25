@@ -38,6 +38,12 @@ export function validateSaveRequest(
   if (!isPipelineDraft(req.draft)) {
     return { ok: false, error: 'Invalid pipeline configuration.' }
   }
+  if (req.draft.trigger !== 'commit' && req.draft.trigger !== 'schedule') {
+    return {
+      ok: false,
+      error: 'Only commit and schedule pipeline triggers are currently supported.'
+    }
+  }
   // Strip any forged prototype keys before the draft is persisted (defense-in-depth — the
   // engine also strips on read, but this keeps the DB clean at the write boundary too).
   return { ok: true, value: { id, draft: stripDangerousKeys(req.draft) } }

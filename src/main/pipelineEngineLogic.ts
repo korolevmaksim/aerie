@@ -7,6 +7,7 @@
 import type { Pipeline, PipelineAction, PostTarget } from '../shared/types'
 import { assertMayPost, isPipelineDraft } from './pipelineModel'
 import type { GuardrailState } from './pipelinePlan'
+import { redactText } from './redact'
 
 // Prototype-pollution guard for the config trust boundary: JSON allows an own key named
 // `__proto__`/`constructor`/`prototype` to ride a parsed object, which a later merge/assign
@@ -137,16 +138,17 @@ export async function dispatchGithubWrite(
 ): Promise<string> {
   assertMayPost(action)
   if (!repoFullName) throw new Error('pipeline auto-post: repository not found')
+  const safeBody = redactText(body)
   if (target === 'commit') {
-    return writers.createCommitComment(ctx.accountId, repoFullName, ctx.headSha, body)
+    return writers.createCommitComment(ctx.accountId, repoFullName, ctx.headSha, safeBody)
   }
   if (target === 'pr') {
     const prNumber = prNumberFromRef(ctx.ref)
     if (prNumber === null) {
       throw new Error(`pipeline auto-post: cannot resolve a PR number from ref "${ctx.ref}"`)
     }
-    return writers.createPrComment(ctx.accountId, repoFullName, prNumber, body)
+    return writers.createPrComment(ctx.accountId, repoFullName, prNumber, safeBody)
   }
-  const { title, body: issueBody } = splitIssueBody(body)
+  const { title, body: issueBody } = splitIssueBody(safeBody)
   return writers.createIssue(ctx.accountId, repoFullName, title, issueBody)
 }

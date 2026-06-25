@@ -571,12 +571,69 @@ export function renderFindingsForPrompt(findings: Finding[]): string {
 // --- diff scoping ------------------------------------------------------------
 
 /** Maps each file to the new-side line spans touched by the diff's hunks. */
+function unquoteGitPath(path: string): string {
+  if (!path.startsWith('"') || !path.endsWith('"')) return path
+  const inner = path.slice(1, -1)
+  let out = ''
+  let bytes: number[] = []
+  const flushBytes = (): void => {
+    if (bytes.length === 0) return
+    out += Buffer.from(bytes).toString('utf8')
+    bytes = []
+  }
+  for (let i = 0; i < inner.length; i++) {
+    const ch = inner[i]
+    if (ch !== '\\') {
+      flushBytes()
+      out += ch
+      continue
+    }
+    const next = inner[i + 1]
+    if (next === undefined) {
+      flushBytes()
+      out += ch
+      continue
+    }
+    if (/[0-7]/.test(next)) {
+      const m = /^[0-7]{1,3}/.exec(inner.slice(i + 1))
+      const octal = m?.[0] ?? next
+      bytes.push(Number.parseInt(octal, 8))
+      i += octal.length
+      continue
+    }
+    flushBytes()
+    switch (next) {
+      case 'n':
+        out += '\n'
+        break
+      case 't':
+        out += '\t'
+        break
+      case 'r':
+        out += '\r'
+        break
+      case 'b':
+        out += '\b'
+        break
+      case 'f':
+        out += '\f'
+        break
+      default:
+        out += next
+        break
+    }
+    i += 1
+  }
+  flushBytes()
+  return out
+}
+
 export function parseChangedLineRanges(diff: string): Map<string, Array<[number, number]>> {
   const ranges = new Map<string, Array<[number, number]>>()
   let file: string | null = null
   for (const line of diff.split('\n')) {
     if (line.startsWith('+++ ')) {
-      const p = line.slice(4).trim()
+      const p = unquoteGitPath(line.slice(4).trim())
       file = p === '/dev/null' ? null : p.replace(/^b\//, '')
       continue
     }

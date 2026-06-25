@@ -12,8 +12,8 @@ an agent + a review prompt, and Aerie checks the target out locally, runs the ag
 it, streams the output live, and — only when you confirm — posts the result as a commit
 comment, PR comment, or issue.
 
-The agents run **locally, on your machine, against an app-owned clone**. Your GitHub token
-never leaves the main process and is never handed to an agent.
+The agents run **locally, on your machine, against an app-owned clone or snapshot**. Your
+GitHub token never leaves the main process and is never handed to an agent.
 
 > Status: early but functional (v0.1). macOS-first, cross-platform by design.
 
@@ -46,8 +46,9 @@ third-party service.
   read-only worktree of your own clone) and builds the unified diff for the agent.
 - **Review your working tree before the PR** — point an agent at the **uncommitted**
   changes in your mapped local clone (all changes via `git diff HEAD`, or just what's
-  staged) for a pre-PR pass. Zero GitHub calls, no checkout, never touches your working
-  copy — read-only `git diff` only.
+  staged) for a pre-PR pass. Zero GitHub calls; Aerie reads the diff from your checkout,
+  builds an isolated app-owned snapshot, and runs the agent there so the agent cannot mutate
+  your working copy.
 - **Review the whole project** — start from a repo's **Project** tab to run an agent on
   the current default-branch snapshot. Aerie uses an app-owned checkout and writes a
   bounded project inventory/audit brief instead of dumping the repository into the prompt;
@@ -87,10 +88,12 @@ third-party service.
   through several agents at once; up to 3 run concurrently and the rest queue. Aerie persists the
   panel as one review object in Cockpit and History, not as loose child runs. Open it to see a
   single consolidated report: consensus findings agreed by ≥K agents, single-source findings to
-  triage, copy-ready Markdown, confirm-gated GitHub posting, and each child agent report preserved
-  below as evidence.
+  triage, copy-ready Markdown, confirm-gated GitHub posting, and each successfully completed child
+  agent report preserved below as evidence. Failed or killed child runs stay in local run history
+  but are excluded from the consolidated Markdown report.
 - **Presets** — save an agent + model + reasoning bundle and apply it in one click.
-- **Live output, kill, and history** — watch the agent's transcript stream, stop a run,
+- **Live output, cancel/kill, and history** — watch the agent's transcript stream, cancel a queued
+  run before it spawns, stop a running run,
   reopen any past run's logs and result, **copy a review** (plain or Markdown) to paste into a
   PR or notes, **mark a review handled or verified locally** when you fix it without posting to
   GitHub, and **re-run** it (same agent + target) for a second opinion. Search history by repo,
@@ -108,7 +111,7 @@ third-party service.
   setting. Restarting Aerie, enabling a pipeline, or saving its config does not bypass that cadence;
   the next automatic run is based on the latest pipeline run or config/enable update. **Run now**
   and **Dry run** are the explicit immediate actions. **Create/edit pipelines** in-app (repo,
-  trigger + schedule cadence, review target, agent steps with model selection from the chosen
+  commit/schedule trigger + schedule cadence, review target, agent steps with model selection from the chosen
   agent/tool, scope filters, and the action) — choosing **Post** reveals an explicit auto-post toggle
   gated behind a distinct danger confirm. Multi-agent pipeline runs create the same consolidated
   report as manual Panel review — consensus findings, single-source findings, and child agent
@@ -120,7 +123,8 @@ third-party service.
   of the opt-in. A liveness line distinguishes the background poller from runnable automation: it
   shows idle states when no pipeline is enabled, and otherwise shows when enabled watches last
   checked, when they'll next check, and the remaining GitHub API budget.
-  Auto-post is off by default and enforced in the main process.
+  Auto-post is off by default, enforced in the main process, and skipped when no child run produced
+  a successfully completed usable review.
 - **Post back to GitHub — behind a confirm** — every write (commit comment, PR comment, or
   new issue) requires an explicit in-app confirmation showing the exact body. If you edit that
   body, **Cancel** / **Esc** asks before discarding it, and backdrop clicks do not close the
@@ -136,8 +140,8 @@ Aerie handles GitHub tokens and spawns local processes, so the boundaries are de
   reaches it solely through a small, typed `contextBridge` IPC surface.
 - Tokens are encrypted at rest via Electron `safeStorage`, are never sent to the renderer,
   never written to a log, and are **never** placed in an agent's environment.
-- Agents run on **app-owned clones** by default, not your working copies (read-only
-  worktree mode is opt-in, default off).
+- Agents run on **app-owned clones/snapshots** by default, not your working copies
+  (read-only linked-worktree mode for commit/project reviews is opt-in, default off).
 - **Every** GitHub write sits behind an explicit confirmation dialog.
 
 Found a security issue? See [SECURITY.md](.github/SECURITY.md).

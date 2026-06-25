@@ -45,6 +45,21 @@ describe('createSemaphore', () => {
     expect(order).toEqual([1, 2])
   })
 
+  it('lets a queued waiter be cancelled before a slot is released', async () => {
+    const sem = createSemaphore(1)
+    await sem.acquire()
+    const controller = new AbortController()
+    const acquired = sem.acquire(controller.signal)
+    expect(sem.waiting()).toBe(1)
+
+    controller.abort()
+    await expect(acquired).resolves.toBe(false)
+    expect(sem.waiting()).toBe(0)
+
+    sem.release()
+    expect(sem.active()).toBe(0)
+  })
+
   it('frees a slot when nobody is waiting, and never goes negative', () => {
     const sem = createSemaphore(1)
     sem.release() // over-release with no holders

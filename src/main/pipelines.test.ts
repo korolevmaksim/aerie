@@ -51,6 +51,7 @@ interface Recorder {
   postedFlags: number[]
   advanced: number
   events: string[]
+  aggregateRunIds: number[][]
 }
 
 function fakePorts(
@@ -68,7 +69,8 @@ function fakePorts(
     statusUpdates: [],
     postedFlags: [],
     advanced: 0,
-    events: []
+    events: [],
+    aggregateRunIds: []
   }
 ): { ports: EnginePorts; rec: Recorder } {
   let runIdSeq = 100
@@ -125,7 +127,11 @@ function fakePorts(
       rec.events.push(`wait:${stepRunId.get(runId)}`)
       return 'done'
     },
-    aggregate: () => emptyAgg,
+    isRunPostEligible: () => true,
+    aggregate: (runIds) => {
+      rec.aggregateRunIds.push(runIds)
+      return emptyAgg
+    },
     post: async (_action, target, _delta, body) => {
       rec.posts.push({ target, body })
       return 'https://github.test/comment/1'
@@ -167,6 +173,39 @@ describe('runPipelineForDelta — the auto-post gate', () => {
     expect(rec.posts[0].target).toBe('pr')
     expect(rec.postedFlags).toEqual([501])
     expect(out).toMatchObject({ ran: true, action: 'post', posted: true })
+  })
+
+  it('does not auto-post a clean-looking report when no child run is post-eligible', async () => {
+    const { ports, rec } = fakePorts({ isRunPostEligible: () => false })
+    const out = await runPipelineForDelta(
+      pipeline({ action: action({ kind: 'post', autoPost: true, target: 'commit' }) }),
+      delta(),
+      ports
+    )
+
+    expect(rec.posts).toHaveLength(0)
+    expect(rec.postedFlags).toHaveLength(0)
+    expect(rec.notifies[0]).toContain('no successfully completed reviews')
+    expect(rec.statusUpdates.at(-1)).toEqual({ id: 501, status: 'skipped' })
+    expect(out).toMatchObject({ ran: true, action: 'post', posted: false, findings: 0 })
+  })
+
+  it('aggregates only post-eligible child runs for pipeline reports', async () => {
+    const { ports, rec } = fakePorts({
+      isRunPostEligible: (runId) => runId === 101
+    })
+    await runPipelineForDelta(
+      pipeline({
+        steps: [
+          { id: 's1', kind: 'agent', ref: 'codex' },
+          { id: 's2', kind: 'agent', ref: 'claude-code' }
+        ]
+      }),
+      delta(),
+      ports
+    )
+
+    expect(rec.aggregateRunIds[0]).toEqual([101])
   })
 
   it('a notify pipeline never writes', async () => {

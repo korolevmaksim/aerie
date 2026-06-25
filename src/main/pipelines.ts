@@ -99,6 +99,8 @@ export interface EnginePorts {
   startStep(step: PipelineStep, delta: DeltaContext, reviewTarget: PipelineReviewTarget): number
   /** Resolves when the run reaches a terminal state (via `runEvents.onFinished`). */
   waitForRun(runId: number): Promise<'done' | 'error' | 'killed'>
+  /** True when a terminal child run is usable in consolidated reports / auto-post bodies. */
+  isRunPostEligible(runId: number): boolean
   /** M6 aggregation over the panel's persisted findings. */
   aggregate(runIds: number[]): ConsensusResult
   /**
@@ -284,7 +286,8 @@ export async function runPipelineForDelta(
       await Promise.all(started.map((runId) => ports.waitForRun(runId)))
     }
 
-    const agg = ports.aggregate(runIds)
+    const eligibleRunIds = runIds.filter((runId) => ports.isRunPostEligible(runId))
+    const agg = ports.aggregate(eligibleRunIds)
     const body = boundActionBody(
       runGroupId !== null
         ? ports.renderRunGroupReport(runGroupId)
@@ -292,6 +295,24 @@ export async function runPipelineForDelta(
     )
 
     let posted = false
+    if (eligibleRunIds.length === 0) {
+      const summary = `Aerie pipeline "${pipeline.name}": no successfully completed reviews to report.`
+      ports.notify(pipeline, summary)
+      ports.updatePipelineRunStatus(pipelineRunId, 'skipped', ports.nowIso())
+      ports.log('pipeline run skipped', {
+        pipelineId: pipeline.id,
+        reason: 'no-post-eligible-runs'
+      })
+      return {
+        ran: true,
+        pipelineRunId,
+        runGroupId,
+        action: effective,
+        posted: false,
+        findings: 0
+      }
+    }
+
     if (effective === 'post') {
       // Belt-and-suspenders: `effective` is only 'post' for an enabled auto-post (and a dry
       // run forces `action` to autoPost:false, so it can never reach here), but assert again

@@ -98,6 +98,37 @@ same change set.
 
 ### Fixed
 
+- **Consolidated reports now exclude failed agent runs**: panel and automation reports only include
+  successfully completed, usable child reviews. Errored/killed agents remain in local run history but
+  their startup errors or partial transcripts no longer appear in the copy-ready report body.
+
+- **Automation auto-post no longer publishes false clean reports**: pipeline runs aggregate only
+  post-eligible child reviews (M-Q-passing output, or block-only runs with structured findings). If
+  every child run fails or produces unusable output, the pipeline is marked skipped and no GitHub
+  comment/issue is written.
+
+- **Queued runs can be cancelled before spawn**: cancelling a queued run now aborts its semaphore wait,
+  marks it `killed`, and prevents it from later acquiring a slot and launching an agent.
+
+- **Working-tree reviews run in an isolated snapshot**: Aerie reads the selected diff from the mapped
+  checkout, applies it to an app-owned local clone, and runs agents there so an agent cannot mutate
+  the user's uncommitted working copy.
+
+- **GitHub write boundaries redact one final time**: manual post handlers and automation auto-post
+  dispatch scrub token-shaped text immediately before calling Octokit, even though run output is
+  already scrubbed at capture/persistence time.
+
+- **Tool findings stay scoped for quoted diff paths**: git paths like `"b/src/file with spaces.ts"`
+  are unquoted before the `b/` prefix is stripped, so findings in files with spaces are no longer
+  silently dropped.
+
+- **Automate no longer offers unsupported triggers**: new pipeline configs are limited to the
+  implemented `commit` and `schedule` triggers until PR/manual execution is wired end to end.
+
+- **CI now exercises more smoke coverage**: existing git/worktree/tooling smokes run in every CI job,
+  Electron-bound store/migration/watch/pipeline/findings smokes run on Linux under `xvfb`, and macOS
+  builds an unpacked package to exercise the packaging path.
+
 - **macOS seamless header no longer overlaps the app UI**: the hidden-titlebar shell now renders
   a real empty drag row above the sidebar/workspace instead of relying on a preload-set CSS flag.
   Native traffic-light controls sit in that reserved row, and the row itself is the window drag

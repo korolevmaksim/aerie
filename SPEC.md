@@ -67,9 +67,10 @@ If any fixed choice blocks you, STOP and flag it. Do not swap it on your own.
   and editable GitHub-post confirmations close only through explicit Cancel/Escape/Post/Save
   controls; Cancel/Escape prompts before discarding dirty drafts. Inline long-form editors
   (custom agents, review prompts) follow the same dirty-discard confirmation rule.
-- Agent runs operate on **app-owned clones** (see §6), never on the user's
-  personal working copies — unless he explicitly opts a repo into read-only
-  worktree mode.
+- Agent runs operate on **app-owned clones/snapshots** (see §6), never on the user's
+  personal working copies — unless he explicitly opts a repo into read-only linked-worktree
+  mode for commit/project reviews. Working-tree reviews read the user's diff, then run the
+  agent in an app-owned snapshot.
 - **Exec-consent (ROADMAP M12).** Spawning an agent runs its `command` — for an
   author-shipped template/catalog id that's vetted, but a **user-authored or
   user-edited** agent (in `agents.json`, or via the in-app editor) is arbitrary local
@@ -290,13 +291,12 @@ settings(key, value)
 > **Working-tree reviews (ROADMAP M7).** A `ref_type` of `'working-tree'` reviews the
 > **uncommitted** changes in the user's mapped local clone — `ref_id` selects the diff
 > (`'working-tree'` = `git diff HEAD`, `'staged'` = `git diff --staged`) and `head_sha` is
-> the commit those changes sit on. This path makes **zero GitHub calls**, creates **no
-> worktree/checkout**, and never mutates the working copy (only read-only `git diff` /
-> `rev-parse` run). It hard-requires a mapped local clone (the changes exist only there),
-> so the agent — and the grounding tools (M5) — run with `cwd` = the user's clone; this is
-> a deliberate, gated extension of §4 (a mapped clone + an explicit working-tree review is
-> the consent), narrower than the `use_local_worktree` checkout mode. Grounding still
-> honours the `ui.groundReviews` opt-out. Findings noise-filtering (M6) applies identically.
+> the commit those changes sit on. This path makes **zero GitHub calls** and never mutates
+> the working copy: Aerie runs read-only `git diff` / `rev-parse` in the mapped clone, clones
+> HEAD into an app-owned local snapshot, applies the selected diff there, and runs the agent
+> with `cwd` = that snapshot. It hard-requires a mapped local clone because the changes exist
+> only there. Grounding still honours the `ui.groundReviews` opt-out and runs against the same
+> snapshot. Findings noise-filtering (M6) applies identically.
 
 > **Project reviews.** A `ref_type` of `'project'` reviews a whole repository snapshot:
 > `ref_id` is the audited branch/ref name, `head_sha` is resolved in the main process from
@@ -425,7 +425,10 @@ settings(key, value)
 > changes wake the local poller immediately so status/due times do not wait for a stale idle timer,
 > but the wake only recomputes persisted cadence anchors; it never makes a scheduled pipeline due
 > early, and all execution still flows through the same enabled-pipeline derivation and gated engine
-> path.
+> path. The engine only aggregates/post-stages **post-eligible** child runs: terminal `done` runs
+> whose review output passes M-Q, or low-prose block-only runs that emitted structured findings.
+> If no child run is post-eligible, an auto-post pipeline is marked skipped and never publishes a
+> clean-looking "0 findings" report.
 
 > **ETag-cached polling foundation (ROADMAP M8).** The automation engine needs to detect a
 > new commit/PR head cheaply. `listCommits`/`listPullRequests` now mirror `listRepos`' ETag
@@ -488,8 +491,8 @@ settings(key, value)
 > code, but exit 0 ≠ a usable review. A pure, shared `assessReviewQuality(output)` classifies
 > a spawned LLM run's captured output as `ok` or `low` (empty / truncated mid-stream / leaked
 > reasoning-or-tool-call transcript / too short / a bare `[aerie]` error sentinel). `low` runs
-> are surfaced as a caution in the run view and are **ineligible for auto-posting** once
-> automation (M9) lands. Tool runs are not gated here — malformed tool JSON already degrades to
+> are surfaced as a caution in the run view and are **ineligible for auto-posting**. Tool runs
+> are not gated here — malformed tool JSON already degrades to
 > "no findings" without failing the run; per-tool timeouts come from each agent's `timeoutSec`.
 
 ## 9. Staged build plan

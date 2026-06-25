@@ -106,4 +106,35 @@ describe('panel report helpers', () => {
     expect(markdown).toContain('<summary>codex · done · exit 0</summary>')
     expect(markdown).toContain('Claude report')
   })
+
+  it('excludes errored or killed child runs from the consolidated markdown report', () => {
+    const markdown = renderPanelReportMarkdown({
+      group: group({
+        agentIds: ['codex', 'claude-code', 'cursor-agent'],
+        runIds: [1, 2, 3]
+      }),
+      runs: [
+        run({ id: 1, agentId: 'codex', status: 'error', exitCode: 2 }),
+        run({ id: 2, agentId: 'claude-code', status: 'done', exitCode: 0 }),
+        run({ id: 3, agentId: 'cursor-agent', status: 'killed', exitCode: null })
+      ],
+      consensusFindings: [],
+      singleSourceFindings: [],
+      consensusMin: 2,
+      totalFindings: 0,
+      outputs: new Map([
+        [1, 'Codex startup failure'],
+        [2, 'Claude completed review'],
+        [3, 'Cursor was killed']
+      ])
+    })
+
+    expect(markdown).toContain('Agents: `claude-code`')
+    expect(markdown).not.toContain('`codex`')
+    expect(markdown).not.toContain('`cursor-agent`')
+    expect(markdown).toContain('<summary>claude-code · done · exit 0</summary>')
+    expect(markdown).toContain('Claude completed review')
+    expect(markdown).not.toContain('Codex startup failure')
+    expect(markdown).not.toContain('Cursor was killed')
+  })
 })

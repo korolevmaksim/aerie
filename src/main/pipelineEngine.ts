@@ -6,7 +6,8 @@
 // gate before any write. Verified by the build smoke (it compiles against the real signatures).
 
 import type { Pipeline, PipelineReviewTarget, PipelineStep } from '../shared/types'
-import { aggregateRunFindings, getRunGroupReport, startRun } from './agentRunner'
+import { assessReviewQuality } from '../shared/quality'
+import { aggregateRunFindings, getRunGroupReport, readRunOutput, startRun } from './agentRunner'
 import { createCommitComment, createIssue, createPrComment } from './github'
 import { log } from './logger'
 import {
@@ -24,11 +25,13 @@ import {
   addRunToGroup,
   findCompletedPipelineRunByDedupe,
   getPipelineRun,
+  getRun,
   getRepoById,
   insertPipelineRun,
   insertRunGroup,
   lastRepoPipelineRunStart,
   listEnabledPipelineRows,
+  listFindingsForRun,
   markWatchSeen,
   recentPipelineRunStarts,
   setPipelineRunGroup as linkPipelineRunGroup,
@@ -40,6 +43,14 @@ import {
 const HOUR_MS = 60 * 60 * 1000
 
 const githubWriters: GithubWriters = { createCommitComment, createPrComment, createIssue }
+
+function isRunPostEligible(runId: number): boolean {
+  const run = getRun(runId)
+  if (!run || run.status !== 'done') return false
+  const output = run.output_path ? readRunOutput(run.output_path) : ''
+  const quality = assessReviewQuality(output, { kind: 'agent' })
+  return quality.level === 'ok' || listFindingsForRun(runId).length > 0
+}
 
 /** Maps a pipeline step to a real `startRun`. Only agent steps run (tool steps are filtered
  *  out by `loadEnabledPipelines`; this guards defensively). A PR delta runs against the PR
@@ -184,6 +195,7 @@ export function buildEnginePorts(): { ports: EnginePorts; dispose: () => void } 
     },
     startStep,
     waitForRun: (runId) => waiter.wait(runId),
+    isRunPostEligible,
     aggregate: (runIds) => aggregateRunFindings({ runIds, groupBy: 'location', consensusMin: 1 }),
     // The ONLY engine→GitHub write path. `dispatchGithubWrite` re-asserts `assertMayPost`
     // before touching a writer (defense-in-depth on top of the engine's own gate).

@@ -102,6 +102,17 @@ describe('validateSaveRequest', () => {
     expect(validateSaveRequest({})).toMatchObject({ ok: false }) // missing draft
   })
 
+  it('rejects pr/manual triggers until the poller and run-now paths support them', () => {
+    expect(validateSaveRequest({ draft: { ...draft, trigger: 'pr' } })).toEqual({
+      ok: false,
+      error: 'Only commit and schedule pipeline triggers are currently supported.'
+    })
+    expect(validateSaveRequest({ draft: { ...draft, trigger: 'manual' } })).toEqual({
+      ok: false,
+      error: 'Only commit and schedule pipeline triggers are currently supported.'
+    })
+  })
+
   it('keeps an autoPost:true draft (config only — the engine still gates the write)', () => {
     const postDraft = { ...draft, action: { kind: 'post' as const, autoPost: true } }
     const r = validateSaveRequest({ draft: postDraft })

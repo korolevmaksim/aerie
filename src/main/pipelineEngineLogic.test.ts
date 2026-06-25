@@ -179,6 +179,20 @@ describe('dispatchGithubWrite — the single gated write dispatch', () => {
     expect(calls.issue).toHaveLength(0)
   })
 
+  it('redacts token-shaped text at the write boundary before calling GitHub', async () => {
+    const calls: Calls = { commit: [], pr: [], issue: [] }
+    await dispatchGithubWrite(
+      fakeWriters(calls),
+      'o/r',
+      action(),
+      'commit',
+      ctx,
+      'do not post sk-proj-abcdefghijklmnopqrstuvwxyz123456'
+    )
+
+    expect(calls.commit[0][3]).toBe('do not post [REDACTED]')
+  })
+
   it('routes an enabled pr post to createPrComment with the parsed PR number', async () => {
     const calls: Calls = { commit: [], pr: [], issue: [] }
     await dispatchGithubWrite(fakeWriters(calls), 'o/r', action(), 'pr', ctx, 'body')

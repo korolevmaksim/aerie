@@ -2211,7 +2211,7 @@ select.field {
   flex: none;
   border: 1px solid var(--border);
   border-radius: 999px;
-  background: rgba(139, 148, 158, 0.18);
+  background: var(--bg-active);
   transition:
     background 120ms ease,
     border-color 120ms ease;
@@ -2229,8 +2229,8 @@ select.field {
     background 120ms ease;
 }
 .switch-control input:checked + .switch-control__track {
-  border-color: rgba(63, 185, 80, 0.75);
-  background: rgba(63, 185, 80, 0.22);
+  border-color: var(--ok-border);
+  background: var(--ok-bg);
 }
 .switch-control input:checked + .switch-control__track .switch-control__thumb {
   transform: translateX(1.05rem);

@@ -94,6 +94,11 @@ function worktreePathFor(fullName: string, sha: string, runTag: string): string 
   return dataDir('worktrees', owner, name, `${sha.slice(0, 12)}-${runTag}`)
 }
 
+function workingTreeSnapshotPathFor(fullName: string, runTag: string): string {
+  const { owner, name } = splitFullName(fullName)
+  return dataDir('worktrees', owner, name, `working-tree-${runTag}`)
+}
+
 const UNSAFE_INHERITED_GIT_ENV = new Set(['EDITOR', 'PAGER', 'PREFIX', 'SSH_ASKPASS'])
 
 function isUnsafeInheritedGitEnv(key: string): boolean {
@@ -404,9 +409,9 @@ export async function headShaOf(localPath: string): Promise<string> {
 
 /**
  * Prepares a working-tree review (M7): writes a diff of the UNCOMMITTED changes in
- * the user's mapped clone to a file. Creates NO worktree and NEVER mutates the
- * working copy — only read-only `git diff` runs. The agent later runs with
- * cwd = the user's clone (uncommitted changes exist only there), zero GitHub calls.
+ * the user's mapped clone to a file, then applies that diff to an app-owned local
+ * snapshot. The user's working copy is never used as the agent cwd — only read-only
+ * local git commands run there.
  *   - staged=false → `git diff HEAD`    (all uncommitted tracked changes)
  *   - staged=true  → `git diff --staged` (only what is staged for the next commit)
  */
@@ -427,9 +432,26 @@ export async function prepareWorkingTree(args: {
   const tag = args.staged ? 'staged' : 'worktree'
   const diffPath = join(diffDir, `${owner}-${name}-${tag}-${args.runTag}.diff`)
   writeFileSync(diffPath, diff, 'utf8')
+  const snapshotPath = workingTreeSnapshotPathFor(args.fullName, args.runTag)
+  rmSync(snapshotPath, { recursive: true, force: true })
+  mkdirSync(join(snapshotPath, '..'), { recursive: true })
+  try {
+    await cloneMutex.run(args.userLocalPath, async () => {
+      await simpleGit({ timeout: { block: GIT_BLOCK_TIMEOUT_MS } })
+        .env(authEnv())
+        .clone(args.userLocalPath, snapshotPath, ['--no-hardlinks'])
+      if (diff.trim() !== '') {
+        await localGit(snapshotPath).raw(['apply', diffPath])
+      }
+    })
+  } catch (error) {
+    rmSync(snapshotPath, { recursive: true, force: true })
+    rmSync(diffPath, { force: true })
+    throw error
+  }
   return {
     mode: 'working-tree',
-    worktreePath: args.userLocalPath,
+    worktreePath: snapshotPath,
     diffPath,
     baseDir: args.userLocalPath
   }
@@ -484,9 +506,12 @@ async function removePreparedWorktree(prepared: {
 /** Removes a run's worktree (off the repo it was added from) and its diff file. */
 export async function cleanupCheckout(prepared: PreparedCheckout): Promise<void> {
   try {
-    // A working-tree review runs IN the user's own clone — there is no worktree to
-    // remove and `worktreePath` IS their clone, so never run `worktree remove` on it.
-    // Only drop the generated diff file.
+    // A working-tree review uses a plain app-owned snapshot directory, not a linked
+    // git worktree. Remove that snapshot directly while never touching `baseDir`
+    // (the user's mapped clone).
+    if (prepared.mode === 'working-tree' && prepared.worktreePath !== prepared.baseDir) {
+      rmSync(prepared.worktreePath, { recursive: true, force: true })
+    }
     await removePreparedWorktree(prepared)
     rmSync(prepared.diffPath, { force: true })
   } catch {

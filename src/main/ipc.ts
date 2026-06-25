@@ -90,6 +90,7 @@ import { clonePathFor, headShaOf, prepareCheckout } from './gitEngine'
 import { parsePipelineRow } from './pipelineEngineLogic'
 import { buildEnginePorts } from './pipelineEngine'
 import { planManualRun, toPipelineWithRuns, validateSaveRequest } from './pipelineIpc'
+import { log } from './logger'
 import { getPollerStatus, wakePoller } from './poller'
 import { runPipelineForDelta } from './pipelines'
 import { buildCommitDelta, DELTA_META } from './pollerLogic'
@@ -152,6 +153,10 @@ function ok<T>(value: T): ApiResult<T> {
 
 function fail(error: string): ApiResult<never> {
   return { ok: false, error }
+}
+
+function isDuplicateAccountLoginError(error: unknown): boolean {
+  return error instanceof Error && /UNIQUE constraint failed: accounts\.login/i.test(error.message)
 }
 
 const SEVERITY_VALUES = new Set<string>(['critical', 'high', 'medium', 'low', 'info'])
@@ -264,6 +269,9 @@ export function registerIpcHandlers(): void {
         })
         return ok({ ...rowToSummary(row), rateLimit: identity.rateLimit })
       } catch (error) {
+        if (isDuplicateAccountLoginError(error)) {
+          return fail('That GitHub account is already added.')
+        }
         return fail(describeAuthError(error))
       }
     }
@@ -915,14 +923,20 @@ export function registerIpcHandlers(): void {
       try {
         const target = resolveRunPostTarget(run, { kind: p.kind, title: p.title })
         if (!target.ok) return fail(target.error)
+        const safeBody = redactText(body)
 
         let url: string
         if (target.target.kind === 'commitComment') {
-          url = await createCommitComment(accountId, repo.full_name, target.target.sha, body)
+          url = await createCommitComment(accountId, repo.full_name, target.target.sha, safeBody)
         } else if (target.target.kind === 'prComment') {
-          url = await createPrComment(accountId, repo.full_name, target.target.prNumber, body)
+          url = await createPrComment(accountId, repo.full_name, target.target.prNumber, safeBody)
         } else {
-          url = await createIssue(accountId, repo.full_name, target.target.title, body)
+          url = await createIssue(
+            accountId,
+            repo.full_name,
+            redactText(target.target.title),
+            safeBody
+          )
         }
         setRunPostedUrl(p.runId, url)
         return ok({ url })
@@ -966,14 +980,20 @@ export function registerIpcHandlers(): void {
           { kind: p.kind, title: p.title }
         )
         if (!target.ok) return fail(target.error)
+        const safeBody = redactText(body)
 
         let url: string
         if (target.target.kind === 'commitComment') {
-          url = await createCommitComment(accountId, repo.full_name, target.target.sha, body)
+          url = await createCommitComment(accountId, repo.full_name, target.target.sha, safeBody)
         } else if (target.target.kind === 'prComment') {
-          url = await createPrComment(accountId, repo.full_name, target.target.prNumber, body)
+          url = await createPrComment(accountId, repo.full_name, target.target.prNumber, safeBody)
         } else {
-          url = await createIssue(accountId, repo.full_name, target.target.title, body)
+          url = await createIssue(
+            accountId,
+            repo.full_name,
+            redactText(target.target.title),
+            safeBody
+          )
         }
         setRunGroupPostedUrl(p.groupId, url)
         return ok({ url })
@@ -1246,7 +1266,12 @@ function guarded<A extends unknown[], R>(
     try {
       return ok(await fn(accountId, repoFullName, ...rest))
     } catch (error) {
-      return fail(describeAuthError(error))
+      const stack = error instanceof Error ? error.stack : undefined
+      const message = error instanceof Error ? error.message : String(error)
+      log.error('guarded IPC operation failed', { error: stack ?? message })
+      const status = (error as { status?: unknown } | null)?.status
+      if (typeof status === 'number') return fail(describeAuthError(error))
+      return fail(message || 'Internal operation failed.')
     }
   }
 }

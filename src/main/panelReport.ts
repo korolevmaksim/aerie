@@ -77,12 +77,14 @@ export function renderPanelReportMarkdown(args: {
   outputs: Map<number, string>
 }): string {
   const { group, consensusFindings, singleSourceFindings, consensusMin, totalFindings } = args
+  const successfulRuns = sortPanelRuns(args.runs).filter((run) => run.status === 'done')
+  const successfulAgentIds = successfulRuns.map((run) => run.agentId)
   const lines: string[] = [
     `# Aerie panel review — ${refLabel(group.refType, group.refId, group.headSha)}`,
     '',
     `Repository: \`${group.repoFullName}\``,
     `Status: \`${group.status}\``,
-    `Agents: ${group.agentIds.map((id) => `\`${id}\``).join(', ')}`,
+    `Agents: ${successfulAgentIds.length > 0 ? successfulAgentIds.map((id) => `\`${id}\``).join(', ') : '_none_'}`,
     `Target SHA: \`${group.headSha}\``,
     ''
   ]
@@ -106,7 +108,10 @@ export function renderPanelReportMarkdown(args: {
   }
 
   lines.push('## Agent reports', '')
-  for (const run of sortPanelRuns(args.runs)) {
+  if (successfulRuns.length === 0) {
+    lines.push('_No successfully completed agent reports._', '')
+  }
+  for (const run of successfulRuns) {
     const output = boundOutput(args.outputs.get(run.id) ?? '')
     lines.push(
       `<details>`,

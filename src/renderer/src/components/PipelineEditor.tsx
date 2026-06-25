@@ -26,7 +26,7 @@ export interface RepoOption {
   fullName: string
 }
 
-const TRIGGERS: PipelineTrigger[] = ['commit', 'pr', 'schedule', 'manual']
+const TRIGGERS: PipelineTrigger[] = ['commit', 'schedule']
 const REVIEW_TARGETS: PipelineReviewTarget[] = ['commit', 'project']
 const ACTIONS: PipelineActionKind[] = ['notify', 'stage', 'post']
 const TARGETS: PostTarget[] = ['commit', 'pr', 'issue']
@@ -225,7 +225,7 @@ function PipelineEditor({
             </select>
             <span className="hint">
               Commit pipelines run on each new default-branch commit; schedule pipelines re-check
-              the default branch on a set cadence; all triggers can be run manually.
+              the default branch on a set cadence. Run now and Dry run are available for both.
             </span>
           </label>
 

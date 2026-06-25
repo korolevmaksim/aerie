@@ -241,4 +241,37 @@ describe('prepare cleanup', () => {
       rmSync(root, { recursive: true, force: true })
     }
   })
+
+  it('prepares working-tree reviews in an isolated snapshot, not the user checkout', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'aerie-git-engine-'))
+    try {
+      const userData = join(root, 'userData')
+      mkdirSync(userData, { recursive: true })
+      const { repoDir } = createCommittedRepo(root)
+      writeFileSync(join(repoDir, 'README.md'), 'hello\nedited\n', 'utf8')
+      const { cleanupCheckout, prepareWorkingTree } = await loadGitEngine(userData)
+
+      const prepared = await prepareWorkingTree({
+        fullName: 'octo/repo',
+        userLocalPath: repoDir,
+        runTag: 'wt',
+        staged: false
+      })
+
+      expect(prepared.mode).toBe('working-tree')
+      expect(prepared.worktreePath).not.toBe(repoDir)
+      expect(existsSync(join(prepared.worktreePath, '.git'))).toBe(true)
+      expect(git(prepared.worktreePath, ['diff', 'HEAD'])).toContain('edited')
+
+      writeFileSync(join(prepared.worktreePath, 'README.md'), 'agent mutation\n', 'utf8')
+      expect(git(repoDir, ['diff', 'HEAD'])).toContain('edited')
+      expect(git(repoDir, ['diff', 'HEAD'])).not.toContain('agent mutation')
+
+      await cleanupCheckout(prepared)
+      expect(existsSync(prepared.worktreePath)).toBe(false)
+      expect(existsSync(repoDir)).toBe(true)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
 })

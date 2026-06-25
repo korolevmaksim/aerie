@@ -43,3 +43,19 @@ jobs:
 
       - name: Stage 0 smoke (verify runnable bundle)
         run: npm run smoke -- --no-build
+
+      - name: Node smoke tests
+        run: npm run smoke:gitdiff && npm run smoke:tooling && npm run smoke:worktree
+
+      - name: Electron smoke tests
+        if: runner.os == 'Linux'
+        run: |
+          xvfb-run -a npm run smoke:findings
+          xvfb-run -a npm run smoke:migration
+          xvfb-run -a npm run smoke:store
+          xvfb-run -a npm run smoke:watches
+          xvfb-run -a npm run smoke:pipelines
+
+      - name: Packaging smoke (macOS unpacked)
+        if: runner.os == 'macOS'
+        run: CSC_IDENTITY_AUTO_DISCOVERY=false npm run build:unpack
