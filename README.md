@@ -36,6 +36,10 @@ third-party service.
   On macOS, the native traffic-light controls sit in a seamless draggable header that
   reserves space above the UI; the task sidebar can collapse to a compact rail when the
   review surface needs more room.
+- **Refined desktop UI** — a token-driven design language with a single disciplined accent, a
+  layered surface ladder with hairline borders, a tiered text hierarchy, and intentional
+  typography. Light and dark themes follow your OS appearance automatically. See
+  `docs/design-system.md`.
 - **Browse repos, commits, and PRs** — cached with conditional requests (ETags), so
   re-listing costs ~0 rate limit.
 - **Local checkout** — Aerie clones into an app-owned working copy (or, opt-in, a

@@ -192,25 +192,15 @@
   color: var(--fg);
 }
 
+/* Active nav is a neutral fill (no colored bar/icon), matching the reference. */
 .sidebar-nav__item--active {
   background: var(--bg-active);
-  border-color: var(--border);
+  border-color: transparent;
   color: var(--fg);
 }
 
 .sidebar-nav__item--active .sidebar-nav__icon-wrapper {
-  color: var(--accent);
-}
-
-.sidebar-nav__item--active::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 25%;
-  height: 50%;
-  width: 3px;
-  background: var(--accent);
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  color: var(--fg);
 }
 
 .sidebar-nav__info {
@@ -324,11 +314,11 @@
 
 kbd {
   border: 1px solid var(--border);
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   padding: 0.05rem 0.35rem;
-  background: rgba(110, 118, 129, 0.14);
-  color: var(--fg);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: var(--bg-active);
+  color: var(--muted);
+  font-family: var(--font-mono);
   font-size: 0.72rem;
 }
 
@@ -348,7 +338,7 @@ kbd {
 .cockpit {
   display: flex;
   flex-direction: column;
-  gap: 0.9rem;
+  gap: 1.1rem;
 }
 
 .cockpit__hero {
@@ -362,9 +352,10 @@ kbd {
 
 .cockpit__hero h1 {
   margin: 0.05rem 0 0.35rem;
-  font-size: 1.75rem;
-  line-height: 1.1;
-  letter-spacing: 0;
+  font-size: 1.5rem;
+  line-height: 1.12;
+  letter-spacing: -0.022em;
+  font-weight: var(--weight-bold);
 }
 
 .cockpit__lede {
@@ -401,23 +392,23 @@ kbd {
 .cockpit-metric {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  padding: 0.85rem 1rem;
+  padding: 0.95rem 1.1rem;
   background: var(--panel);
-  box-shadow: var(--shadow-sm);
   transition: all var(--transition-fast);
 }
 
 .cockpit-metric:hover {
   border-color: var(--border-hover);
-  box-shadow: var(--shadow-md);
-  transform: translateY(-1px);
+  background: var(--bg-surface);
 }
 
 .cockpit-metric__value {
   display: block;
   font-size: 1.45rem;
-  font-weight: 750;
+  font-weight: var(--weight-bold);
+  font-variant-numeric: tabular-nums;
   line-height: 1;
+  letter-spacing: -0.02em;
 }
 
 .cockpit-metric__label {
@@ -445,7 +436,7 @@ kbd {
 .cockpit__grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(290px, 340px);
-  gap: 0.9rem;
+  gap: 1.1rem;
   align-items: start;
 }
 
@@ -462,11 +453,10 @@ kbd {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--panel);
-  box-shadow: var(--shadow-sm);
 }
 
 .cockpit-section {
-  padding: 1.1rem;
+  padding: 1.25rem 1.3rem;
 }
 
 .cockpit-section__head {
@@ -532,7 +522,6 @@ kbd {
 .cockpit-run-row:hover {
   border-color: var(--border-hover);
   background: var(--bg-hover);
-  box-shadow: var(--shadow-md);
 }
 
 .cockpit-run-row__target {
@@ -630,11 +619,10 @@ kbd {
 .cockpit-repo:hover {
   border-color: var(--border-hover);
   background: var(--bg-hover);
-  box-shadow: var(--shadow-md);
 }
 
 .cockpit-rail-card {
-  padding: 1.1rem;
+  padding: 1.25rem 1.3rem;
 }
 
 .cockpit-rail-card__action {

@@ -186,6 +186,31 @@ same change set.
 
 ### Changed
 
+- **Mature visual redesign (appearance-only)**: a single, disciplined, token-driven design
+  language applied across the whole renderer, modelled on the OpenAI / ChatGPT desktop UI —
+  near-monochrome, near-black canvas, calm, hairline-bordered, flat — with light and dark themes
+  kept in lockstep. The chrome is grayscale; **one reserved warm accent** (`#f0865a` dark /
+  `#d96b3a` light) carries the text caret, focus ring, links, finding locations, the brand mark,
+  and the "running" state, while muted green/amber/red carry status. The primary action is a
+  **high-contrast neutral button** (near-white on dark, near-black on light) — contrast, not
+  color, is the affordance. Introduced a 4px spacing scale, larger radii, translucent-free
+  surface ladder with hairline borders, flat elevation (cards rely on borders; shadow is for
+  overlays only), a four-tier text hierarchy, and intentional typography (negative heading
+  tracking, tabular numerals, unified `--font-mono`). Drill-in **tabs** and the review-mode
+  toggle are real segmented controls; panel headers have a hairline toolbar divider; the
+  multi-agent picker is selectable chips; sidebar nav uses a neutral active fill (no colored
+  bar); target-metadata pills, code, SHAs, and diff hunks are neutral; native checkboxes/radios
+  adopt the warm accent; the rainbow-gradient wordmark became a solid wordmark + one accent mark.
+  Theme-aware surfaces replaced `rgba(255,255,255,…)` fills that were invisible in light mode;
+  consoles/diffs stay intentionally dark in both themes. No component logic, IPC, GitHub write,
+  token, git, or agent surface changed. Design rules: `docs/design-system.md`; rationale in the
+  2026-06-24/2026-06-25 entries of `docs/UI_UX_RESEARCH.md`.
+
+- **Fixed silent interaction states**: four design tokens (`--bg-hover`, `--bg-active`,
+  `--fg-muted`, `--border-default`) were referenced throughout the shell and components but never
+  defined, so hover/active styling on buttons, rows, nav, and cards did nothing. They are now
+  real tokens in both themes.
+
 - **Value-first first-run onboarding** (ROADMAP M14): the zero-accounts welcome screen now leads
   with what Aerie actually does (runs your local AI coding agents on a commit or PR and posts the
   review back to GitHub, on your machine) and shows an explicit **3-step path** to a first review

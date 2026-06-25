@@ -1,97 +1,173 @@
+/*
+ * Aerie design tokens — OpenAI/ChatGPT-inspired: near-monochrome, near-black,
+ * calm, hairline-bordered, flat. Color is the exception; one warm accent is held
+ * in reserve. The whole UI is token-driven, so palette/type/space/elevation live
+ * here. Dark is the default; the light theme overrides these in the
+ * prefers-color-scheme block below. See docs/design-system.md.
+ */
 :root {
-  /* Fonts */
-  --font-sans:
-    system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
-  --font-mono:
-    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
-    monospace;
+  color-scheme: dark;
 
-  /* Border Radii */
+  /* Typography — native-grade UI face on macOS, refined dev mono. */
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', system-ui, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+  --font-mono:
+    'SF Mono', ui-monospace, 'JetBrains Mono', 'Cascadia Code', SFMono-Regular, Menlo, Monaco,
+    Consolas, 'Liberation Mono', monospace;
+
+  /* Type weights — slightly off the default stops for a more intentional feel. */
+  --weight-regular: 420;
+  --weight-medium: 530;
+  --weight-semibold: 620;
+  --weight-bold: 700;
+
+  /* Border radii — soft geometry. */
   --radius-sm: 6px;
   --radius-md: 8px;
   --radius-lg: 12px;
   --radius-xl: 16px;
   --radius-full: 9999px;
 
-  /* Transitions */
-  --transition-fast: 120ms cubic-bezier(0.4, 0, 0.2, 1);
+  /* Spacing scale — 4px base. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* Motion. */
+  --transition-fast: 110ms cubic-bezier(0.4, 0, 0.2, 1);
   --transition-normal: 200ms cubic-bezier(0.4, 0, 0.2, 1);
 
-  /* Dark Theme Colors (default) */
-  --bg: #07080c;
-  --panel: #0e0f14;
-  --bg-surface: #13151f;
-  --border: #222533;
-  --border-hover: #32374e;
-  --border-focus: #585cff;
-  --fg: #f3f4f6;
-  --muted: #8b949e;
-  --fg-subtle: #5f6672;
-  --accent: #6366f1;
-  --accent-hover: #818cf8;
-  --accent-glow: rgba(99, 102, 241, 0.15);
+  /* Surfaces — near-black ladder. Hover/active are translucent overlays so they
+     read correctly on canvas, panels, and cards alike. */
+  --bg: #0d0d0d;
+  --panel: #171717;
+  --bg-surface: #1f1f1f;
+  --bg-raised: #262626;
+  --bg-hover: #232323;
+  --bg-active: #2c2c2c;
+  --bg-sidebar: #0a0a0a;
+  --bg-code: #0a0a0a;
+  --fg-code: #e6e6e6;
 
-  --ok: #10b981;
-  --ok-bg: rgba(16, 185, 129, 0.08);
-  --ok-border: rgba(16, 185, 129, 0.25);
+  /* Hairlines — translucent so they adapt to any surface. */
+  --border: rgba(255, 255, 255, 0.1);
+  --border-hover: rgba(255, 255, 255, 0.2);
+  --border-default: rgba(255, 255, 255, 0.1);
+  --border-focus: var(--accent);
 
-  --mid: #f59e0b;
-  --mid-bg: rgba(245, 158, 11, 0.08);
-  --mid-border: rgba(245, 158, 11, 0.25);
+  /* Text hierarchy — four tiers, neutral grays. */
+  --fg: #ededed;
+  --fg-muted: #cdcdcd;
+  --muted: #9b9b9b;
+  --fg-subtle: #707070;
 
-  --low: #ef4444;
-  --low-bg: rgba(239, 68, 68, 0.08);
-  --low-border: rgba(239, 68, 68, 0.25);
+  /* Accent — one reserved warm tone (caret, focus, links, brand, running state). */
+  --accent: #f0865a;
+  --accent-hover: #ff9d73;
+  --accent-fg: #1a1207;
+  --on-accent: #1a1207;
+  --accent-muted: rgba(240, 134, 90, 0.16);
+  --accent-border: rgba(240, 134, 90, 0.45);
+  --accent-glow: rgba(240, 134, 90, 0.16);
 
-  --danger: #ef4444;
+  /* Primary action — high-contrast NEUTRAL button (contrast is the affordance). */
+  --btn-primary-bg: #f2f2f2;
+  --btn-primary-bg-hover: #ffffff;
+  --btn-primary-fg: #0d0d0d;
 
-  /* Shadows */
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.4);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -4px rgba(0, 0, 0, 0.5);
-  --shadow-glow: 0 0 24px rgba(99, 102, 241, 0.06);
+  /* Semantic — success (muted). */
+  --ok: #4eb87a;
+  --ok-bg: rgba(78, 184, 122, 0.12);
+  --ok-border: rgba(78, 184, 122, 0.3);
 
-  --bg-sidebar: rgba(10, 11, 16, 0.85);
-  --brand-gradient: linear-gradient(135deg, #a5b4fc 0%, #6366f1 50%, #38bdf8 100%);
+  /* Semantic — warning / at-risk (muted). */
+  --mid: #d9a441;
+  --mid-bg: rgba(217, 164, 65, 0.12);
+  --mid-border: rgba(217, 164, 65, 0.3);
+
+  /* Semantic — danger / destructive (muted). */
+  --low: #e96a62;
+  --low-bg: rgba(233, 106, 98, 0.12);
+  --low-border: rgba(233, 106, 98, 0.32);
+  --danger: #e96a62;
+
+  /* Elevation — flat; cards rely on hairlines, shadow is for overlays only. */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.18);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.5);
+  --shadow-glow: 0 0 0 1px var(--accent-border);
+
+  --brand-gradient: linear-gradient(135deg, #ffb08a 0%, #f0865a 100%);
 }
 
 @media (prefers-color-scheme: light) {
   :root {
-    /* Light Theme Colors */
-    --bg: #f8fafc;
+    color-scheme: light;
+
+    /* Surfaces — clean white with a faint gray inset. */
+    --bg: #ffffff;
     --panel: #ffffff;
-    --bg-surface: #f1f5f9;
-    --border: #e2e8f0;
-    --border-hover: #cbd5e1;
-    --border-focus: #4f46e5;
-    --fg: #0f172a;
-    --muted: #64748b;
-    --fg-subtle: #94a3b8;
-    --accent: #4f46e5;
-    --accent-hover: #3730a3;
-    --accent-glow: rgba(79, 70, 229, 0.1);
+    --bg-surface: #f7f7f8;
+    --bg-raised: #ffffff;
+    --bg-hover: #f0f0f0;
+    --bg-active: #e6e6e6;
+    --bg-sidebar: #f9f9f9;
+    /* Consoles/diffs stay dark in light mode — terminal convention reads as deliberate. */
+    --bg-code: #0a0a0a;
+    --fg-code: #e6e6e6;
 
-    --ok: #059669;
-    --ok-bg: rgba(5, 150, 105, 0.06);
-    --ok-border: rgba(5, 150, 105, 0.2);
+    /* Hairlines. */
+    --border: rgba(0, 0, 0, 0.1);
+    --border-hover: rgba(0, 0, 0, 0.2);
+    --border-default: rgba(0, 0, 0, 0.1);
+    --border-focus: var(--accent);
 
-    --mid: #d97706;
-    --mid-bg: rgba(217, 119, 6, 0.06);
-    --mid-border: rgba(217, 119, 6, 0.2);
+    /* Text hierarchy. */
+    --fg: #0d0d0d;
+    --fg-muted: #3a3a3a;
+    --muted: #6e6e6e;
+    --fg-subtle: #9b9b9b;
 
-    --low: #dc2626;
-    --low-bg: rgba(220, 38, 38, 0.06);
-    --low-border: rgba(220, 38, 38, 0.2);
+    /* Accent — deepened for contrast on white. */
+    --accent: #d96b3a;
+    --accent-hover: #c25a2c;
+    --accent-fg: #ffffff;
+    --on-accent: #ffffff;
+    --accent-muted: rgba(217, 107, 58, 0.12);
+    --accent-border: rgba(217, 107, 58, 0.45);
+    --accent-glow: rgba(217, 107, 58, 0.12);
 
-    --danger: #dc2626;
+    /* Primary action — high-contrast neutral (dark button on light). */
+    --btn-primary-bg: #0d0d0d;
+    --btn-primary-bg-hover: #2b2b2b;
+    --btn-primary-fg: #ffffff;
 
-    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
-    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -4px rgba(0, 0, 0, 0.05);
-    --shadow-glow: 0 0 24px rgba(79, 70, 229, 0.04);
+    --ok: #1f9d4d;
+    --ok-bg: rgba(31, 157, 77, 0.1);
+    --ok-border: rgba(31, 157, 77, 0.28);
 
-    --bg-sidebar: rgba(248, 250, 252, 0.85);
-    --brand-gradient: linear-gradient(135deg, #4f46e5 0%, #38bdf8 100%);
+    --mid: #b07d12;
+    --mid-bg: rgba(176, 125, 18, 0.1);
+    --mid-border: rgba(176, 125, 18, 0.28);
+
+    --low: #cf4b44;
+    --low-bg: rgba(207, 75, 68, 0.1);
+    --low-border: rgba(207, 75, 68, 0.28);
+    --danger: #cf4b44;
+
+    --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+    --shadow-md: 0 4px 16px rgba(15, 23, 42, 0.08);
+    --shadow-lg: 0 16px 48px rgba(15, 23, 42, 0.16);
+    --shadow-glow: 0 0 0 1px var(--accent-border);
+
+    --brand-gradient: linear-gradient(135deg, #f0865a 0%, #d96b3a 100%);
   }
 }
 
@@ -99,21 +175,40 @@
   box-sizing: border-box;
 }
 
-/* Scrollbars */
+/* Scrollbars — thin, quiet, only assert on hover. */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--border);
+  background: var(--bg-active);
   border-radius: var(--radius-full);
-  border: 2px solid transparent;
+  border: 3px solid transparent;
+  background-clip: padding-box;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--border-hover);
+  background-clip: padding-box;
+}
+
+::selection {
+  background: var(--accent-muted);
+  color: var(--fg);
+}
+
+/* Native checkboxes / radios pick up the brand accent instead of OS blue. */
+input[type='checkbox'],
+input[type='radio'] {
+  accent-color: var(--accent);
+}
+
+/* The warm text caret — a small signature detail from the reference. */
+input,
+textarea {
+  caret-color: var(--accent);
 }
 
 /* Keyboard-only focus ring (a11y, M11): visible for Tab users, not on mouse click.
@@ -138,7 +233,23 @@ body {
   background: var(--bg);
   color: var(--fg);
   font-family: var(--font-sans);
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  letter-spacing: -0.006em;
+  font-feature-settings:
+    'liga' 1,
+    'calt' 1;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Headings carry the tracking that makes type read as designed, not default. */
+h1,
+h2,
+h3 {
+  letter-spacing: -0.021em;
+  font-weight: var(--weight-semibold);
 }
 
 #root,
@@ -166,13 +277,24 @@ body {
 }
 
 .wordmark {
-  font-size: 1.45rem;
-  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.3rem;
+  font-weight: var(--weight-bold);
   letter-spacing: -0.03em;
+  color: var(--fg);
+}
+
+/* A single small accent mark replaces the old rainbow gradient wordmark. */
+.wordmark::before {
+  content: '';
+  width: 0.62rem;
+  height: 0.62rem;
+  flex: none;
+  border-radius: 3px;
   background: var(--brand-gradient);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  display: inline-block;
+  box-shadow: 0 0 0 3px var(--accent-muted);
 }
 
 .tagline {
@@ -193,7 +315,9 @@ body {
 
 .panel__title {
   margin: 0 0 1rem;
-  font-size: 1.1rem;
+  font-size: 1.15rem;
+  font-weight: var(--weight-semibold);
+  letter-spacing: -0.02em;
 }
 
 .add-form {
@@ -204,24 +328,28 @@ body {
 
 .field {
   min-width: 0;
-  background: var(--panel);
+  background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   color: var(--fg);
-  padding: 0.55rem 0.75rem;
-  font-size: 0.9rem;
-  box-shadow: var(--shadow-sm);
+  padding: 0.5rem 0.7rem;
+  font-size: 0.875rem;
+  font-family: inherit;
   transition:
     border-color var(--transition-fast),
     background-color var(--transition-fast),
     box-shadow var(--transition-fast);
 }
 
-/* Mouse focus on a field: accent the border, no outline. Keyboard focus keeps the ring */
+.field::placeholder {
+  color: var(--fg-subtle);
+}
+
+/* Mouse focus on a field: accent the border + soft ring, no outline. Keyboard focus keeps the ring */
 .field:focus {
   border-color: var(--border-focus);
-  background-color: var(--bg-surface);
-  box-shadow: 0 0 0 3px var(--accent-glow);
+  background-color: var(--panel);
+  box-shadow: 0 0 0 3px var(--accent-muted);
 }
 .field:focus:not(:focus-visible) {
   outline: none;
@@ -250,17 +378,23 @@ select.field {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.375rem;
+  gap: 0.4rem;
+  min-height: 2.1rem;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  padding: 0.55rem 1rem;
-  font-size: 0.875rem;
-  font-weight: 500;
+  padding: 0.45rem 0.85rem;
+  font-size: 0.85rem;
+  font-weight: var(--weight-medium);
+  letter-spacing: -0.006em;
   color: var(--fg);
-  background: var(--panel);
+  background: var(--bg-surface);
   box-shadow: var(--shadow-sm);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast),
+    transform var(--transition-fast);
   user-select: none;
 }
 
@@ -271,31 +405,33 @@ select.field {
 }
 
 .btn:active:not(:disabled) {
-  transform: scale(0.98);
+  transform: translateY(0.5px);
   background: var(--bg-active);
 }
 
 .btn:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
+/* Primary = high-contrast NEUTRAL button (near-white on dark, near-black on light).
+   Contrast is the affordance — the primary action is never a colored fill. */
 .btn--primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #ffffff;
-  font-weight: 600;
+  background: var(--btn-primary-bg);
+  border-color: var(--btn-primary-bg);
+  color: var(--btn-primary-fg);
+  font-weight: var(--weight-semibold);
+  box-shadow: none;
 }
 
 .btn--primary:hover:not(:disabled) {
-  background: var(--accent-hover);
-  border-color: var(--accent-hover);
-  color: #ffffff;
-  box-shadow: 0 0 12px var(--accent-glow);
+  background: var(--btn-primary-bg-hover);
+  border-color: var(--btn-primary-bg-hover);
+  color: var(--btn-primary-fg);
 }
 
 .btn--primary:active:not(:disabled) {
-  background: var(--accent);
+  background: var(--btn-primary-bg);
 }
 
 .btn--ghost {
@@ -370,32 +506,36 @@ select.field {
 }
 
 .sev {
+  display: inline-block;
+  padding: 0.08rem 0.4rem;
+  border-radius: var(--radius-sm);
   text-transform: uppercase;
-  font-size: 0.68rem;
-  letter-spacing: 0.03em;
+  font-size: 0.66rem;
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.04em;
 }
 .sev--critical,
 .sev--high {
-  background: rgba(248, 81, 73, 0.16);
-  color: #ff9b94;
+  background: var(--low-bg);
+  color: var(--low);
 }
 .sev--medium {
-  background: rgba(210, 153, 34, 0.16);
-  color: #e3b341;
+  background: var(--mid-bg);
+  color: var(--mid);
 }
 .sev--low,
 .sev--info {
-  background: rgba(88, 166, 255, 0.14);
-  color: var(--accent);
+  background: var(--bg-active);
+  color: var(--muted);
 }
 
 /* Low-quality-review caution (M-Q): amber, distinct from the red .alert error. */
 .run__warn {
-  background: rgba(210, 153, 34, 0.12);
-  border: 1px solid rgba(210, 153, 34, 0.45);
-  color: #e3b341;
+  background: var(--mid-bg);
+  border: 1px solid var(--mid-border);
+  color: var(--mid);
   padding: 0.6rem 0.8rem;
-  border-radius: 7px;
+  border-radius: var(--radius-md);
   font-size: 0.85rem;
 }
 
@@ -561,23 +701,23 @@ select.field {
   font-size: 0.8rem;
 }
 .agent-editor__token code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   color: var(--accent);
 }
 
 /* Non-blocking amber caution when a model/reasoning is set but its token is absent from
    args — same palette as .run__warn, scoped tighter for the sub-editor. */
 .agent-editor__warn {
-  background: rgba(210, 153, 34, 0.12);
-  border: 1px solid rgba(210, 153, 34, 0.45);
-  color: #e3b341;
+  background: var(--mid-bg);
+  border: 1px solid var(--mid-border);
+  color: var(--mid);
   padding: 0.45rem 0.65rem;
-  border-radius: 7px;
+  border-radius: var(--radius-md);
   font-size: 0.8rem;
   margin: 0;
 }
 .agent-editor__warn code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
 }
 
 /* Reduced motion: the editor signals state via content change, not transforms — there is no
@@ -595,7 +735,7 @@ select.field {
   gap: 0.5rem;
 }
 .agent-consent__warn {
-  color: #e3b341;
+  color: var(--mid);
   font-size: 0.8rem;
 }
 
@@ -668,7 +808,6 @@ select.field {
 .history-row:focus-within {
   border-color: var(--border-hover);
   background: var(--bg-hover);
-  box-shadow: var(--shadow-md);
 }
 
 .history-row__open {
@@ -852,15 +991,33 @@ select.field {
 .run__agent-picks {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem 1.1rem;
+  gap: 0.5rem;
   margin: 0.4rem 0;
 }
 
+/* Agent picks read as selectable chips, with a clear checked state. */
 .run__agent-pick {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.45rem;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: var(--panel);
+  font-size: 0.85rem;
   cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.run__agent-pick:hover {
+  border-color: var(--border-hover);
+  background: var(--bg-hover);
+}
+
+.run__agent-pick:has(input:checked) {
+  border-color: var(--accent-border);
+  background: var(--accent-muted);
+  color: var(--fg);
 }
 
 .run__batch-item {
@@ -920,15 +1077,17 @@ select.field {
 
 .panel-report__summary > div {
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 12px;
   display: grid;
   gap: 6px;
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--bg-surface);
 }
 
 .panel-report__summary strong {
   font-size: 24px;
+  font-weight: var(--weight-bold);
+  font-variant-numeric: tabular-nums;
 }
 
 .panel-report__controls {
@@ -955,8 +1114,8 @@ select.field {
 
 .panel-report__agent {
   border: 1px solid var(--border);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.02);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
 }
 
 .panel-report__agent > summary {
@@ -1066,7 +1225,11 @@ select.field {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 0.8rem;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding-bottom: 0.85rem;
+  margin-bottom: 1.1rem;
+  border-bottom: 1px solid var(--border);
 }
 
 .panel__head .panel__title {
@@ -1104,7 +1267,7 @@ select.field {
 }
 
 .poller-dot--on {
-  background: #3fb950;
+  background: var(--ok);
 }
 .poller-dot--idle {
   background: var(--mid);
@@ -1133,12 +1296,12 @@ select.field {
 
 .chip {
   font-size: 0.65rem;
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--accent);
-  border: 1px solid var(--accent-glow);
-  background: var(--accent-glow);
+  color: var(--muted);
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
   border-radius: var(--radius-sm);
   padding: 0.125rem 0.45rem;
 }
@@ -1299,31 +1462,49 @@ select.field {
   border-color: var(--accent);
 }
 
-/* tabs + drill-in */
+/* tabs + drill-in — a real segmented control, not text links */
 .tabs {
-  display: flex;
-  gap: 0.3rem;
+  display: inline-flex;
+  gap: 0.15rem;
+  padding: 0.2rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
 }
 
 .tab {
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 7px;
+  border-radius: var(--radius-md);
   color: var(--muted);
-  padding: 0.35rem 0.7rem;
-  font-size: 0.85rem;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.82rem;
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
   cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.tab:hover:not(.tab--active) {
+  color: var(--fg);
+  background: var(--bg-hover);
 }
 
 .tab--active {
   color: var(--fg);
   border-color: var(--border);
   background: var(--panel);
+  box-shadow: var(--shadow-sm);
 }
 
+/* Square icon button for the in-view back control. */
 .back {
-  padding: 0.2rem 0.5rem;
-  margin-right: 0.4rem;
+  width: 1.95rem;
+  min-width: 1.95rem;
+  padding: 0;
+  margin-right: 0.55rem;
+  font-size: 1.05rem;
+  border-radius: var(--radius-md);
 }
 
 .branch-select {
@@ -1367,7 +1548,6 @@ select.field {
 .commit-row:hover {
   border-color: var(--border-hover);
   background: var(--bg-hover);
-  box-shadow: var(--shadow-md);
 }
 
 /* Match the focus ring's corners to the row (the global :focus-visible uses 4px). */
@@ -1386,7 +1566,7 @@ select.field {
 .sha {
   font-family: var(--font-mono);
   font-size: 0.78rem;
-  color: var(--accent);
+  color: var(--fg-muted);
 }
 
 .more {
@@ -1465,7 +1645,7 @@ select.field {
 
 .file__name {
   flex: 1;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1485,7 +1665,7 @@ select.field {
   margin: 0;
   padding: 0.4rem 0;
   border-top: 1px solid var(--border);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 0.76rem;
   line-height: 1.45;
   overflow-x: auto;
@@ -1504,8 +1684,8 @@ select.field {
   background: rgba(248, 81, 73, 0.15);
 }
 .diff__line--hunk {
-  color: var(--accent);
-  background: rgba(88, 166, 255, 0.08);
+  color: var(--muted);
+  background: var(--bg-active);
 }
 
 /* mapping + prepare (Stage 4) */
@@ -1533,7 +1713,7 @@ select.field {
 }
 
 .mapping__val {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 0.78rem;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1592,7 +1772,10 @@ select.field {
 
 .review-launcher {
   max-width: 100%;
-  background: #0f141b;
+  background: var(--bg-surface);
+  border-radius: var(--radius-lg);
+  padding: 1.2rem 1.3rem;
+  gap: 1rem;
 }
 
 .review-launcher__head {
@@ -1600,6 +1783,8 @@ select.field {
   align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
 }
 
 .review-launcher__target {
@@ -1619,7 +1804,9 @@ select.field {
 
 .review-launcher__target h3 {
   margin: 0;
-  font-size: 1rem;
+  font-size: 1.05rem;
+  font-weight: var(--weight-semibold);
+  letter-spacing: -0.015em;
   line-height: 1.25;
   overflow-wrap: anywhere;
 }
@@ -1641,38 +1828,52 @@ select.field {
   max-width: 45%;
 }
 
+/* Target metadata is informational, not interactive — keep it quiet, not accent. */
+.review-launcher__meta .chip {
+  color: var(--muted);
+  background: var(--bg-surface);
+  border-color: var(--border);
+}
+
 .review-launcher__mode {
   display: inline-grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.15rem;
   align-self: flex-start;
-  width: min(100%, 17rem);
+  width: min(100%, 18rem);
+  padding: 0.2rem;
   border: 1px solid var(--border);
-  border-radius: 8px;
-  overflow: hidden;
+  border-radius: var(--radius-lg);
+  background: var(--panel);
 }
 
 .review-launcher__mode-btn {
   min-width: 0;
-  border: 0;
-  border-right: 1px solid var(--border);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--muted);
-  padding: 0.45rem 0.7rem;
+  padding: 0.4rem 0.7rem;
   font: inherit;
   font-size: 0.82rem;
+  font-weight: var(--weight-medium);
   cursor: pointer;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  transition: all var(--transition-fast);
 }
 
-.review-launcher__mode-btn:last-child {
-  border-right: 0;
+.review-launcher__mode-btn:hover:not(.review-launcher__mode-btn--active) {
+  color: var(--fg);
+  background: var(--bg-hover);
 }
 
 .review-launcher__mode-btn--active {
-  background: rgba(88, 166, 255, 0.14);
+  background: var(--bg-surface);
+  border-color: var(--border);
   color: var(--fg);
+  box-shadow: var(--shadow-sm);
 }
 
 .review-launcher__controls {
@@ -1741,16 +1942,16 @@ select.field {
   margin: 0;
   max-height: 360px;
   overflow: auto;
-  background: #010409;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  padding: 0.7rem;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.76rem;
-  line-height: 1.5;
+  background: var(--bg-code);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  padding: 0.8rem 0.9rem;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  line-height: 1.55;
   white-space: pre-wrap;
   word-break: break-word;
-  color: #c9d1d9;
+  color: var(--fg-code);
 }
 
 .run__local,
@@ -1770,7 +1971,9 @@ select.field {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(1, 4, 9, 0.7);
+  background: rgba(5, 7, 11, 0.6);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1784,12 +1987,13 @@ select.field {
   max-width: 560px;
   align-self: flex-start;
   margin-top: 8vh;
-  background: var(--panel);
+  background: var(--bg-raised);
   border: 1px solid var(--border);
-  border-radius: 11px;
+  border-radius: var(--radius-xl);
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  box-shadow: var(--shadow-lg);
 }
 .palette__input {
   border: none;
@@ -1814,7 +2018,7 @@ select.field {
   cursor: pointer;
 }
 .palette__item--active {
-  background: rgba(88, 166, 255, 0.16);
+  background: var(--accent-muted);
 }
 .palette__hint {
   color: var(--muted);
@@ -1830,15 +2034,16 @@ select.field {
 .modal {
   width: 100%;
   max-width: 640px;
-  background: var(--bg);
+  background: var(--bg-raised);
   border: 1px solid var(--border);
-  border-radius: 11px;
-  padding: 1.2rem;
+  border-radius: var(--radius-xl);
+  padding: 1.3rem;
   display: flex;
   flex-direction: column;
   gap: 0.7rem;
   max-height: 85vh;
   overflow: auto;
+  box-shadow: var(--shadow-lg);
 }
 
 /* A confirm dialog needs only a title + a line of text + two buttons — keep it compact. */
@@ -1860,7 +2065,7 @@ select.field {
 .modal__body {
   width: 100%;
   resize: vertical;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 0.8rem;
   line-height: 1.5;
 }
@@ -2077,7 +2282,7 @@ select.field {
   flex: none;
 }
 .run-line__detail {
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-mono);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2138,7 +2343,7 @@ select.field {
   min-width: 0;
 }
 .pe-step__id {
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-mono);
   color: var(--muted);
 }
 .pe-schedule {

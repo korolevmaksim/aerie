@@ -135,3 +135,103 @@ Panel review is now a persisted group over normal child runs:
   confirm-gated, and main derives the commit/PR/issue target from the stored group target.
 - Child runs remain visible inside the panel for logs, kill/status handling, and debugging,
   but they are no longer the top-level UX artifact.
+
+---
+
+Date: 2026-06-24
+
+## Product Question: Visual Maturity
+
+The cockpit information architecture was sound, but the *visual* layer still read as a
+prototype rather than a product: a three-stop rainbow gradient wordmark, an indigo accent
+fighting hard-coded blues in several places, harsh near-black backgrounds with cheap accent
+glows, untreated system typography, and — most damaging — **four design tokens that were
+referenced but never defined** (`--bg-hover`, `--bg-active`, `--fg-muted`, `--border-default`),
+so hover and active states silently did nothing. This pass is appearance-only: no component
+logic, IPC, or behavior changed.
+
+## External Patterns Reviewed
+
+- [Linear design system](https://linear.app) — the benchmark for serious dark-first desktop
+  tooling. Near-black canvas (`#08090a`) with a layered surface ladder, a tiered grayscale
+  text hierarchy (`#f7f8f8` / `#d0d6e0` / `#8a8f98` / `#62666d`), **one** restrained
+  lavender-indigo accent (`#5e6ad2`), Inter at custom weights with negative tracking, and
+  flat elevation carried by hairline borders rather than shadows. Takeaway: discipline scales
+  — one accent, a surface ladder, hairlines, and tracking do almost all the work.
+- [Anthropic / Claude](https://claude.ai) — warm ivory canvas (`#faf9f5`), warm-black ink
+  (never cool gray on a warm field), a single clay accent (`#cc785c`), serif display + sans
+  body, flat surface bands, no gradients. Takeaway: a single accent held in reserve plus a
+  thermally-consistent neutral ramp reads as "made by people with a point of view".
+- [GitHub Primer / Copilot](https://primer.style) — functional semantic tokens shared across
+  modes (`canvas.default #0d1117`, `fg.default #e6edf3`, `fg.muted #8b949e`, `border #30363d`,
+  `accent #2f81f7`). Takeaway: model color as semantic roles so light/dark stay in lockstep,
+  and keep code/console surfaces deliberately inset.
+- 2026 developer-tool convention (Zed, Cursor, Warp, Raycast, Geist) — cool-neutral or
+  warm-tinted surfaces over true black, comfortable density (≈4px base, ≈13–15px body),
+  tabular numerals for metrics, and avoidance of generic "shadcn-default" gradients/glows.
+
+## Aerie Decision
+
+A single, disciplined, token-driven design language (dark-first, light theme in lockstep):
+
+1. **One accent.** A refined indigo-violet (`#6970e6` dark / `#5a61d6` light), used scarcely
+   for primary actions, focus, links, and active nav. Every previously hard-coded blue/amber
+   (palette, mode toggles, findings, hunk headers, warnings) now routes through accent or the
+   semantic tokens, so there is no second chromatic color.
+2. **Surface ladder, not glows.** `canvas → panel → surface → raised` (`#0b0d10 → #111418 →
+   #171b21 → #1c212a`) with hairline borders and soft, flat shadows; the accent glow on the
+   primary button and the `--shadow-glow` were removed.
+3. **Tiered text + intentional type.** Four text tiers (`--fg / --fg-muted / --muted /
+   --fg-subtle`), a native-grade system stack (SF Pro on macOS) with negative tracking on
+   headings, tabular numerals on metrics, and unified `--font-mono` everywhere.
+4. **Solid wordmark.** The rainbow-gradient text wordmark became a solid wordmark with one
+   small accent mark — the single decorative device.
+5. **Defined interaction states.** The four undefined tokens are now real, so hover/active
+   states work across buttons, rows, nav, and cards.
+6. **Theme-aware everywhere.** Surfaces that hard-coded `rgba(255,255,255,0.02)` (panel-report
+   tiles, agent cards) now use tokens, so light theme no longer renders invisible fills;
+   consoles/diffs stay intentionally dark in both themes (terminal convention).
+7. **No new privilege.** Purely a renderer styling change in `main.css` / `shell.css` and
+   `index.html`; no IPC, GitHub write, token, git, or agent surface was touched.
+
+The full token reference and component rules live in `docs/design-system.md`.
+
+---
+
+Date: 2026-06-25
+
+## Product Question: Adopt the OpenAI / ChatGPT visual language
+
+The disciplined indigo system was a real step up, but the owner identified a specific design
+language he wants Aerie to match: the **OpenAI / ChatGPT desktop product UI** (chat view,
+Automations, Settings, the "Welcome back" home). The reference was supplied directly as
+screenshots.
+
+## Pattern Reviewed (the reference itself)
+
+- **Near-monochrome, near-black canvas.** The entire chrome is grayscale on `~#0d0d0d` (white in
+  light mode). Color is the exception — a tiny warm-orange caret, muted green/red for diffs,
+  otherwise none. Takeaway: hierarchy must come from spacing, weight, surface steps, and
+  hairlines, not color.
+- **Hairlines over shadows.** Cards and settings rows are separated by ~1px translucent borders;
+  there is essentially no shadow except on true overlays. Takeaway: go flat; reserve shadow for
+  modals/popovers.
+- **Neutral high-contrast primary button.** The single prominent action (e.g. send) is a
+  near-white button on dark, dark text — not a colored fill. Takeaway: contrast, not hue, is the
+  primary affordance; everything else is bordered/ghost.
+- **Roomy, calm layout.** Generous padding, hairline-divided settings rows (label + control +
+  muted description), large confident page titles. Takeaway: lean roomy.
+- **Soft geometry + pills.** Medium-large radii on cards/inputs; fully-rounded tabs, toggles,
+  and chips with neutral (not colored) active fills.
+
+## Aerie Decision
+
+Re-theme the whole token layer from "single indigo accent" to the OpenAI-style language:
+near-monochrome grayscale chrome, one reserved **warm accent** (`#f0865a` dark / `#d96b3a`
+light) for the caret/focus/links/finding-locations/brand mark/running state only, muted
+semantic green/amber/red, translucent hover/active overlays, hairline borders, flat elevation,
+a 4px spacing scale, larger radii, and a **neutral high-contrast primary button**
+(`--btn-primary-*`). Codified in `docs/design-system.md`; applied app-wide via tokens plus
+targeted component rules (primary button, neutral nav active state, neutralized code/SHA/hunk,
+the warm caret, airier spacing). Appearance-only — no component logic, IPC, GitHub write, token,
+git, or agent surface changed.
