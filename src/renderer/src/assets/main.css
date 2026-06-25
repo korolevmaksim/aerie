@@ -487,22 +487,31 @@ select.field {
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
+  min-width: 0;
 }
 
 .run__finding {
   display: flex;
   align-items: baseline;
   gap: 0.5rem;
+  min-width: 0;
+  flex-wrap: wrap;
   font-size: 0.85rem;
 }
 
 .run__finding-loc {
+  min-width: 0;
+  max-width: min(100%, 34rem);
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: var(--accent);
   white-space: nowrap;
 }
 
 .run__finding-msg {
+  flex: 1 1 18rem;
   min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .sev {
@@ -1056,6 +1065,7 @@ select.field {
 .panel-report {
   display: grid;
   gap: 18px;
+  min-width: 0;
 }
 
 .panel-report__bar {
@@ -1100,6 +1110,7 @@ select.field {
 .panel-report__section {
   display: grid;
   gap: 10px;
+  min-width: 0;
 }
 
 .panel-report__section h3 {
@@ -1110,9 +1121,12 @@ select.field {
 .panel-report__agents {
   display: grid;
   gap: 10px;
+  min-width: 0;
 }
 
 .panel-report__agent {
+  min-width: 0;
+  overflow: hidden;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--bg-surface);

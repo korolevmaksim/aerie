@@ -98,6 +98,10 @@ same change set.
 
 ### Fixed
 
+- **Panel report layout no longer overflows**: long structured-finding paths and messages now
+  stay inside the consolidated review panel instead of pushing the Agent reports section out of
+  alignment.
+
 - **Consolidated reports now exclude failed agent runs**: panel and automation reports only include
   successfully completed, usable child reviews. Errored/killed agents remain in local run history but
   their startup errors or partial transcripts no longer appear in the copy-ready report body.
