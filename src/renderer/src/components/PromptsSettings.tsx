@@ -18,6 +18,7 @@ function PromptsSettings(): React.JSX.Element {
     name: '',
     body: ''
   })
+  const [loaded, setLoaded] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const confirm = useConfirm()
@@ -25,8 +26,16 @@ function PromptsSettings(): React.JSX.Element {
   useEffect(() => {
     let cancelled = false
     void (async () => {
-      const res = await window.aerie.prompts.list()
-      if (!cancelled && res.ok) setPrompts(res.value)
+      try {
+        const res = await window.aerie.prompts.list()
+        if (!cancelled && res.ok) setPrompts(res.value)
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Could not load review prompts.')
+        }
+      } finally {
+        if (!cancelled) setLoaded(true)
+      }
     })()
     return () => {
       cancelled = true
@@ -154,7 +163,9 @@ function PromptsSettings(): React.JSX.Element {
       </form>
       {error && <p className="alert">{error}</p>}
 
-      {prompts.length === 0 ? (
+      {!loaded ? (
+        <p className="empty">Loading prompts…</p>
+      ) : prompts.length === 0 ? (
         <p className="empty">No prompts yet.</p>
       ) : (
         <ul className="prompt-list">

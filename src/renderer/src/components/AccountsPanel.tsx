@@ -38,6 +38,7 @@ function AccountsPanel({
   const [pendingId, setPendingId] = useState<number | null>(null)
   const [reauthId, setReauthId] = useState<number | null>(null)
   const [reauthToken, setReauthToken] = useState('')
+  const [accountsLoaded, setAccountsLoaded] = useState(false)
   const [ratesLoading, setRatesLoading] = useState(true)
   const confirm = useConfirm()
 
@@ -51,6 +52,7 @@ function AccountsPanel({
         const list = await window.aerie.accounts.list()
         if (cancelled) return
         setAccounts(list)
+        setAccountsLoaded(true)
 
         // `accounts.list()` returns no rate limit (it's only known after a live
         // read), so the panel would otherwise open showing "rate: —". Auto-load
@@ -71,7 +73,10 @@ function AccountsPanel({
           })
         )
       } catch (e) {
-        if (!cancelled) setError(String(e))
+        if (!cancelled) {
+          setError(String(e))
+          setAccountsLoaded(true)
+        }
       } finally {
         if (!cancelled) setRatesLoading(false)
       }
@@ -197,7 +202,9 @@ function AccountsPanel({
 
       {error && <p className="alert">{error}</p>}
 
-      {accounts.length === 0 ? (
+      {!accountsLoaded ? (
+        <p className="empty">Loading accounts…</p>
+      ) : accounts.length === 0 ? (
         <div className="empty onboarding">
           <p>
             <strong>Welcome to Aerie.</strong> It runs your local AI coding agents (Codex, Claude

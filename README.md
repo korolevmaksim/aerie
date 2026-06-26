@@ -33,6 +33,8 @@ third-party service.
 - **Review cockpit** — after adding an account, Aerie opens on an account-scoped cockpit
   with active runs, attention-worthy reviews, ready-to-post results, favorite/recent repo
   targets, agent readiness, automation liveness, and the local trust boundary in one place.
+  Initial loads and account switches show explicit loading placeholders instead of stale
+  counts or empty-state flashes.
   On macOS, the native traffic-light controls sit in a seamless draggable header that
   reserves space above the UI; the task sidebar can collapse to a compact rail when the
   review surface needs more room.

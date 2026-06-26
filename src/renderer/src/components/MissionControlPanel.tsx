@@ -77,15 +77,19 @@ function RepoShortcut({
 function Metric({
   label,
   value,
-  tone = 'neutral'
+  tone = 'neutral',
+  loading = false
 }: {
   label: string
-  value: number
+  value: number | string
   tone?: 'neutral' | 'good' | 'warn' | 'bad'
+  loading?: boolean
 }): React.JSX.Element {
   return (
-    <div className={`cockpit-metric cockpit-metric--${tone}`}>
-      <span className="cockpit-metric__value">{value}</span>
+    <div
+      className={`cockpit-metric cockpit-metric--${tone}${loading ? ' cockpit-metric--loading' : ''}`}
+    >
+      <span className={`cockpit-metric__value${loading ? ' loading-skeleton' : ''}`}>{value}</span>
       <span className="cockpit-metric__label">{label}</span>
     </div>
   )
@@ -285,7 +289,7 @@ function MissionControlPanel({
             Open history
           </button>
           <button className="btn btn--ghost" onClick={() => void refresh()} disabled={refreshing}>
-            {refreshing ? 'Refreshing...' : 'Refresh'}
+            {refreshing ? 'Refreshing…' : 'Refresh'}
           </button>
         </div>
       </div>
@@ -293,25 +297,39 @@ function MissionControlPanel({
       {error && <p className="alert">{error}</p>}
 
       <div className="cockpit__metrics" aria-busy={loading}>
-        <Metric
-          label="running"
-          value={summary.active}
-          tone={summary.active > 0 ? 'warn' : 'neutral'}
-        />
-        <Metric
-          label="needs review"
-          value={summary.attention}
-          tone={summary.attention > 0 ? 'bad' : 'good'}
-        />
-        <Metric label="ready to post" value={summary.readyToPost} tone="warn" />
-        <Metric label="handled" value={summary.handled} tone="neutral" />
-        <Metric label="completed" value={summary.completed} tone="good" />
-        <Metric label="posted" value={summary.posted} tone="neutral" />
+        {loading && <span className="sr-only">Loading cockpit metrics…</span>}
+        {loading ? (
+          <>
+            <Metric label="running" value="—" loading />
+            <Metric label="needs review" value="—" loading />
+            <Metric label="ready to post" value="—" loading />
+            <Metric label="handled" value="—" loading />
+            <Metric label="completed" value="—" loading />
+            <Metric label="posted" value="—" loading />
+          </>
+        ) : (
+          <>
+            <Metric
+              label="running"
+              value={summary.active}
+              tone={summary.active > 0 ? 'warn' : 'neutral'}
+            />
+            <Metric
+              label="needs review"
+              value={summary.attention}
+              tone={summary.attention > 0 ? 'bad' : 'good'}
+            />
+            <Metric label="ready to post" value={summary.readyToPost} tone="warn" />
+            <Metric label="handled" value={summary.handled} tone="neutral" />
+            <Metric label="completed" value={summary.completed} tone="good" />
+            <Metric label="posted" value={summary.posted} tone="neutral" />
+          </>
+        )}
       </div>
 
       <div className="cockpit__grid">
         <div className="cockpit__main">
-          <section className="cockpit-section">
+          <section className="cockpit-section" aria-busy={loading}>
             <div className="cockpit-section__head">
               <div>
                 <h2>Attention queue</h2>
@@ -334,7 +352,7 @@ function MissionControlPanel({
             )}
           </section>
 
-          <section className="cockpit-section">
+          <section className="cockpit-section" aria-busy={loading}>
             <div className="cockpit-section__head">
               <div>
                 <h2>In progress</h2>
@@ -357,7 +375,7 @@ function MissionControlPanel({
             )}
           </section>
 
-          <section className="cockpit-section">
+          <section className="cockpit-section" aria-busy={loading}>
             <div className="cockpit-section__head">
               <div>
                 <h2>Review targets</h2>
@@ -381,20 +399,24 @@ function MissionControlPanel({
           </section>
         </div>
 
-        <aside className="cockpit__rail" aria-label="Readiness and automation">
+        <aside className="cockpit__rail" aria-label="Readiness and automation" aria-busy={loading}>
           <section className="cockpit-rail-card">
             <div className="cockpit-rail-card__head">
               <h2>Agent readiness</h2>
-              <span className="status-pill status-pill--ok">
-                {installedAgents.length}/{agents.length || 0}
+              <span className={`status-pill status-pill--${loading ? 'muted' : 'ok'}`}>
+                {loading ? '…' : `${installedAgents.length}/${agents.length || 0}`}
               </span>
             </div>
-            <p className="muted">
-              {installedAgents.length} installed
-              {waitingForApproval.length > 0
-                ? ` · ${waitingForApproval.length} waiting for approval`
-                : ' · all approved or built-in'}
-            </p>
+            {loading ? (
+              <p className="muted">Loading agent readiness…</p>
+            ) : (
+              <p className="muted">
+                {installedAgents.length} installed
+                {waitingForApproval.length > 0
+                  ? ` · ${waitingForApproval.length} waiting for approval`
+                  : ' · all approved or built-in'}
+              </p>
+            )}
             <button
               className="btn btn--ghost cockpit-rail-card__action"
               onClick={() => onNavigate('tools')}
@@ -407,11 +429,15 @@ function MissionControlPanel({
             <div className="cockpit-rail-card__head">
               <h2>Automation</h2>
               <span className="status-pill status-pill--muted">
-                {enabledPipelines.length} enabled
+                {loading ? '…' : `${enabledPipelines.length} enabled`}
               </span>
             </div>
             <p className="muted">
-              {poller ? formatPollerStatus(poller, now) : 'Poller status unavailable.'}
+              {loading
+                ? 'Loading automation status…'
+                : poller
+                  ? formatPollerStatus(poller, now)
+                  : 'Poller status unavailable.'}
             </p>
             <button
               className="btn btn--ghost cockpit-rail-card__action"

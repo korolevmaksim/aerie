@@ -9,27 +9,36 @@ function PresetsSettings(): React.JSX.Element {
   const [agentId, setAgentId] = useState('')
   const [model, setModel] = useState('')
   const [reasoning, setReasoning] = useState('')
+  const [loaded, setLoaded] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
     void (async () => {
-      const [a, p] = await Promise.all([
-        window.aerie.runner.listAgents(),
-        window.aerie.presets.list()
-      ])
-      if (cancelled) return
-      if (a.ok) {
-        setAgents(a.value)
-        const first = a.value.find((x) => x.available) ?? a.value[0]
-        if (first) {
-          setAgentId(first.id)
-          setModel(first.model)
-          setReasoning(first.reasoning)
+      try {
+        const [a, p] = await Promise.all([
+          window.aerie.runner.listAgents(),
+          window.aerie.presets.list()
+        ])
+        if (cancelled) return
+        if (a.ok) {
+          setAgents(a.value)
+          const first = a.value.find((x) => x.available) ?? a.value[0]
+          if (first) {
+            setAgentId(first.id)
+            setModel(first.model)
+            setReasoning(first.reasoning)
+          }
         }
+        if (p.ok) setPresets(p.value)
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Could not load review presets.')
+        }
+      } finally {
+        if (!cancelled) setLoaded(true)
       }
-      if (p.ok) setPresets(p.value)
     })()
     return () => {
       cancelled = true
@@ -135,7 +144,9 @@ function PresetsSettings(): React.JSX.Element {
       </form>
       {error && <p className="alert">{error}</p>}
 
-      {presets.length === 0 ? (
+      {!loaded ? (
+        <p className="empty">Loading presets…</p>
+      ) : presets.length === 0 ? (
         <p className="empty">No presets yet.</p>
       ) : (
         <ul className="accounts">

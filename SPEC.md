@@ -111,7 +111,9 @@ operator view over existing safe IPC data (`repos:list`, `runner:listAllRuns`,
 `runner:listAgents`, `pipelines:list`, `pipelines:pollerStatus`). It promotes the core
 review loop instead of module tabs: active runs, failed/stopped/ready-to-post reviews,
 favorite/recent repo targets, agent readiness, automation liveness, and the local trust
-boundary. The persistent task sidebar is renderer-only and can collapse to a compact rail;
+boundary. First account loads and account switches render loading-safe placeholders so stale
+metrics, readiness, and automation values are not shown as current data. The persistent task
+sidebar is renderer-only and can collapse to a compact rail;
 the preference is stored in renderer-local storage and adds no IPC surface. It is a
 renderer-only composition layer: it adds no privileged IPC, GitHub write, token, git, or
 agent execution surface.

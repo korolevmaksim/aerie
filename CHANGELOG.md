@@ -13,6 +13,10 @@ same change set.
 
 ### Added
 
+- **Loading state clarity**: Review Cockpit now shows loading-safe metric and rail placeholders
+  during first load or account switches instead of stale zeros, while Accounts, review launchers,
+  prompt/preset settings, and panel reports avoid false empty states before their data arrives.
+
 - **Seamless macOS window chrome**: the desktop shell now uses Electron's hidden native
   titlebar on macOS, keeps the native close/minimize/zoom traffic lights, reserves a
   top drag region so controls do not overlap the Aerie UI, and leaves non-macOS window

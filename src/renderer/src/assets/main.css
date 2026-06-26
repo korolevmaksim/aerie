@@ -1,16 +1,16 @@
-/*
- * Aerie design tokens — OpenAI/ChatGPT-inspired: near-monochrome, near-black,
- * calm, hairline-bordered, flat. Color is the exception; one warm accent is held
- * in reserve. The whole UI is token-driven, so palette/type/space/elevation live
- * here. Dark is the default; the light theme overrides these in the
- * prefers-color-scheme block below. See docs/design-system.md.
+/* Hallmark · genre: modern-minimal · macrostructure: workbench · design-system: design.md · designed-as-app
+ *
+ * Aerie design tokens — near-monochrome, near-black, calm, hairline-bordered,
+ * flat. Colour is the exception; one warm accent is held in reserve. The whole
+ * UI is token-driven. Dark is the default; the light theme overrides these in
+ * the prefers-color-scheme block below. All colours are OKLCH.
  */
 :root {
   color-scheme: dark;
 
   /* Typography — native-grade UI face on macOS, refined dev mono. */
   --font-sans:
-    -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', system-ui, 'Segoe UI', Roboto,
+    -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, 'Segoe UI', Roboto,
     'Helvetica Neue', Arial, sans-serif;
   --font-mono:
     'SF Mono', ui-monospace, 'JetBrains Mono', 'Cascadia Code', SFMono-Regular, Menlo, Monaco,
@@ -25,6 +25,7 @@
   /* Border radii — soft geometry. */
   --radius-sm: 6px;
   --radius-md: 8px;
+  --radius-card: 10px;
   --radius-lg: 12px;
   --radius-xl: 16px;
   --radius-full: 9999px;
@@ -44,130 +45,145 @@
   --transition-fast: 110ms cubic-bezier(0.4, 0, 0.2, 1);
   --transition-normal: 200ms cubic-bezier(0.4, 0, 0.2, 1);
 
-  /* Surfaces — near-black ladder. Hover/active are translucent overlays so they
-     read correctly on canvas, panels, and cards alike. */
-  --bg: #0d0d0d;
-  --panel: #171717;
-  --bg-surface: #1f1f1f;
-  --bg-raised: #262626;
-  --bg-hover: #232323;
-  --bg-active: #2c2c2c;
-  --bg-sidebar: #0a0a0a;
-  --bg-code: #0a0a0a;
-  --fg-code: #e6e6e6;
+  /* Surfaces — near-black ladder (OKLCH, achromatic). */
+  --bg: oklch(15.91% 0 0);                     /* #0d0d0d */
+  --panel: oklch(20.46% 0 0);                   /* #171717 */
+  --bg-surface: oklch(23.93% 0 0);              /* #1f1f1f */
+  --bg-raised: oklch(26.86% 0 0);               /* #262626 */
+  --bg-hover: oklch(25.62% 0 0);                /* #232323 */
+  --bg-active: oklch(29.31% 0 0);               /* #2c2c2c */
+  --bg-sidebar: oklch(14.48% 0 0);              /* #0a0a0a */
+  --bg-code: oklch(14.48% 0 0);                 /* #0a0a0a */
+  --fg-code: oklch(92.49% 0 0);                 /* #e6e6e6 */
 
   /* Hairlines — translucent so they adapt to any surface. */
   --border: rgba(255, 255, 255, 0.1);
   --border-hover: rgba(255, 255, 255, 0.2);
   --border-default: rgba(255, 255, 255, 0.1);
+  --border-faint: rgba(255, 255, 255, 0.08);
   --border-focus: var(--accent);
 
-  /* Text hierarchy — four tiers, neutral grays. */
-  --fg: #ededed;
-  --fg-muted: #cdcdcd;
-  --muted: #9b9b9b;
-  --fg-subtle: #707070;
+  /* Text hierarchy — four tiers, neutral grays (OKLCH). */
+  --fg: oklch(94.61% 0 0);                      /* #ededed */
+  --fg-muted: oklch(84.83% 0 0);                /* #cdcdcd */
+  --muted: oklch(68.95% 0 0);                   /* #9b9b9b */
+  --fg-subtle: oklch(54.52% 0 0);               /* #707070 */
 
   /* Accent — one reserved warm tone (caret, focus, links, brand, running state). */
-  --accent: #f0865a;
-  --accent-hover: #ff9d73;
-  --accent-fg: #1a1207;
-  --on-accent: #1a1207;
-  --accent-muted: rgba(240, 134, 90, 0.16);
-  --accent-border: rgba(240, 134, 90, 0.45);
-  --accent-glow: rgba(240, 134, 90, 0.16);
+  --accent: oklch(72.72% 0.1426 42.7);           /* #f0865a */
+  --accent-hover: oklch(78.75% 0.1303 43.7);     /* #ff9d73 */
+  --accent-fg: oklch(18.91% 0.0244 75);           /* #1a1207 */
+  --on-accent: oklch(18.91% 0.0244 75);           /* #1a1207 */
+  --accent-muted: oklch(72.72% 0.1426 42.7 / 0.16);
+  --accent-border: oklch(72.72% 0.1426 42.7 / 0.45);
+  --accent-glow: oklch(72.72% 0.1426 42.7 / 0.16);
 
   /* Primary action — high-contrast NEUTRAL button (contrast is the affordance). */
-  --btn-primary-bg: #f2f2f2;
-  --btn-primary-bg-hover: #ffffff;
-  --btn-primary-fg: #0d0d0d;
+  --btn-primary-bg: oklch(96.12% 0 0);           /* #f2f2f2 */
+  --btn-primary-bg-hover: oklch(100% 0 0);       /* #ffffff */
+  --btn-primary-fg: oklch(15.91% 0 0);           /* #0d0d0d */
 
   /* Semantic — success (muted). */
-  --ok: #4eb87a;
-  --ok-bg: rgba(78, 184, 122, 0.12);
-  --ok-border: rgba(78, 184, 122, 0.3);
+  --ok: oklch(70.43% 0.1344 155);                /* #4eb87a */
+  --ok-bg: oklch(70.43% 0.1344 155 / 0.12);
+  --ok-border: oklch(70.43% 0.1344 155 / 0.3);
 
   /* Semantic — warning / at-risk (muted). */
-  --mid: #d9a441;
-  --mid-bg: rgba(217, 164, 65, 0.12);
-  --mid-border: rgba(217, 164, 65, 0.3);
+  --mid: oklch(75.07% 0.1295 79.8);              /* #d9a441 */
+  --mid-bg: oklch(75.07% 0.1295 79.8 / 0.12);
+  --mid-border: oklch(75.07% 0.1295 79.8 / 0.3);
 
   /* Semantic — danger / destructive (muted). */
-  --low: #e96a62;
-  --low-bg: rgba(233, 106, 98, 0.12);
-  --low-border: rgba(233, 106, 98, 0.32);
-  --danger: #e96a62;
+  --low: oklch(67.68% 0.1593 25.8);              /* #e96a62 */
+  --low-bg: oklch(67.68% 0.1593 25.8 / 0.12);
+  --low-border: oklch(67.68% 0.1593 25.8 / 0.32);
+  --danger: oklch(67.68% 0.1593 25.8);           /* #e96a62 */
+
+  /* Diff colours — kept as named tokens for theme portability. */
+  --diff-add-bg: oklch(70.43% 0.1344 155 / 0.15);
+  --diff-del-bg: oklch(67.68% 0.1593 25.8 / 0.15);
+
+  /* Overlay. */
+  --overlay-bg: oklch(14.48% 0 0 / 0.6);
 
   /* Elevation — flat; cards rely on hairlines, shadow is for overlays only. */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.18);
-  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.3);
-  --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.5);
+  --shadow-sm: 0 1px 2px oklch(0% 0 0 / 0.18);
+  --shadow-md: 0 4px 16px oklch(0% 0 0 / 0.3);
+  --shadow-lg: 0 16px 48px oklch(0% 0 0 / 0.5);
   --shadow-glow: 0 0 0 1px var(--accent-border);
 
-  --brand-gradient: linear-gradient(135deg, #ffb08a 0%, #f0865a 100%);
+  --brand-gradient: linear-gradient(135deg, var(--accent-hover) 0%, var(--accent) 100%);
 }
 
 @media (prefers-color-scheme: light) {
   :root {
     color-scheme: light;
 
-    /* Surfaces — clean white with a faint gray inset. */
-    --bg: #ffffff;
-    --panel: #ffffff;
-    --bg-surface: #f7f7f8;
-    --bg-raised: #ffffff;
-    --bg-hover: #f0f0f0;
-    --bg-active: #e6e6e6;
-    --bg-sidebar: #f9f9f9;
+    /* Surfaces — warm-tinted toward the accent hue (~55° amber), not flat white. */
+    --bg: oklch(99.2% 0.004 55);                  /* warm paper */
+    --panel: oklch(99.8% 0.002 55);                /* near-white */
+    --bg-surface: oklch(97.5% 0.003 55);           /* inset */
+    --bg-raised: oklch(99.5% 0.002 55);            /* lifted */
+    --bg-hover: oklch(95.5% 0.003 55);             /* hover */
+    --bg-active: oklch(93% 0.004 55);              /* pressed */
+    --bg-sidebar: oklch(98% 0.003 55);             /* sidebar */
     /* Consoles/diffs stay dark in light mode — terminal convention reads as deliberate. */
-    --bg-code: #0a0a0a;
-    --fg-code: #e6e6e6;
+    --bg-code: oklch(14.48% 0 0);                  /* #0a0a0a */
+    --fg-code: oklch(92.49% 0 0);                  /* #e6e6e6 */
 
     /* Hairlines. */
     --border: rgba(0, 0, 0, 0.1);
     --border-hover: rgba(0, 0, 0, 0.2);
     --border-default: rgba(0, 0, 0, 0.1);
+    --border-faint: rgba(0, 0, 0, 0.06);
     --border-focus: var(--accent);
 
     /* Text hierarchy. */
-    --fg: #0d0d0d;
-    --fg-muted: #3a3a3a;
-    --muted: #6e6e6e;
-    --fg-subtle: #9b9b9b;
+    --fg: oklch(15.91% 0 0);                      /* #0d0d0d */
+    --fg-muted: oklch(34.85% 0 0);                /* #3a3a3a */
+    --muted: oklch(53.82% 0 0);                   /* #6e6e6e */
+    --fg-subtle: oklch(68.95% 0 0);               /* #9b9b9b */
 
-    /* Accent — deepened for contrast on white. */
-    --accent: #d96b3a;
-    --accent-hover: #c25a2c;
-    --accent-fg: #ffffff;
-    --on-accent: #ffffff;
-    --accent-muted: rgba(217, 107, 58, 0.12);
-    --accent-border: rgba(217, 107, 58, 0.45);
-    --accent-glow: rgba(217, 107, 58, 0.12);
+    /* Accent — deepened for contrast on light surfaces. */
+    --accent: oklch(64.97% 0.1518 43.1);           /* #d96b3a */
+    --accent-hover: oklch(58.91% 0.146 42.6);      /* #c25a2c */
+    --accent-fg: oklch(100% 0 0);                  /* #ffffff */
+    --on-accent: oklch(100% 0 0);                  /* #ffffff */
+    --accent-muted: oklch(64.97% 0.1518 43.1 / 0.12);
+    --accent-border: oklch(64.97% 0.1518 43.1 / 0.45);
+    --accent-glow: oklch(64.97% 0.1518 43.1 / 0.12);
 
     /* Primary action — high-contrast neutral (dark button on light). */
-    --btn-primary-bg: #0d0d0d;
-    --btn-primary-bg-hover: #2b2b2b;
-    --btn-primary-fg: #ffffff;
+    --btn-primary-bg: oklch(15.91% 0 0);           /* #0d0d0d */
+    --btn-primary-bg-hover: oklch(28.91% 0 0);     /* #2b2b2b */
+    --btn-primary-fg: oklch(100% 0 0);             /* #ffffff */
 
-    --ok: #1f9d4d;
-    --ok-bg: rgba(31, 157, 77, 0.1);
-    --ok-border: rgba(31, 157, 77, 0.28);
+    --ok: oklch(61.24% 0.1578 150);                /* #1f9d4d */
+    --ok-bg: oklch(61.24% 0.1578 150 / 0.1);
+    --ok-border: oklch(61.24% 0.1578 150 / 0.28);
 
-    --mid: #b07d12;
-    --mid-bg: rgba(176, 125, 18, 0.1);
-    --mid-border: rgba(176, 125, 18, 0.28);
+    --mid: oklch(62.51% 0.1254 78.8);              /* #b07d12 */
+    --mid-bg: oklch(62.51% 0.1254 78.8 / 0.1);
+    --mid-border: oklch(62.51% 0.1254 78.8 / 0.28);
 
-    --low: #cf4b44;
-    --low-bg: rgba(207, 75, 68, 0.1);
-    --low-border: rgba(207, 75, 68, 0.28);
-    --danger: #cf4b44;
+    --low: oklch(59.19% 0.1685 26.6);              /* #cf4b44 */
+    --low-bg: oklch(59.19% 0.1685 26.6 / 0.1);
+    --low-border: oklch(59.19% 0.1685 26.6 / 0.28);
+    --danger: oklch(59.19% 0.1685 26.6);           /* #cf4b44 */
 
-    --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
-    --shadow-md: 0 4px 16px rgba(15, 23, 42, 0.08);
-    --shadow-lg: 0 16px 48px rgba(15, 23, 42, 0.16);
+    /* Diff — lighter backgrounds for light mode. */
+    --diff-add-bg: oklch(61.24% 0.1578 150 / 0.12);
+    --diff-del-bg: oklch(59.19% 0.1685 26.6 / 0.12);
+
+    /* Overlay. */
+    --overlay-bg: oklch(15.91% 0 0 / 0.4);
+
+    --shadow-sm: 0 1px 2px oklch(22% 0.02 250 / 0.06);
+    --shadow-md: 0 4px 16px oklch(22% 0.02 250 / 0.08);
+    --shadow-lg: 0 16px 48px oklch(22% 0.02 250 / 0.16);
     --shadow-glow: 0 0 0 1px var(--accent-border);
 
-    --brand-gradient: linear-gradient(135deg, #f0865a 0%, #d96b3a 100%);
+    --brand-gradient: linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%);
   }
 }
 
@@ -279,7 +295,7 @@ h3 {
 .wordmark {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--space-2);
   font-size: 1.3rem;
   font-weight: var(--weight-bold);
   letter-spacing: -0.03em;
@@ -465,7 +481,7 @@ select.field {
   font-size: 0.875rem;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--space-2);
   box-shadow: var(--shadow-sm);
 }
 
@@ -493,7 +509,7 @@ select.field {
 .run__finding {
   display: flex;
   align-items: baseline;
-  gap: 0.5rem;
+  gap: var(--space-2);
   min-width: 0;
   flex-wrap: wrap;
   font-size: 0.85rem;
@@ -551,14 +567,14 @@ select.field {
 /* In-app agent editor (M12). */
 .agent-editor {
   margin-top: 1.4rem;
-  border-top: 1px solid var(--border, #2a2f37);
+  border-top: 1px solid var(--border);
   padding-top: 0.8rem;
 }
 .agent-editor__actions,
 .agent-editor__add {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 .agent-editor__add {
   margin-top: 0.8rem;
@@ -609,7 +625,7 @@ select.field {
   flex-direction: column;
   gap: 0.6rem;
   border: 1px solid var(--border);
-  border-radius: 9px;
+  border-radius: var(--radius-card);
   padding: 0.8rem 0.9rem;
   margin: 0;
 }
@@ -641,7 +657,7 @@ select.field {
 .agent-editor__chips {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 .agent-editor__chip-list {
   display: flex;
@@ -653,7 +669,7 @@ select.field {
   align-items: center;
   gap: 0.35rem;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   padding: 0.15rem 0.3rem 0.15rem 0.6rem;
   font-size: 0.8rem;
 }
@@ -673,7 +689,7 @@ select.field {
   font-size: 0.85rem;
   line-height: 1;
   padding: 0.1rem 0.25rem;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
 }
 .agent-editor__chip-remove:hover {
   color: var(--danger);
@@ -741,7 +757,7 @@ select.field {
 .agent-consent {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 .agent-consent__warn {
   color: var(--mid);
@@ -768,13 +784,51 @@ select.field {
   font-size: 0.9rem;
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  white-space: nowrap;
+  border: 0;
+  clip: rect(0, 0, 0, 0);
+}
+
+@keyframes loading-skeleton-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 0.92;
+  }
+}
+
+.loading-skeleton {
+  display: inline-block;
+  color: transparent !important;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, var(--bg-surface), var(--bg-raised), var(--bg-surface));
+  background-size: 200% 100%;
+  animation: loading-skeleton-pulse 1.35s ease-in-out infinite;
+  user-select: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-skeleton {
+    animation: none;
+  }
+}
+
 .accounts {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 
 .account {
@@ -785,13 +839,13 @@ select.field {
   gap: 0.6rem 1rem;
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 9px;
+  border-radius: var(--radius-card);
   padding: 0.7rem 0.9rem;
 }
 
 .reauth {
   display: flex;
-  gap: 0.5rem;
+  gap: var(--space-2);
   width: 100%;
 }
 
@@ -810,7 +864,9 @@ select.field {
   background: var(--panel);
   padding-right: 0.75rem;
   box-shadow: var(--shadow-sm);
-  transition: all var(--transition-fast);
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast);
 }
 
 .history-row:hover,
@@ -824,7 +880,7 @@ select.field {
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: var(--space-3);
   padding: 0.75rem 1.1rem;
   background: none;
   border: none;
@@ -833,7 +889,7 @@ select.field {
   color: inherit;
   text-align: left;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: background-color var(--transition-fast);
 }
 
 /* Match the focus ring's corners to the button (the global :focus-visible uses 4px). */
@@ -893,7 +949,7 @@ select.field {
 .preset-form {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: var(--space-2);
   margin: 0.7rem 0 1rem;
 }
 
@@ -904,7 +960,7 @@ select.field {
 
 .preset-form__actions {
   display: flex;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 
 .account__label--clamp {
@@ -930,7 +986,7 @@ select.field {
   flex-direction: column;
   gap: 0.45rem;
   border: 1px solid var(--border);
-  border-radius: 9px;
+  border-radius: var(--radius-card);
   padding: 0.7rem 0.9rem;
 }
 
@@ -938,11 +994,11 @@ select.field {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.75rem;
+  gap: var(--space-3);
 }
 
 .prompt-item__name {
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
   min-width: 0;
   flex: 1;
   overflow: hidden;
@@ -1000,7 +1056,7 @@ select.field {
 .run__agent-picks {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: var(--space-2);
   margin: 0.4rem 0;
 }
 
@@ -1015,7 +1071,10 @@ select.field {
   background: var(--panel);
   font-size: 0.85rem;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast);
 }
 
 .run__agent-pick:hover {
@@ -1031,15 +1090,15 @@ select.field {
 
 .run__batch-item {
   margin-top: 0.8rem;
-  border-top: 1px solid var(--border, #2a2f37);
+  border-top: 1px solid var(--border);
   padding-top: 0.6rem;
 }
 
 .run__consensus {
   margin-top: 0.8rem;
   padding: 0.6rem 0.8rem;
-  border: 1px solid var(--border, #2a2f37);
-  border-radius: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
 }
 
 .run__consensus-controls {
@@ -1064,14 +1123,14 @@ select.field {
 
 .panel-report {
   display: grid;
-  gap: 18px;
+  gap: 1.125rem;
   min-width: 0;
 }
 
 .panel-report__bar {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-2);
   flex-wrap: wrap;
 }
 
@@ -1082,20 +1141,20 @@ select.field {
 .panel-report__summary {
   display: grid;
   grid-template-columns: repeat(4, minmax(120px, 1fr));
-  gap: 10px;
+  gap: var(--space-2);
 }
 
 .panel-report__summary > div {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  padding: 12px;
+  padding: 0.75rem;
   display: grid;
-  gap: 6px;
+  gap: 0.375rem;
   background: var(--bg-surface);
 }
 
 .panel-report__summary strong {
-  font-size: 24px;
+  font-size: 1.5rem;
   font-weight: var(--weight-bold);
   font-variant-numeric: tabular-nums;
 }
@@ -1103,24 +1162,24 @@ select.field {
 .panel-report__controls {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-2);
   flex-wrap: wrap;
 }
 
 .panel-report__section {
   display: grid;
-  gap: 10px;
+  gap: var(--space-2);
   min-width: 0;
 }
 
 .panel-report__section h3 {
   margin: 0;
-  font-size: 15px;
+  font-size: 0.9375rem;
 }
 
 .panel-report__agents {
   display: grid;
-  gap: 10px;
+  gap: var(--space-2);
   min-width: 0;
 }
 
@@ -1134,14 +1193,14 @@ select.field {
 
 .panel-report__agent > summary {
   cursor: pointer;
-  padding: 12px;
+  padding: 0.75rem;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-2);
 }
 
 .panel-report__agent > .runview {
-  padding: 0 12px 12px;
+  padding: 0 0.75rem 0.75rem;
 }
 
 .account__main {
@@ -1152,7 +1211,7 @@ select.field {
 }
 
 .account__login {
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
 }
 
 .account__label {
@@ -1162,7 +1221,7 @@ select.field {
 
 .badge {
   font-size: 0.72rem;
-  font-weight: 500;
+  font-weight: var(--weight-medium);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   padding: 0.15rem 0.45rem;
@@ -1182,7 +1241,7 @@ select.field {
 .rate {
   font-size: 0.8rem;
   font-variant-numeric: tabular-nums;
-  font-weight: 500;
+  font-weight: var(--weight-medium);
 }
 
 .rate--ok {
@@ -1239,7 +1298,7 @@ select.field {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
+  gap: var(--space-4);
   flex-wrap: wrap;
   padding-bottom: 0.85rem;
   margin-bottom: 1.1rem;
@@ -1250,7 +1309,7 @@ select.field {
   margin: 0;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 
 .panel__head-actions {
@@ -1268,7 +1327,7 @@ select.field {
   align-items: center;
   gap: 0.45rem;
   font-size: 0.82rem;
-  color: var(--muted, #8a8f98);
+  color: var(--muted);
   margin: 0 0 0.6rem;
 }
 
@@ -1332,14 +1391,14 @@ select.field {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 
 .repo {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
+  gap: var(--space-4);
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -1367,12 +1426,17 @@ select.field {
   font-size: 1.15rem;
   line-height: 1;
   color: var(--muted);
-  transition: all var(--transition-fast);
+  transition: color var(--transition-fast);
 }
 
-.repo__fav:hover {
+.repo__fav:hover,
+.repo__fav:focus-visible {
   color: var(--fg);
   transform: scale(1.15);
+}
+
+.repo__fav:active {
+  transform: scale(0.95);
 }
 
 .repo__fav--on {
@@ -1380,7 +1444,7 @@ select.field {
 }
 
 .repo__name {
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
   font-size: 0.95rem;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1442,12 +1506,12 @@ select.field {
 .worktree {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: var(--space-3);
 }
 
 .worktree__modes {
   display: flex;
-  gap: 1.25rem;
+  gap: var(--space-5);
   flex-wrap: wrap;
 }
 
@@ -1461,7 +1525,7 @@ select.field {
 .project-review {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: var(--space-3);
 }
 
 .project-review__summary {
@@ -1496,7 +1560,10 @@ select.field {
   font-weight: var(--weight-medium);
   white-space: nowrap;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast);
 }
 
 .tab:hover:not(.tab--active) {
@@ -1545,7 +1612,7 @@ select.field {
 .commit-row {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: var(--space-3);
   width: 100%;
   padding: 0.65rem 0.95rem;
   border: 1px solid var(--border);
@@ -1556,7 +1623,9 @@ select.field {
   text-align: left;
   cursor: pointer;
   box-shadow: var(--shadow-sm);
-  transition: all var(--transition-fast);
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast);
 }
 
 .commit-row:hover {
@@ -1594,7 +1663,7 @@ select.field {
 .commit-body {
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: var(--radius-md);
   padding: 0.7rem;
   font-size: 0.82rem;
   white-space: pre-wrap;
@@ -1615,12 +1684,12 @@ select.field {
 .files {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 
 .file {
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   overflow: hidden;
   background: var(--panel);
 }
@@ -1639,7 +1708,7 @@ select.field {
   font-size: 0.62rem;
   letter-spacing: 0.04em;
   padding: 0.1rem 0.35rem;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   color: var(--muted);
 }
@@ -1692,10 +1761,10 @@ select.field {
 }
 
 .diff__line--add {
-  background: rgba(63, 185, 80, 0.15);
+  background: var(--diff-add-bg);
 }
 .diff__line--del {
-  background: rgba(248, 81, 73, 0.15);
+  background: var(--diff-del-bg);
 }
 .diff__line--hunk {
   color: var(--muted);
@@ -1705,7 +1774,7 @@ select.field {
 /* mapping + prepare (Stage 4) */
 .mapping {
   border: 1px solid var(--border);
-  border-radius: 9px;
+  border-radius: var(--radius-card);
   background: var(--panel);
   padding: 0.8rem 0.9rem;
   margin-bottom: 1rem;
@@ -1738,7 +1807,7 @@ select.field {
 .mapping__toggle {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--space-2);
   color: var(--muted);
   cursor: pointer;
 }
@@ -1746,7 +1815,7 @@ select.field {
 .prepare {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--space-2);
   margin-bottom: 1rem;
 }
 
@@ -1756,7 +1825,7 @@ select.field {
 
 .prepare__result {
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--panel);
   padding: 0.6rem 0.8rem;
   display: flex;
@@ -1768,12 +1837,12 @@ select.field {
 .run {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: var(--space-3);
   min-width: 0;
   margin-bottom: 1.2rem;
   padding: 0.9rem;
   border: 1px solid var(--border);
-  border-radius: 9px;
+  border-radius: var(--radius-card);
   background: var(--panel);
 }
 
@@ -1789,14 +1858,14 @@ select.field {
   background: var(--bg-surface);
   border-radius: var(--radius-lg);
   padding: 1.2rem 1.3rem;
-  gap: 1rem;
+  gap: var(--space-4);
 }
 
 .review-launcher__head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 1rem;
+  gap: var(--space-4);
   padding-bottom: 1rem;
   border-bottom: 1px solid var(--border);
 }
@@ -1875,7 +1944,10 @@ select.field {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  transition: all var(--transition-fast);
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast);
 }
 
 .review-launcher__mode-btn:hover:not(.review-launcher__mode-btn--active) {
@@ -1957,7 +2029,7 @@ select.field {
   max-height: 360px;
   overflow: auto;
   background: var(--bg-code);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-faint);
   border-radius: var(--radius-md);
   padding: 0.8rem 0.9rem;
   font-family: var(--font-mono);
@@ -1985,7 +2057,7 @@ select.field {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(5, 7, 11, 0.6);
+  background: var(--overlay-bg);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
   display: flex;
@@ -2028,7 +2100,7 @@ select.field {
   align-items: baseline;
   gap: 0.6rem;
   padding: 0.5rem 0.7rem;
-  border-radius: 7px;
+  border-radius: var(--radius-md);
   cursor: pointer;
 }
 .palette__item--active {
@@ -2097,7 +2169,7 @@ select.field {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 1rem;
+  gap: var(--space-4);
   padding: 2rem;
   text-align: center;
 }
@@ -2110,7 +2182,7 @@ select.field {
   max-width: 600px;
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 0.8rem;
   color: var(--low);
   font-size: 0.85rem;
@@ -2124,11 +2196,11 @@ select.field {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 .pipeline {
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 0.65rem 0.8rem;
   background: var(--panel);
 }
@@ -2147,7 +2219,7 @@ select.field {
   flex-wrap: wrap;
 }
 .pipeline__name {
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
 }
 .pipeline__repo {
   color: var(--muted);
@@ -2178,7 +2250,7 @@ select.field {
 .status-pill {
   font-size: 0.8rem;
   padding: 0.1rem 0.55rem;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   border: 1px solid var(--border);
   color: var(--muted);
 }
@@ -2224,7 +2296,7 @@ select.field {
   height: 1.25rem;
   flex: none;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: var(--bg-active);
   transition:
     background 120ms ease,
@@ -2334,15 +2406,15 @@ select.field {
 }
 .pe-fieldset {
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 0.6rem 0.75rem;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 .pe-fieldset > legend,
 .pe-fieldset > summary {
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
   padding: 0 0.3rem;
 }
 .pe-step {
@@ -2374,7 +2446,7 @@ select.field {
 }
 .pe-radio {
   display: flex;
-  gap: 1rem;
+  gap: var(--space-4);
   flex-wrap: wrap;
 }
 .pe-radio__opt,
@@ -2386,11 +2458,11 @@ select.field {
 }
 .pe-post-danger {
   border: 1px solid var(--low);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 0.5rem 0.6rem;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 .pe-check--danger {
   color: var(--low);
@@ -2423,5 +2495,28 @@ select.field {
     flex: 1 1 100%;
     min-width: 0;
     width: 100%;
+  }
+}
+
+/* --- Reduced-motion --------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* Suppress transform-based hover effects. */
+  .repo__fav:hover,
+  .repo__fav:focus-visible,
+  .repo__fav:active {
+    transform: none;
+  }
+
+  .btn:active {
+    transform: none;
   }
 }

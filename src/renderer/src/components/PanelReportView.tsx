@@ -210,9 +210,11 @@ function PanelReportView({
           agents
         </label>
         <button className="btn btn--ghost" onClick={() => void load()} disabled={loading}>
-          {loading ? 'Refreshing...' : 'Refresh report'}
+          {loading ? 'Refreshing…' : 'Refresh report'}
         </button>
       </div>
+
+      {!report && loading && <p className="empty">Loading report…</p>}
 
       {report && (
         <>

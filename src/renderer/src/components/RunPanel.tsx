@@ -60,6 +60,7 @@ function RunPanel({
   const [selectedPresetId, setSelectedPresetId] = useState('')
   const [prompts, setPrompts] = useState<Prompt[]>([])
   const [promptId, setPromptId] = useState<number | null>(null)
+  const [optionsLoadedFor, setOptionsLoadedFor] = useState<RefType | null>(null)
   const [currentRun, setCurrentRun] = useState<RunRecord | null>(null)
   const [currentGroup, setCurrentGroup] = useState<RunGroupHistoryItem | null>(null)
   const [currentStatus, setCurrentStatus] = useState<RunStatus | null>(null)
@@ -77,26 +78,34 @@ function RunPanel({
   useEffect(() => {
     let cancelled = false
     void (async () => {
-      const [a, p, pr] = await Promise.all([
-        window.aerie.runner.listAgents(),
-        window.aerie.presets.list(),
-        window.aerie.prompts.list()
-      ])
-      if (cancelled) return
-      if (a.ok) {
-        setAgents(a.value)
-        setAgentId((prev) => {
-          if (prev) return prev
-          const firstAvailable = a.value.find((x) => x.available && !x.needsConsent)
-          if (firstAvailable) return firstAvailable.id
-          const firstInstalled = a.value.find((x) => x.available)
-          return (firstInstalled ?? a.value[0])?.id ?? ''
-        })
-      }
-      if (p.ok) setPresets(p.value)
-      if (pr.ok) {
-        setPrompts(pr.value)
-        setPromptId((prev) => prev ?? defaultPromptId(refType, pr.value))
+      try {
+        const [a, p, pr] = await Promise.all([
+          window.aerie.runner.listAgents(),
+          window.aerie.presets.list(),
+          window.aerie.prompts.list()
+        ])
+        if (cancelled) return
+        if (a.ok) {
+          setAgents(a.value)
+          setAgentId((prev) => {
+            if (prev) return prev
+            const firstAvailable = a.value.find((x) => x.available && !x.needsConsent)
+            if (firstAvailable) return firstAvailable.id
+            const firstInstalled = a.value.find((x) => x.available)
+            return (firstInstalled ?? a.value[0])?.id ?? ''
+          })
+        }
+        if (p.ok) setPresets(p.value)
+        if (pr.ok) {
+          setPrompts(pr.value)
+          setPromptId((prev) => prev ?? defaultPromptId(refType, pr.value))
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Could not load review options.')
+        }
+      } finally {
+        if (!cancelled) setOptionsLoadedFor(refType)
       }
     })()
     return () => {
@@ -155,6 +164,7 @@ function RunPanel({
 
   const selectedAgent = agents.find((a) => a.id === agentId)
   const active = currentStatus === 'queued' || currentStatus === 'running'
+  const optionsLoading = optionsLoadedFor !== refType
   // Guard against a promptId that no longer exists (e.g. deleted in Settings): the
   // picker and the start request always use a live id (or the first prompt).
   const effectivePromptId = prompts.some((p) => p.id === promptId)
@@ -328,7 +338,7 @@ function RunPanel({
             setPanelMode(false)
             setError(null)
           }}
-          disabled={starting}
+          disabled={starting || optionsLoading}
         >
           Single agent
         </button>
@@ -342,13 +352,15 @@ function RunPanel({
             )
             setError(null)
           }}
-          disabled={starting}
+          disabled={starting || optionsLoading}
         >
           Panel review
         </button>
       </div>
 
-      {!panelMode ? (
+      {optionsLoading ? (
+        <p className="empty review-launcher__loading">Preparing review options…</p>
+      ) : !panelMode ? (
         <>
           <div className="run__controls review-launcher__controls">
             {presets.length > 0 && (
