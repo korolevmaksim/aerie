@@ -7,6 +7,9 @@ import type {
   PipelineDraft,
   PipelineRunStatus,
   PipelineTrigger,
+  PullRequestFeedbackItem,
+  PullRequestFeedbackKind,
+  PullRequestFeedbackResult,
   RefType,
   ReviewMemoryAnnotation,
   ReviewMemoryDecision,
@@ -27,6 +30,7 @@ import {
   stableFindingIdOf,
   type Finding
 } from './findings'
+import { summarizePullRequestFeedbackItems } from './prFeedbackModel'
 
 /**
  * SQLite store for Aerie. Lives in the main process only. The DB file sits under
@@ -520,6 +524,36 @@ const MIGRATIONS: ReadonlyArray<(db: Database.Database) => void> = [
         ON review_memory_annotations (stable_id, archived_at);
       CREATE INDEX idx_review_memory_context_active
         ON review_memory_annotations (context_hash, archived_at);
+    `)
+  },
+  // v24 — read-only pull-request feedback cache. Main syncs GitHub PR issue
+  // comments and review-thread comments into this local, redacted cache so runs
+  // can receive bounded discussion context without exposing tokens to renderer
+  // code or writing anything back to GitHub.
+  (db) => {
+    db.exec(`
+      CREATE TABLE pr_feedback_items (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        repo_id      INTEGER NOT NULL REFERENCES repos(id) ON DELETE CASCADE,
+        pr_number    INTEGER NOT NULL,
+        kind         TEXT    NOT NULL CHECK (kind IN ('issue_comment','review_thread_comment')),
+        source_id    TEXT    NOT NULL,
+        thread_id    TEXT,
+        is_resolved  INTEGER CHECK (is_resolved IN (0, 1) OR is_resolved IS NULL),
+        is_outdated  INTEGER CHECK (is_outdated IN (0, 1) OR is_outdated IS NULL),
+        path         TEXT,
+        line         INTEGER,
+        author_login TEXT,
+        body         TEXT    NOT NULL DEFAULT '',
+        body_hash    TEXT    NOT NULL,
+        url          TEXT,
+        created_at   TEXT    NOT NULL,
+        updated_at   TEXT,
+        synced_at    TEXT    NOT NULL,
+        UNIQUE (repo_id, kind, source_id)
+      );
+      CREATE INDEX idx_pr_feedback_target ON pr_feedback_items (repo_id, pr_number, updated_at);
+      CREATE INDEX idx_pr_feedback_path ON pr_feedback_items (repo_id, pr_number, path);
     `)
   }
 ]
@@ -1616,6 +1650,150 @@ export function listReviewMemoryAnnotationsForContextHashes(
     )
     .all(...uniqueContextHashes, repoKey, repoKey)
     .map((row) => rowToReviewMemoryAnnotation(row as ReviewMemoryAnnotationRow))
+}
+
+// --- pull request feedback cache ---------------------------------------------
+
+export interface PullRequestFeedbackRow {
+  id: number
+  repo_id: number
+  pr_number: number
+  kind: PullRequestFeedbackKind
+  source_id: string
+  thread_id: string | null
+  is_resolved: number | null
+  is_outdated: number | null
+  path: string | null
+  line: number | null
+  author_login: string | null
+  body: string
+  body_hash: string
+  url: string | null
+  created_at: string
+  updated_at: string | null
+  synced_at: string
+}
+
+export type NewPullRequestFeedbackItem = Omit<
+  PullRequestFeedbackItem,
+  'id' | 'repoId' | 'prNumber' | 'syncedAt'
+>
+
+function rowToPullRequestFeedbackItem(row: PullRequestFeedbackRow): PullRequestFeedbackItem {
+  return {
+    id: row.id,
+    repoId: row.repo_id,
+    prNumber: row.pr_number,
+    kind: row.kind,
+    sourceId: row.source_id,
+    threadId: row.thread_id,
+    isResolved: row.is_resolved === null ? null : row.is_resolved === 1,
+    isOutdated: row.is_outdated === null ? null : row.is_outdated === 1,
+    path: row.path,
+    line: row.line,
+    authorLogin: row.author_login,
+    body: row.body,
+    bodyHash: row.body_hash,
+    url: row.url,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    syncedAt: row.synced_at
+  }
+}
+
+function pullRequestFeedbackResult(
+  repoId: number,
+  prNumber: number,
+  items: PullRequestFeedbackItem[]
+): PullRequestFeedbackResult {
+  return {
+    repoId,
+    prNumber,
+    summary: summarizePullRequestFeedbackItems(items),
+    items
+  }
+}
+
+export function listPullRequestFeedbackItems(
+  repoId: number,
+  prNumber: number,
+  limit = 200
+): PullRequestFeedbackItem[] {
+  return requireDb()
+    .prepare(
+      `SELECT * FROM pr_feedback_items
+       WHERE repo_id = ? AND pr_number = ?
+       ORDER BY
+         CASE
+           WHEN kind = 'review_thread_comment' AND is_resolved = 0 THEN 0
+           WHEN kind = 'issue_comment' THEN 1
+           WHEN kind = 'review_thread_comment' AND is_resolved = 1 THEN 2
+           ELSE 3
+         END ASC,
+         COALESCE(updated_at, created_at) DESC,
+         id DESC
+       LIMIT ?`
+    )
+    .all(repoId, prNumber, limit)
+    .map((row) => rowToPullRequestFeedbackItem(row as PullRequestFeedbackRow))
+}
+
+export function getPullRequestFeedbackResult(
+  repoId: number,
+  prNumber: number,
+  limit = 200
+): PullRequestFeedbackResult {
+  return pullRequestFeedbackResult(
+    repoId,
+    prNumber,
+    listPullRequestFeedbackItems(repoId, prNumber, limit)
+  )
+}
+
+export function replacePullRequestFeedbackItems(
+  repoId: number,
+  prNumber: number,
+  items: NewPullRequestFeedbackItem[],
+  syncedAt: string
+): PullRequestFeedbackResult {
+  const database = requireDb()
+  const insert = database.prepare(
+    `INSERT INTO pr_feedback_items (
+       repo_id, pr_number, kind, source_id, thread_id, is_resolved, is_outdated, path,
+       line, author_login, body, body_hash, url, created_at, updated_at, synced_at
+     )
+     VALUES (
+       @repoId, @prNumber, @kind, @sourceId, @threadId, @isResolved, @isOutdated, @path,
+       @line, @authorLogin, @body, @bodyHash, @url, @createdAt, @updatedAt, @syncedAt
+     )`
+  )
+  const tx = database.transaction(() => {
+    database
+      .prepare(`DELETE FROM pr_feedback_items WHERE repo_id = ? AND pr_number = ?`)
+      .run(repoId, prNumber)
+    for (const item of items) {
+      insert.run({
+        repoId,
+        prNumber,
+        kind: item.kind,
+        sourceId: item.sourceId,
+        threadId: item.threadId,
+        isResolved: item.isResolved === null ? null : item.isResolved ? 1 : 0,
+        isOutdated: item.isOutdated === null ? null : item.isOutdated ? 1 : 0,
+        path: item.path,
+        line: item.line,
+        authorLogin: item.authorLogin,
+        body: item.body,
+        bodyHash: item.bodyHash,
+        url: item.url,
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
+        syncedAt
+      })
+    }
+  })
+  tx()
+  return getPullRequestFeedbackResult(repoId, prNumber)
 }
 
 // --- settings (Stage 7) ------------------------------------------------------

@@ -31,6 +31,7 @@ import type {
   PipelineWithRuns,
   PollerStatus,
   PullRequestDetail,
+  PullRequestFeedbackResult,
   PullRequestSummary,
   RefType,
   RepoMapping,
@@ -92,7 +93,8 @@ import {
   listPullRequests,
   listRepos,
   pollCommitHead,
-  reposFromCache
+  reposFromCache,
+  syncPullRequestFeedback
 } from './github'
 import { clonePathFor, headShaOf, prepareCheckout } from './gitEngine'
 import { parsePipelineRow } from './pipelineEngineLogic'
@@ -448,6 +450,44 @@ export function registerIpcHandlers(): void {
       (accountId: number, repoFullName: string, num: number): Promise<PullRequestDetail> =>
         getPullRequest(accountId, repoFullName, num)
     )
+  )
+
+  ipcMain.handle(
+    CHANNELS.repoPullFeedback,
+    async (
+      event,
+      accountId: unknown,
+      repoId: unknown,
+      repoFullName: unknown,
+      num: unknown
+    ): Promise<ApiResult<PullRequestFeedbackResult>> => {
+      if (!isTrustedSender(event)) return fail('Untrusted sender.')
+      if (!isValidId(accountId)) return fail('Invalid account id.')
+      if (!isValidId(repoId)) return fail('Invalid repository id.')
+      if (typeof repoFullName !== 'string' || !repoFullName.includes('/')) {
+        return fail('Invalid repository name.')
+      }
+      if (typeof num !== 'number' || !Number.isInteger(num) || num <= 0) {
+        return fail('Invalid pull request number.')
+      }
+
+      const repo = getRepoById(repoId)
+      if (!repo) return fail('Repository not found.')
+      if (repo.account_id !== accountId || repo.full_name !== repoFullName) {
+        return fail('Repository/account mismatch.')
+      }
+
+      try {
+        return ok(await syncPullRequestFeedback(accountId, repoId, repoFullName, num))
+      } catch (error) {
+        const stack = error instanceof Error ? error.stack : undefined
+        const message = error instanceof Error ? error.message : String(error)
+        log.error('PR feedback sync failed', { error: stack ?? message })
+        const status = (error as { status?: unknown } | null)?.status
+        if (typeof status === 'number') return fail(describeAuthError(error))
+        return fail(message || 'Could not sync pull request feedback.')
+      }
+    }
   )
 
   // --- repo mapping & git engine (Stage 4) -----------------------------------

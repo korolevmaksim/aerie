@@ -156,6 +156,15 @@ advisory wording; full repo memory and archived annotations are never injected. 
 redacted before persistence and stay local unless the user manually includes them in a GitHub post
 body.
 
+Pull-request feedback context is a read-only GitHub discussion cache. Main syncs general PR comments
+through REST issue comments (GitHub PRs are issues) and review-thread comments through GitHub
+GraphQL `reviewThreads` so resolved/outdated state, path, and line stay available. If GraphQL thread
+sync is unavailable, main falls back to REST pull review comments with unknown resolved state. All
+comment bodies are redacted before persistence, tokens never reach renderer or agents, and the cache
+adds no GitHub write surface. PR agent prompts may include only a bounded advisory section from the
+current PR cache, prioritized toward unresolved changed-file review threads and general PR comments;
+resolved/outdated discussions are context for dedupe, not authority over current source code.
+
 ## 6. Repo mapping & local execution
 
 Each repo carries: `remote_url` (from GitHub), optional `user_local_path` (his
@@ -310,6 +319,9 @@ review_memory_annotations(id, scope_key, scope_kind['repo'|'global'], repo_id, s
 review_memory_events(id, annotation_id, event_kind['created'|'updated'|'cleared'], scope_key,
                      scope_kind['repo'|'global'], repo_id, stable_id, context_hash,
                      decision, note, source_finding_id, source_run_id, created_at)
+pr_feedback_items(id, repo_id, pr_number, kind['issue_comment'|'review_thread_comment'],
+                  source_id, thread_id, is_resolved, is_outdated, path, line,
+                  author_login, body, body_hash, url, created_at, updated_at, synced_at)
 http_cache(key, etag, payload, updated_at)   -- conditional-request (ETag) cache; payload
                                              -- holds the body to replay on a 304 (M8)
 watches(id, repo_id, ref_type['commit'|'pr'], ref, last_seen_sha, last_polled_at)  -- M8

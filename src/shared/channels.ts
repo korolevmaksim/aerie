@@ -17,6 +17,7 @@ export const CHANNELS = {
   repoCommit: 'repo:commit',
   repoPulls: 'repo:pulls',
   repoPull: 'repo:pull',
+  repoPullFeedback: 'repo:pullFeedback',
   mappingGet: 'mapping:get',
   mappingPickLocal: 'mapping:pickLocal',
   mappingClearLocal: 'mapping:clearLocal',

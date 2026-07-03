@@ -40,7 +40,7 @@ import {
   substitute,
   type Agent
 } from './agentConfig'
-import { decryptToken } from './auth'
+import { decryptToken, describeAuthError } from './auth'
 import {
   extractSecrets,
   parseAgentFindings,
@@ -51,7 +51,7 @@ import {
   type Finding
 } from './findings'
 import { attachFindingContextHashes } from './findingContext'
-import { getPullRequestBaseSha } from './github'
+import { getPullRequestBaseSha, syncPullRequestFeedback } from './github'
 import {
   cleanupCheckout,
   prepareCheckout,
@@ -69,6 +69,7 @@ import {
 } from './panelReport'
 import { whichOnPath } from './pathLookup'
 import { redactText } from './redact'
+import { buildPullRequestFeedbackPromptContext } from './prFeedback'
 import {
   attachReviewMemory,
   buildReviewMemoryPromptContext,
@@ -995,6 +996,56 @@ async function execute(
       )
     }
 
+    let prFeedback = {
+      text: '',
+      considered: 0,
+      included: 0,
+      omitted: 0,
+      unresolvedThreads: 0,
+      resolvedThreads: 0,
+      outdatedThreads: 0
+    }
+    if (agent.kind !== 'tool' && params.refType === 'pr') {
+      const prNumber = Number(params.refId)
+      if (Number.isInteger(prNumber) && prNumber > 0) {
+        try {
+          emit('system', '[aerie] syncing PR feedback context...\n')
+          const synced = await syncPullRequestFeedback(
+            params.accountId,
+            repo.id,
+            repo.full_name,
+            prNumber
+          )
+          emit(
+            'system',
+            `[aerie] PR feedback: synced ${synced.summary.total} discussion item(s) (${synced.summary.unresolvedThreads} unresolved thread(s)).\n`
+          )
+        } catch (error) {
+          emit(
+            'system',
+            `[aerie] PR feedback unavailable; continuing without live sync: ${describeAuthError(error)}\n`
+          )
+        }
+
+        try {
+          prFeedback = buildPullRequestFeedbackPromptContext(repo.id, prNumber, changedFiles)
+          emit(
+            'system',
+            `[aerie] PR feedback: ${prFeedback.included} advisory item(s) injected into prompt (${prFeedback.considered} cached considered${
+              prFeedback.omitted > 0 ? `, ${prFeedback.omitted} omitted by cap/path` : ''
+            }).\n`
+          )
+        } catch (error) {
+          emit(
+            'system',
+            `[aerie] PR feedback prompt context skipped: ${
+              error instanceof Error ? error.message : String(error)
+            }\n`
+          )
+        }
+      }
+    }
+
     // A selected prompt supplies the review INSTRUCTIONS; the machine context
     // (repo/sha/paths) is always prepended by buildPrompt. Falls back to the
     // built-in default when no prompt is chosen or the id no longer exists.
@@ -1016,7 +1067,8 @@ async function execute(
         diffFile: prepared.diffPath,
         changedFiles,
         groundTruth,
-        reviewMemory: reviewMemory.text
+        reviewMemory: reviewMemory.text,
+        prFeedback: prFeedback.text
       },
       instructions
     )

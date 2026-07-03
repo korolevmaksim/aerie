@@ -140,6 +140,33 @@ describe('buildPrompt', () => {
     expect(p.match(/MEMORY_LINE/g)).toHaveLength(1)
   })
 
+  it('auto-appends bounded PR feedback when provided', () => {
+    const p = buildPrompt({
+      ...base,
+      refType: 'pr',
+      refId: '42',
+      prFeedback:
+        '## Pull request feedback context - advisory only\n- unresolved review thread (src/a.ts:4): Fix this edge case.'
+    })
+    expect(p).toContain('Pull request feedback context')
+    expect(p).toContain('advisory only')
+    expect(p).toContain('Fix this edge case.')
+  })
+
+  it('lets a prompt place {{prFeedback}} itself without duplicate auto-append', () => {
+    const p = buildPrompt(
+      {
+        ...base,
+        refType: 'pr',
+        refId: '42',
+        prFeedback: 'PR_FEEDBACK_LINE'
+      },
+      'Use PR discussion here: {{prFeedback}}'
+    )
+    expect(p).toContain('Use PR discussion here: PR_FEEDBACK_LINE')
+    expect(p.match(/PR_FEEDBACK_LINE/g)).toHaveLength(1)
+  })
+
   it('adds no review-memory section when none is provided', () => {
     const p = buildPrompt({ ...base, refType: 'commit', refId: 'deadbeef' })
     expect(p).not.toContain('Local review memory')

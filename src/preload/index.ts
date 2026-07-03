@@ -24,6 +24,7 @@ import type {
   Preset,
   Prompt,
   PullRequestDetail,
+  PullRequestFeedbackResult,
   PullRequestSummary,
   RepoMapping,
   SavePipelineRequest,
@@ -114,7 +115,14 @@ const api = {
       fullName: string,
       num: number
     ): Promise<ApiResult<PullRequestDetail>> =>
-      ipcRenderer.invoke(CHANNELS.repoPull, accountId, fullName, num)
+      ipcRenderer.invoke(CHANNELS.repoPull, accountId, fullName, num),
+    pullFeedback: (
+      accountId: number,
+      repoId: number,
+      fullName: string,
+      num: number
+    ): Promise<ApiResult<PullRequestFeedbackResult>> =>
+      ipcRenderer.invoke(CHANNELS.repoPullFeedback, accountId, repoId, fullName, num)
   },
 
   /** Repo mapping + git engine (Stage 4): app-owned clones, worktrees, diffs. */

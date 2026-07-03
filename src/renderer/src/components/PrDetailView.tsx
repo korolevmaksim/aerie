@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { PullRequestDetail } from '@shared/types'
 import { formatRelativeTime } from '../lib/format'
+import PullRequestFeedbackPanel from './PullRequestFeedbackPanel'
 import RunPanel from './RunPanel'
 
 function PrDetailView({
@@ -71,6 +72,12 @@ function PrDetailView({
             )}
           </div>
           {pr.body && <pre className="commit-body">{pr.body}</pre>}
+          <PullRequestFeedbackPanel
+            accountId={accountId}
+            repoId={repoId}
+            repoFullName={repoFullName}
+            number={pr.number}
+          />
           {pr.commits.length > 0 && (
             <RunPanel
               accountId={accountId}

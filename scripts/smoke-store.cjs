@@ -37,7 +37,7 @@ app.whenReady().then(() => {
     const db = store.initStore(':memory:')
 
     const version = db.pragma('user_version', { simple: true })
-    assert(version >= 22, `expected migration user_version >= 22, got ${version}`)
+    assert(version >= 24, `expected migration user_version >= 24, got ${version}`)
     assert(
       Array.isArray(db.pragma('foreign_key_check')) && db.pragma('foreign_key_check').length === 0,
       'foreign_key_check reported violations after migrations'
@@ -95,6 +95,48 @@ app.whenReady().then(() => {
     assert(refreshed.user_local_path === '/tmp/octo-repo', 'local path was clobbered')
     assert(refreshed.use_local_worktree === 1, 'local worktree flag was clobbered')
     assert(refreshed.favorite === 1, 'favorite flag was clobbered')
+
+    const feedbackResult = store.replacePullRequestFeedbackItems(
+      repo.id,
+      42,
+      [
+        {
+          kind: 'issue_comment',
+          sourceId: 'issue:100',
+          threadId: null,
+          isResolved: null,
+          isOutdated: null,
+          path: null,
+          line: null,
+          authorLogin: 'reviewer',
+          body: 'Please update the rollout notes.',
+          bodyHash: 'hash-issue',
+          url: 'https://github.com/octo/repo/pull/42#issuecomment-100',
+          createdAt: '2026-06-23T00:02:30.000Z',
+          updatedAt: '2026-06-23T00:02:30.000Z'
+        },
+        {
+          kind: 'review_thread_comment',
+          sourceId: 'review:200',
+          threadId: 'thread:200',
+          isResolved: false,
+          isOutdated: false,
+          path: 'src/app.ts',
+          line: 12,
+          authorLogin: 'reviewer',
+          body: 'Null case is still open.',
+          bodyHash: 'hash-review',
+          url: 'https://github.com/octo/repo/pull/42#discussion_r200',
+          createdAt: '2026-06-23T00:02:40.000Z',
+          updatedAt: '2026-06-23T00:02:40.000Z'
+        }
+      ],
+      '2026-06-23T00:02:50.000Z'
+    )
+    assert(feedbackResult.summary.total === 2, 'PR feedback cache insert failed')
+    assert(feedbackResult.summary.unresolvedThreads === 1, 'PR feedback unresolved summary failed')
+    const cachedFeedback = store.getPullRequestFeedbackResult(repo.id, 42)
+    assert(cachedFeedback.items[0].sourceId === 'review:200', 'PR feedback priority sort failed')
 
     const sha = 'a'.repeat(40)
     const projectRun = store.insertRun({

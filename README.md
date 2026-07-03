@@ -98,6 +98,12 @@ third-party service.
   posting warns when local memory has suppressed structured findings. LLM reviews also receive a
   bounded, changed-file-only advisory memory section so current code still wins and full repo
   memory is never injected.
+- **PR feedback context** — PR views sync existing GitHub pull-request comments and review-thread
+  comments into a local redacted cache. Review-thread state comes from GitHub GraphQL, so Aerie can
+  show unresolved, resolved, and outdated conversations; general PR comments come through the REST
+  issue-comments API. PR agent runs get a bounded advisory section from that cache, prioritizing
+  unresolved changed-file threads and general reviewer requests so agents avoid repeating resolved
+  feedback while still treating the current diff as source of truth.
 - **Panel review (multi-agent) + consolidated report** — flip on "Panel review" to run one change
   through several agents at once; up to 3 run concurrently and the rest queue. Aerie persists the
   panel as one review object in Cockpit and History, not as loose child runs. Open it to see a

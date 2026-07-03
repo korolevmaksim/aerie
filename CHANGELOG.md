@@ -13,6 +13,15 @@ same change set.
 
 ### Added
 
+- **PR feedback context**: PR detail views now sync existing GitHub pull-request comments and
+  review-thread comments into a local redacted SQLite cache (`pr_feedback_items`). Main fetches
+  general PR comments through REST issue comments and review threads through GraphQL so resolved
+  and outdated conversation state is available, falling back to REST review comments when GraphQL
+  thread state cannot be read. PR agent runs best-effort sync that cache and inject a bounded
+  advisory prompt section prioritizing unresolved changed-file feedback and general reviewer
+  requests. The renderer receives only typed, redacted DTOs through a new `repo:pullFeedback` IPC
+  method; no GitHub write surface is added.
+
 - **Review memory / evidence ledger**: persisted structured findings now carry a
   renderer-visible occurrence id, exact fingerprint, and versioned stable id. A new local SQLite
   ledger stores repo/global finding decisions (`accepted`, `fixed`, `false_positive`,

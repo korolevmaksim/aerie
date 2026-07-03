@@ -6,12 +6,14 @@ import type {
   Paginated,
   PollResult,
   PullRequestDetail,
+  PullRequestFeedbackResult,
   PullRequestSummary,
   RepoSummary,
   ReposResult
 } from '../shared/types'
-import { createOctokit, decryptToken } from './auth'
+import { createOctokit, decryptToken, describeAuthError } from './auth'
 import { log } from './logger'
+import { feedbackBodyHash, normalizeFeedbackBody } from './prFeedbackModel'
 import { nextPollDelayMs, parseRateLimit, type RateLimit } from './rateLimit'
 import {
   getAccount,
@@ -23,6 +25,8 @@ import {
   syncReposForAccount,
   touchWatchPolled,
   upsertWatch,
+  replacePullRequestFeedbackItems,
+  type NewPullRequestFeedbackItem,
   type NewRepo,
   type RepoRow
 } from './store'
@@ -406,6 +410,286 @@ export async function getPullRequestBaseSha(
     pull_number: pullNumber
   })
   return pr.base.sha
+}
+
+type RawIssueComment = {
+  id: number
+  body?: string | null
+  html_url?: string | null
+  user?: { login?: string | null } | null
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+type RawReviewComment = {
+  id: number
+  body?: string | null
+  html_url?: string | null
+  user?: { login?: string | null } | null
+  created_at?: string | null
+  updated_at?: string | null
+  path?: string | null
+  line?: number | null
+  original_line?: number | null
+  in_reply_to_id?: number | null
+  pull_request_review_id?: number | null
+}
+
+interface ReviewThreadsGraphqlResponse {
+  repository: {
+    pullRequest: {
+      reviewThreads: {
+        pageInfo: { hasNextPage: boolean; endCursor: string | null }
+        nodes: Array<{
+          id: string
+          isResolved: boolean
+          isOutdated: boolean
+          path: string | null
+          line: number | null
+          comments: {
+            nodes: Array<{
+              id: string
+              url: string
+              body: string | null
+              author: { login: string } | null
+              createdAt: string
+              updatedAt: string
+              outdated: boolean
+              path: string | null
+              line: number | null
+            } | null> | null
+          } | null
+        } | null> | null
+      }
+    } | null
+  } | null
+}
+
+const REVIEW_THREADS_QUERY = `
+  query AeriePullRequestFeedback($owner: String!, $repo: String!, $number: Int!, $cursor: String) {
+    repository(owner: $owner, name: $repo) {
+      pullRequest(number: $number) {
+        reviewThreads(first: 100, after: $cursor) {
+          pageInfo {
+            hasNextPage
+            endCursor
+          }
+          nodes {
+            id
+            isResolved
+            isOutdated
+            path
+            line
+            comments(first: 100) {
+              nodes {
+                id
+                url
+                body
+                author {
+                  login
+                }
+                createdAt
+                updatedAt
+                outdated
+                path
+                line
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+`
+
+function feedbackItem(input: {
+  kind: NewPullRequestFeedbackItem['kind']
+  sourceId: string
+  threadId: string | null
+  isResolved: boolean | null
+  isOutdated: boolean | null
+  path: string | null
+  line: number | null
+  authorLogin: string | null
+  body: unknown
+  url: string | null
+  createdAt: string | null | undefined
+  updatedAt: string | null | undefined
+}): NewPullRequestFeedbackItem {
+  const body = normalizeFeedbackBody(input.body)
+  return {
+    kind: input.kind,
+    sourceId: input.sourceId,
+    threadId: input.threadId,
+    isResolved: input.isResolved,
+    isOutdated: input.isOutdated,
+    path: input.path,
+    line: input.line,
+    authorLogin: input.authorLogin,
+    body,
+    bodyHash: feedbackBodyHash(body),
+    url: input.url,
+    createdAt: input.createdAt ?? new Date(0).toISOString(),
+    updatedAt: input.updatedAt ?? null
+  }
+}
+
+async function fetchIssueComments(
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  pullNumber: number
+): Promise<NewPullRequestFeedbackItem[]> {
+  const comments = (await octokit.paginate(
+    'GET /repos/{owner}/{repo}/issues/{issue_number}/comments',
+    {
+      owner,
+      repo,
+      issue_number: pullNumber,
+      per_page: 100
+    }
+  )) as RawIssueComment[]
+  return comments.map((comment) =>
+    feedbackItem({
+      kind: 'issue_comment',
+      sourceId: `issue:${comment.id}`,
+      threadId: null,
+      isResolved: null,
+      isOutdated: null,
+      path: null,
+      line: null,
+      authorLogin: comment.user?.login ?? null,
+      body: comment.body ?? '',
+      url: comment.html_url ?? null,
+      createdAt: comment.created_at,
+      updatedAt: comment.updated_at
+    })
+  )
+}
+
+async function fetchReviewThreadsGraphql(
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  pullNumber: number
+): Promise<NewPullRequestFeedbackItem[]> {
+  const items: NewPullRequestFeedbackItem[] = []
+  let cursor: string | null = null
+  do {
+    const response = await octokit.graphql<ReviewThreadsGraphqlResponse>(REVIEW_THREADS_QUERY, {
+      owner,
+      repo,
+      number: pullNumber,
+      cursor
+    })
+    const threads = response.repository?.pullRequest?.reviewThreads
+    if (!threads) throw new Error('Pull request not found.')
+    for (const thread of threads.nodes ?? []) {
+      if (!thread) continue
+      for (const comment of thread.comments?.nodes ?? []) {
+        if (!comment) continue
+        items.push(
+          feedbackItem({
+            kind: 'review_thread_comment',
+            sourceId: `review:${comment.id}`,
+            threadId: thread.id,
+            isResolved: thread.isResolved,
+            isOutdated: thread.isOutdated || comment.outdated,
+            path: comment.path ?? thread.path,
+            line: comment.line ?? thread.line,
+            authorLogin: comment.author?.login ?? null,
+            body: comment.body ?? '',
+            url: comment.url ?? null,
+            createdAt: comment.createdAt,
+            updatedAt: comment.updatedAt
+          })
+        )
+      }
+    }
+    cursor = threads.pageInfo.hasNextPage ? threads.pageInfo.endCursor : null
+  } while (cursor)
+  return items
+}
+
+async function fetchReviewCommentsRest(
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  pullNumber: number
+): Promise<NewPullRequestFeedbackItem[]> {
+  const comments = (await octokit.paginate(
+    'GET /repos/{owner}/{repo}/pulls/{pull_number}/comments',
+    {
+      owner,
+      repo,
+      pull_number: pullNumber,
+      per_page: 100
+    }
+  )) as RawReviewComment[]
+  return comments.map((comment) =>
+    feedbackItem({
+      kind: 'review_thread_comment',
+      sourceId: `rest-review:${comment.id}`,
+      threadId: comment.in_reply_to_id
+        ? `rest-thread:${comment.in_reply_to_id}`
+        : comment.pull_request_review_id
+          ? `rest-review-thread:${comment.pull_request_review_id}:${comment.path ?? ''}:${comment.line ?? comment.original_line ?? ''}`
+          : null,
+      isResolved: null,
+      isOutdated: null,
+      path: comment.path ?? null,
+      line: comment.line ?? comment.original_line ?? null,
+      authorLogin: comment.user?.login ?? null,
+      body: comment.body ?? '',
+      url: comment.html_url ?? null,
+      createdAt: comment.created_at,
+      updatedAt: comment.updated_at
+    })
+  )
+}
+
+/**
+ * Read-only PR feedback ingestion: general PR comments through REST issue
+ * comments, review-thread comments through GraphQL so resolved/outdated state is
+ * preserved. The fallback keeps the feature useful with tokens that cannot reach
+ * GraphQL reviewThreads, but resolved-state becomes unknown.
+ */
+export async function syncPullRequestFeedback(
+  accountId: number,
+  repoId: number,
+  repoFullName: string,
+  pullNumber: number
+): Promise<PullRequestFeedbackResult> {
+  const { octokit, owner, repo } = await octokitAndRepo(accountId, repoFullName)
+  const issueComments = await fetchIssueComments(octokit, owner, repo, pullNumber)
+  let reviewComments: NewPullRequestFeedbackItem[]
+  try {
+    reviewComments = await fetchReviewThreadsGraphql(octokit, owner, repo, pullNumber)
+  } catch (error) {
+    log.warn('PR feedback GraphQL sync failed; falling back to REST review comments', {
+      accountId,
+      repoFullName,
+      pullNumber,
+      error: describeAuthError(error)
+    })
+    reviewComments = await fetchReviewCommentsRest(octokit, owner, repo, pullNumber)
+  }
+
+  const result = replacePullRequestFeedbackItems(
+    repoId,
+    pullNumber,
+    [...issueComments, ...reviewComments],
+    new Date().toISOString()
+  )
+  log.info('PR feedback synced', {
+    accountId,
+    repoId,
+    repoFullName,
+    pullNumber,
+    count: result.summary.total,
+    unresolvedThreads: result.summary.unresolvedThreads
+  })
+  return result
 }
 
 // --- automation polling (M8) -------------------------------------------------

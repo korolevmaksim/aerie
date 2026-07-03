@@ -127,6 +127,51 @@ export interface PullRequestDetail extends PullRequestSummary {
   commits: CommitSummary[]
 }
 
+export type PullRequestFeedbackKind = 'issue_comment' | 'review_thread_comment'
+
+/**
+ * Renderer-safe, redacted GitHub PR discussion context. It is fetched and persisted by
+ * main only; no token or raw Octokit response reaches the renderer.
+ */
+export interface PullRequestFeedbackItem {
+  id: number
+  repoId: number
+  prNumber: number
+  kind: PullRequestFeedbackKind
+  /** Stable GitHub source identifier, namespaced by fetch path. */
+  sourceId: string
+  /** GitHub GraphQL thread id when known; null for general PR comments or REST fallback. */
+  threadId: string | null
+  isResolved: boolean | null
+  isOutdated: boolean | null
+  path: string | null
+  line: number | null
+  authorLogin: string | null
+  body: string
+  bodyHash: string
+  url: string | null
+  createdAt: string
+  updatedAt: string | null
+  syncedAt: string
+}
+
+export interface PullRequestFeedbackSummary {
+  total: number
+  issueComments: number
+  reviewThreadComments: number
+  unresolvedThreads: number
+  resolvedThreads: number
+  outdatedThreads: number
+  lastSyncedAt: string | null
+}
+
+export interface PullRequestFeedbackResult {
+  repoId: number
+  prNumber: number
+  summary: PullRequestFeedbackSummary
+  items: PullRequestFeedbackItem[]
+}
+
 /** Page of results plus whether GitHub reports a next page (Link header). */
 export interface Paginated<T> {
   items: T[]
