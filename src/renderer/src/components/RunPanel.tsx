@@ -11,6 +11,7 @@ import type {
   StartBatchResult
 } from '@shared/types'
 import { copyForTarget, defaultPromptId } from '../lib/reviewLauncher'
+import ConsensusPanel from './ConsensusPanel'
 import PanelReportView from './PanelReportView'
 import RunView from './RunView'
 
@@ -549,60 +550,14 @@ function RunPanel({
             </p>
           )}
           {!currentGroup && batchRuns.length > 1 && (
-            <div className="run__consensus">
-              <div className="run__consensus-controls">
-                <strong>Consensus</strong>
-                <label className="run__consensus-min">
-                  agreed by ≥
-                  <select
-                    className="field"
-                    value={consensusMin}
-                    onChange={(e) => setConsensusMin(Number(e.target.value))}
-                    disabled={computingConsensus}
-                  >
-                    {Array.from({ length: Math.max(1, batchRuns.length) }, (_, i) => i + 1)
-                      .filter((n) => n >= 2)
-                      .map((n) => (
-                        <option key={n} value={n}>
-                          {n}
-                        </option>
-                      ))}
-                  </select>
-                  agents
-                </label>
-                <button
-                  className="btn btn--ghost"
-                  onClick={() => void onComputeConsensus()}
-                  disabled={computingConsensus}
-                >
-                  {computingConsensus ? 'Computing…' : 'Compute'}
-                </button>
-              </div>
-              <p className="hint">
-                Consensus is by code location (file + line) — different agents word the same issue
-                differently. Run it after the reviews finish.
-              </p>
-              {consensus !== null &&
-                (consensus.length === 0 ? (
-                  <p className="empty">
-                    No location was flagged by ≥{consensusMin} agents (or no findings yet).
-                  </p>
-                ) : (
-                  <ul className="run__findings-list">
-                    {consensus.map((c, i) => (
-                      <li key={i} className="run__finding">
-                        <span className="chip">{c.agreement}×</span>
-                        <span className={`chip sev sev--${c.severity}`}>{c.severity}</span>
-                        <code className="run__finding-loc">
-                          {c.file}
-                          {c.line != null ? `:${c.line}` : ''}
-                        </code>
-                        <span className="run__finding-msg">{c.message}</span>
-                      </li>
-                    ))}
-                  </ul>
-                ))}
-            </div>
+            <ConsensusPanel
+              consensus={consensus}
+              consensusMin={consensusMin}
+              runCount={batchRuns.length}
+              computing={computingConsensus}
+              onConsensusMinChange={setConsensusMin}
+              onCompute={() => void onComputeConsensus()}
+            />
           )}
 
           {!currentGroup &&

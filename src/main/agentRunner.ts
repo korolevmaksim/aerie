@@ -50,6 +50,7 @@ import {
   scopeToChanges,
   type Finding
 } from './findings'
+import { attachFindingContextHashes } from './findingContext'
 import { getPullRequestBaseSha } from './github'
 import {
   cleanupCheckout,
@@ -68,6 +69,11 @@ import {
 } from './panelReport'
 import { whichOnPath } from './pathLookup'
 import { redactText } from './redact'
+import {
+  attachReviewMemory,
+  buildReviewMemoryPromptContext,
+  filterSuppressedFindings
+} from './reviewMemory'
 import { formatMissingOutputError, keepTail } from './runOutput'
 import { activeCount, noteOutput, noteStatus, registerRun } from './runEvents'
 import { createSemaphore } from './semaphore'
@@ -92,6 +98,7 @@ import {
   listRunsForGroupWithRepo,
   listRunsForRepo,
   setSetting,
+  stableIdForFindingRow,
   updateRunGroupLocalStatus,
   updateRunLocalStatus,
   updateRunStatus,
@@ -793,6 +800,7 @@ async function execute(
         // before persisting, mirroring the prose path; tool parsers already drop secrets.
         findings = agentFindings.map((f) => redactFinding(f, scrub))
       }
+      if (prepared) findings = attachFindingContextHashes(prepared.worktreePath, findings)
       insertFindings(runId, findings)
     } catch (e) {
       log.warn('could not persist findings', {
@@ -974,6 +982,19 @@ async function execute(
       }
     }
 
+    const reviewMemory =
+      agent.kind === 'tool'
+        ? { text: '', considered: 0, included: 0, omitted: 0, suppressed: 0, reopened: 0 }
+        : buildReviewMemoryPromptContext(repo.id, changedFiles)
+    if (agent.kind !== 'tool') {
+      emit(
+        'system',
+        `[aerie] review memory: ${reviewMemory.included} advisory decision(s) injected into prompt (${reviewMemory.considered} active considered${
+          reviewMemory.omitted > 0 ? `, ${reviewMemory.omitted} omitted by cap/path` : ''
+        }).\n`
+      )
+    }
+
     // A selected prompt supplies the review INSTRUCTIONS; the machine context
     // (repo/sha/paths) is always prepended by buildPrompt. Falls back to the
     // built-in default when no prompt is chosen or the id no longer exists.
@@ -994,7 +1015,8 @@ async function execute(
         repoPath: prepared.worktreePath,
         diffFile: prepared.diffPath,
         changedFiles,
-        groundTruth
+        groundTruth,
+        reviewMemory: reviewMemory.text
       },
       instructions
     )
@@ -1210,28 +1232,39 @@ export function listRunRecords(repoId: number): RunRecord[] {
 
 const SEVERITIES = new Set(['critical', 'high', 'medium', 'low', 'info'])
 
-function rowToFinding(f: ReturnType<typeof listFindingsForRun>[number]): Finding {
+type PersistedFinding = Finding & { id: number }
+
+function rowToFinding(f: ReturnType<typeof listFindingsForRun>[number]): PersistedFinding {
   return {
+    id: f.id,
     tool: f.tool,
     ruleId: f.rule_id,
     severity: (SEVERITIES.has(f.severity) ? f.severity : 'medium') as Finding['severity'],
     file: f.file,
     line: f.line,
     message: f.message,
-    fingerprint: f.fingerprint
+    fingerprint: f.fingerprint,
+    stableId: stableIdForFindingRow(f),
+    contextHash: f.context_hash
   }
 }
 
 /** A run's persisted structured findings (tool output or an agent's findings block). */
 export function listRunFindings(runId: number): RunFinding[] {
-  return listFindingsForRun(runId).map((f) => ({
+  const run = getRun(runId)
+  const findings = listFindingsForRun(runId).map((f) => ({
+    id: f.id,
     tool: f.tool,
     ruleId: f.rule_id,
     severity: (SEVERITIES.has(f.severity) ? f.severity : 'medium') as RunFinding['severity'],
     file: f.file,
     line: f.line,
-    message: f.message
+    message: f.message,
+    fingerprint: f.fingerprint,
+    stableId: stableIdForFindingRow(f),
+    contextHash: f.context_hash
   }))
+  return run ? attachReviewMemory(run.repo_id, findings) : findings
 }
 
 /**
@@ -1241,8 +1274,11 @@ export function listRunFindings(runId: number): RunFinding[] {
  * problem differently; `consensusMin` keeps only issues enough sources agree on.
  */
 export function aggregateRunFindings(params: ConsensusParams): ConsensusResult {
-  const all: Finding[] = []
+  const all: PersistedFinding[] = []
+  const repoIds = new Set<number>()
   for (const id of params.runIds) {
+    const run = getRun(id)
+    if (run) repoIds.add(run.repo_id)
     for (const row of listFindingsForRun(id)) all.push(rowToFinding(row))
   }
   const agg = aggregateFindings(all, {
@@ -1250,17 +1286,23 @@ export function aggregateRunFindings(params: ConsensusParams): ConsensusResult {
     minSeverity: params.minSeverity,
     groupBy: params.groupBy
   })
+  const findings = agg.kept.map((k, i) => ({
+    id: k.id,
+    tool: k.tool,
+    ruleId: k.ruleId,
+    severity: k.severity,
+    file: k.file,
+    line: k.line,
+    message: k.message,
+    fingerprint: k.fingerprint,
+    stableId: k.stableId,
+    contextHash: k.contextHash ?? null,
+    agreement: agg.agreement[i]
+  }))
+  const repoId = repoIds.size === 1 ? [...repoIds][0] : null
   return {
     total: all.length,
-    findings: agg.kept.map((k, i) => ({
-      tool: k.tool,
-      ruleId: k.ruleId,
-      severity: k.severity,
-      file: k.file,
-      line: k.line,
-      message: k.message,
-      agreement: agg.agreement[i]
-    }))
+    findings: repoId ? attachReviewMemory(repoId, findings) : findings
   }
 }
 
@@ -1283,8 +1325,10 @@ export function getRunGroupReport(groupId: number, consensusMin = 2): RunGroupRe
     consensusMin: 1,
     groupBy: 'location'
   })
-  const consensusFindings = allFindings.findings.filter((f) => f.agreement >= threshold)
-  const singleSourceFindings = allFindings.findings.filter((f) => f.agreement < threshold)
+  const memorySuppressedFindings = allFindings.findings.filter((f) => f.memory?.suppresses)
+  const visibleFindings = filterSuppressedFindings(allFindings.findings)
+  const consensusFindings = visibleFindings.filter((f) => f.agreement >= threshold)
+  const singleSourceFindings = visibleFindings.filter((f) => f.agreement < threshold)
   const outputs = new Map<number, string>()
   for (const run of successfulRuns) {
     outputs.set(run.id, run.outputPath ? readRunOutput(run.outputPath) : '')
@@ -1294,6 +1338,7 @@ export function getRunGroupReport(groupId: number, consensusMin = 2): RunGroupRe
     runs,
     consensusFindings,
     singleSourceFindings,
+    memorySuppressedFindings,
     consensusMin: threshold,
     totalFindings: allFindings.total,
     outputs
@@ -1303,6 +1348,7 @@ export function getRunGroupReport(groupId: number, consensusMin = 2): RunGroupRe
     runs,
     consensusFindings,
     singleSourceFindings,
+    memorySuppressedFindings,
     totalFindings: allFindings.total,
     markdown
   }

@@ -13,6 +13,7 @@ function PostConfirmModal({
   targetLabel,
   initialBody,
   initialTitle,
+  warning,
   mentionLogin,
   busy,
   error,
@@ -23,6 +24,7 @@ function PostConfirmModal({
   targetLabel: string
   initialBody: string
   initialTitle?: string
+  warning?: string | null
   /** When set, offer a checkbox that prepends @login to notify the author. */
   mentionLogin?: string | null
   busy: boolean
@@ -104,6 +106,11 @@ function PostConfirmModal({
             onChange={(e) => setTitle(e.target.value)}
             disabled={busy}
           />
+        )}
+        {warning && (
+          <p className="alert" role="alert">
+            {warning}
+          </p>
         )}
         {mentionLogin && (
           <label className="modal__tag">

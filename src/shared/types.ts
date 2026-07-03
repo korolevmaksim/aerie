@@ -495,8 +495,117 @@ export interface SetRunLocalStatusParams {
   localStatus: RunLocalStatus
 }
 
+// --- review memory / evidence ledger ----------------------------------------
+
+export type ReviewMemoryDecision =
+  | 'accepted'
+  | 'fixed'
+  | 'false_positive'
+  | 'accepted_risk'
+  | 'duplicate'
+  | 'dismissed'
+  | 'needs_follow_up'
+
+export type ReviewMemoryScopeKind = 'repo' | 'global'
+
+export interface ReviewMemoryAnnotation {
+  id: number
+  scopeKind: ReviewMemoryScopeKind
+  repoId: number | null
+  stableId: string
+  contextHash: string | null
+  decision: ReviewMemoryDecision
+  note: string
+  sourceFindingId: number | null
+  sourceRunId: number | null
+  createdAt: string
+  updatedAt: string
+  archivedAt: string | null
+}
+
+export type ReviewMemoryEventKind = 'created' | 'updated' | 'cleared'
+
+export interface ReviewMemoryEvent {
+  id: number
+  annotationId: number | null
+  eventKind: ReviewMemoryEventKind
+  scopeKind: ReviewMemoryScopeKind
+  repoId: number | null
+  stableId: string
+  contextHash: string | null
+  decision: ReviewMemoryDecision | null
+  note: string
+  sourceFindingId: number | null
+  sourceRunId: number | null
+  createdAt: string
+}
+
+export interface ReviewMemoryMatch {
+  annotation: ReviewMemoryAnnotation
+  matchedBy: 'stable_id' | 'context_hash'
+  suppresses: boolean
+  /** True when a finding marked fixed appears again in a later run. */
+  reopened: boolean
+}
+
+export interface AnnotateFindingParams {
+  findingId: number
+  decision: ReviewMemoryDecision
+  scopeKind?: ReviewMemoryScopeKind
+  note?: string
+}
+
+export interface ClearFindingMemoryParams {
+  annotationId: number
+}
+
+export interface UpdateReviewMemoryAnnotationParams {
+  annotationId: number
+  decision: ReviewMemoryDecision
+  note?: string
+}
+
+export interface ReviewMemoryExportEntry {
+  scopeKind: ReviewMemoryScopeKind
+  stableId: string
+  contextHash: string | null
+  decision: ReviewMemoryDecision
+  note: string
+  archivedAt: string | null
+  updatedAt: string
+}
+
+export interface ReviewMemoryExport {
+  schemaVersion: 1
+  exportedAt: string
+  repoId: number
+  annotations: ReviewMemoryExportEntry[]
+}
+
+export interface ImportReviewMemoryParams {
+  repoId: number
+  payload: string
+}
+
+export interface ImportReviewMemoryResult {
+  imported: number
+  skipped: number
+  errors: string[]
+}
+
+export interface ReviewMemoryPromptContext {
+  text: string
+  considered: number
+  included: number
+  omitted: number
+  suppressed: number
+  reopened: number
+}
+
 /** A normalized finding persisted for a run (tool output or an agent's findings block). */
 export interface RunFinding {
+  /** Local database occurrence id. Used for precise review-memory annotations. */
+  id: number
   /** The tool/agent that produced it (e.g. 'eslint', 'codex'). */
   tool: string
   ruleId: string | null
@@ -504,6 +613,14 @@ export interface RunFinding {
   file: string
   line: number | null
   message: string
+  /** Exact dedupe fingerprint for this finding shape. */
+  fingerprint: string
+  /** Versioned, line-insensitive id for matching repeat findings across runs. */
+  stableId: string
+  /** Hash-only source-window fallback for matching after path/message drift. */
+  contextHash: string | null
+  /** Local review-memory decision, repo-scoped before global. */
+  memory?: ReviewMemoryMatch | null
 }
 
 /** A finding aggregated across a panel of runs, tagged with how many sources agreed. */
@@ -655,6 +772,8 @@ export interface RunGroupReport {
   consensusFindings: ConsensusFinding[]
   /** Deduped findings below the consensus threshold, still useful for triage. */
   singleSourceFindings: ConsensusFinding[]
+  /** Structured findings omitted from the report because review memory suppresses them. */
+  memorySuppressedFindings: ConsensusFinding[]
   /** Total raw structured findings across child runs. */
   totalFindings: number
   /** Ready-to-copy consolidated Markdown report. */

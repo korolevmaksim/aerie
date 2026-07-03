@@ -524,6 +524,8 @@ export function buildPrompt(
     changedFiles?: string[]
     /** Deterministic local-tool findings injected as ground truth (M5); {{groundTruth}}. */
     groundTruth?: string
+    /** Bounded local review-memory summary, advisory only; {{reviewMemory}}. */
+    reviewMemory?: string
   },
   instructions: string = DEFAULT_REVIEW_INSTRUCTIONS
 ): string {
@@ -550,6 +552,7 @@ export function buildPrompt(
   // are left intact by substitute(). An empty/blank prompt falls back to default.
   const effective = (instructions ?? '').trim() || DEFAULT_REVIEW_INSTRUCTIONS
   const gt = (ctx.groundTruth ?? '').trim()
+  const memory = (ctx.reviewMemory ?? '').trim()
   const body = substitute(effective, {
     repo: ctx.fullName,
     subject,
@@ -558,7 +561,8 @@ export function buildPrompt(
     diffFile: ctx.diffFile,
     reviewFile: ctx.diffFile,
     changedFiles: changed.join('\n'),
-    groundTruth: gt
+    groundTruth: gt,
+    reviewMemory: memory
   })
   // Ground the review in deterministic local-tool findings: confirm/refute/merge, no
   // padding. Auto-appended unless the prompt already places {{groundTruth}} itself.
@@ -566,6 +570,9 @@ export function buildPrompt(
     gt && !effective.includes('{{groundTruth}}')
       ? `\n\n## Deterministic findings from local tools — treat as ground truth\nConfirm, refute, or merge each below; add only substantiated NEW issues; do not pad.\n\n${gt}`
       : ''
+  // Local review memory is advisory and bounded by the current changed files. It is
+  // auto-appended unless a custom prompt explicitly places {{reviewMemory}}.
+  const memoryContext = memory && !effective.includes('{{reviewMemory}}') ? `\n\n${memory}` : ''
   // Ask the agent to ALSO emit a machine-readable findings block so Aerie can persist
   // and aggregate findings across agents (M8/M9). Best-effort: it's stripped from the
   // posted comment and the run never fails if it's absent or malformed.
@@ -577,5 +584,5 @@ export function buildPrompt(
     '[{"file":"path/from/repo/root","line":42,"severity":"high","ruleId":"optional","message":"one concise line"}]\n' +
     '```\n' +
     'severity is one of critical|high|medium|low|info. Only real, substantiated issues — do not pad.'
-  return `${context}\n\n${body}${grounding}${findingsRequest}\n`
+  return `${context}\n\n${body}${grounding}${memoryContext}${findingsRequest}\n`
 }

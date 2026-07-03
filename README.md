@@ -86,13 +86,26 @@ third-party service.
 - **Structured findings** — each review also extracts the agent's concrete findings (file, line,
   severity, message) into a compact list under the review; the raw block is kept out of the posted
   comment. Sets up cross-agent consensus across a panel.
+- **Review memory / evidence ledger** — structured findings have stable identities across runs.
+  Mark a finding accepted, fixed, false positive, accepted risk, duplicate, dismissed, or needs
+  follow-up; repeated suppressing decisions collapse into a recoverable local section instead of
+  polluting the actionable list. Aerie also stores a hash-only source context fallback, so a finding
+  can still match after path/message drift without persisting source snippets. A fixed finding that
+  appears again is shown as reopened, not hidden. Settings includes a per-repo Review memory manager
+  with search, decision/scope filters, note editing, archive controls, selected-row bulk archive,
+  JSON export/import, and a recent audit-event timeline. Decisions are local SQLite metadata;
+  archived decisions leave future matching but remain in exportable audit history. Single-run
+  posting warns when local memory has suppressed structured findings. LLM reviews also receive a
+  bounded, changed-file-only advisory memory section so current code still wins and full repo
+  memory is never injected.
 - **Panel review (multi-agent) + consolidated report** — flip on "Panel review" to run one change
   through several agents at once; up to 3 run concurrently and the rest queue. Aerie persists the
   panel as one review object in Cockpit and History, not as loose child runs. Open it to see a
   single consolidated report: consensus findings agreed by ≥K agents, single-source findings to
-  triage, copy-ready Markdown, confirm-gated GitHub posting, and each successfully completed child
-  agent report preserved below as evidence. Failed or killed child runs stay in local run history
-  but are excluded from the consolidated Markdown report.
+  triage, inline review-memory actions, suppression counts, copy-ready Markdown, confirm-gated
+  GitHub posting, and each successfully completed child agent report preserved below as evidence.
+  Failed or killed child runs stay in local run history but are excluded from the consolidated
+  Markdown report.
 - **Presets** — save an agent + model + reasoning bundle and apply it in one click.
 - **Live output, cancel/kill, and history** — watch the agent's transcript stream, cancel a queued
   run before it spawns, stop a running run,
@@ -230,7 +243,12 @@ xattr -dr com.apple.quarantine /Applications/Aerie.app
 6. Watch the live transcript. When it finishes, **Post as commit/PR comment** where that
    target exists, or **Create issue** — confirm the exact body (optionally tag the author)
    and it's posted.
-7. If you handled the audit locally instead, mark it **Handled locally** or **Verified locally**
+7. Mark noisy structured findings **False positive** or **Dismiss** to suppress future repeats;
+   use **Accept** or **Fixed** to leave an auditable local decision. If a fixed finding returns,
+   Aerie marks it reopened and keeps it actionable.
+8. Use Settings → **Review memory** to search a repository's decisions, edit notes/statuses,
+   archive stale suppressions, export/import memory JSON, and inspect recent audit events.
+9. If you handled the audit locally instead, mark it **Handled locally** or **Verified locally**
    from the run view so it leaves the cockpit attention queue without creating a GitHub comment.
 
 ### Configuring agents & prompts

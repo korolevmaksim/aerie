@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { PostKind, RunFinding, RunLocalStatus, RunRecord, RunStatus } from '@shared/types'
+import type {
+  PostKind,
+  ReviewMemoryDecision,
+  RunFinding,
+  RunLocalStatus,
+  RunRecord,
+  RunStatus
+} from '@shared/types'
 import { formatRelativeTime } from '../lib/format'
 import { runOutputToMarkdown, runRefLabel } from '../lib/runConsole'
 import PostConfirmModal from './PostConfirmModal'
@@ -15,6 +22,50 @@ function localStatusLabel(status: RunLocalStatus): string {
   if (status === 'handled') return 'Handled locally'
   if (status === 'verified') return 'Verified locally'
   return 'Open'
+}
+
+const QUICK_MEMORY_DECISIONS: ReadonlyArray<{ decision: ReviewMemoryDecision; label: string }> = [
+  { decision: 'accepted', label: 'Accept' },
+  { decision: 'fixed', label: 'Fixed' },
+  { decision: 'false_positive', label: 'False positive' },
+  { decision: 'dismissed', label: 'Dismiss' }
+]
+
+function decisionLabel(decision: ReviewMemoryDecision): string {
+  switch (decision) {
+    case 'accepted':
+      return 'accepted'
+    case 'fixed':
+      return 'fixed'
+    case 'false_positive':
+      return 'false positive'
+    case 'accepted_risk':
+      return 'accepted risk'
+    case 'duplicate':
+      return 'duplicate'
+    case 'dismissed':
+      return 'dismissed'
+    case 'needs_follow_up':
+      return 'needs follow-up'
+  }
+}
+
+function decisionRequiresNote(decision: ReviewMemoryDecision): boolean {
+  return (
+    decision === 'false_positive' ||
+    decision === 'accepted_risk' ||
+    decision === 'duplicate' ||
+    decision === 'dismissed'
+  )
+}
+
+function memoryLabel(finding: RunFinding): string | null {
+  const memory = finding.memory
+  if (!memory) return null
+  const parts = [`memory: ${decisionLabel(memory.annotation.decision)}`]
+  if (memory.reopened) parts.push('reopened')
+  if (memory.matchedBy === 'context_hash') parts.push('via context')
+  return parts.join(' · ')
 }
 
 /**
@@ -47,6 +98,13 @@ function RunView({
   const [settingLocalStatus, setSettingLocalStatus] = useState(false)
   const [localStatusError, setLocalStatusError] = useState<string | null>(null)
   const [postError, setPostError] = useState<string | null>(null)
+  const [memoryDraft, setMemoryDraft] = useState<{
+    findingId: number
+    decision: ReviewMemoryDecision
+    note: string
+  } | null>(null)
+  const [memoryBusyId, setMemoryBusyId] = useState<number | null>(null)
+  const [memoryError, setMemoryError] = useState<string | null>(null)
   const [copied, setCopied] = useState<string | null>(null)
   const runIdRef = useRef(run.id)
   const consoleRef = useRef<HTMLPreElement | null>(null)
@@ -120,6 +178,53 @@ function RunView({
     await window.aerie.runner.kill(run.id)
   }
 
+  const reloadFindings = useCallback(async (): Promise<void> => {
+    const res = await window.aerie.runner.findings(run.id)
+    if (res.ok) setFindings(res.value)
+    else setMemoryError(res.error)
+  }, [run.id])
+
+  const saveFindingDecision = useCallback(
+    async (finding: RunFinding, decision: ReviewMemoryDecision, note = ''): Promise<void> => {
+      setMemoryBusyId(finding.id)
+      setMemoryError(null)
+      try {
+        const res = await window.aerie.reviewMemory.annotateFinding({
+          findingId: finding.id,
+          decision,
+          scopeKind: 'repo',
+          note
+        })
+        if (res.ok) {
+          setMemoryDraft(null)
+          await reloadFindings()
+        } else {
+          setMemoryError(res.error)
+        }
+      } finally {
+        setMemoryBusyId(null)
+      }
+    },
+    [reloadFindings]
+  )
+
+  const clearFindingDecision = useCallback(
+    async (finding: RunFinding): Promise<void> => {
+      const annotationId = finding.memory?.annotation.id
+      if (!annotationId) return
+      setMemoryBusyId(finding.id)
+      setMemoryError(null)
+      try {
+        const res = await window.aerie.reviewMemory.clearAnnotation({ annotationId })
+        if (res.ok) await reloadFindings()
+        else setMemoryError(res.error)
+      } finally {
+        setMemoryBusyId(null)
+      }
+    },
+    [reloadFindings]
+  )
+
   // Copy the run's review (the clean captured output when present, else the live transcript) to
   // the clipboard. Client-side over text already on screen; the Markdown wrapper adds only a
   // target/agent/status header — never a token or local path.
@@ -155,6 +260,12 @@ function RunView({
   const reviewBody = `${capped.trim()}\n\n---\n_Posted via Aerie · agent \`${run.agentId}\`_`
   const issueTitle = `Aerie review: ${runRefLabel(run)}`
   const canPost = isTerminal(status) && cleanOutput.trim().length > 0
+  const actionableFindings = findings.filter((finding) => !finding.memory?.suppresses)
+  const suppressedFindings = findings.filter((finding) => finding.memory?.suppresses)
+  const memoryPostWarning =
+    suppressedFindings.length > 0
+      ? `Review memory suppressed ${suppressedFindings.length} structured finding${suppressedFindings.length === 1 ? '' : 's'} locally. Check the draft for agent prose that still mentions suppressed items.`
+      : null
   // The runner (M-Q) flags an empty/truncated/transcript-leaked LLM review in the
   // transcript; surface that verdict here so the user reviews before posting. Reading
   // the marker keeps a single source of truth (the main-process assessment).
@@ -206,6 +317,88 @@ function RunView({
     } finally {
       setPosting(false)
     }
+  }
+
+  const renderFinding = (finding: RunFinding, index: number): React.JSX.Element => {
+    const draft = memoryDraft?.findingId === finding.id ? memoryDraft : null
+    const busy = memoryBusyId === finding.id
+    const memory = finding.memory
+    const memoryChipLabel = memoryLabel(finding)
+    return (
+      <li
+        key={finding.id || index}
+        className={`run__finding run__finding--managed${memory?.suppresses ? ' run__finding--suppressed' : ''}`}
+      >
+        <div className="run__finding-main">
+          <span className={`chip sev sev--${finding.severity}`}>{finding.severity}</span>
+          <code className="run__finding-loc">
+            {finding.file}
+            {finding.line != null ? `:${finding.line}` : ''}
+          </code>
+          <span className="run__finding-msg">{finding.message}</span>
+          {memory && (
+            <span
+              className={`chip run__memory-chip${memory.suppresses ? ' run__memory-chip--suppressed' : ''}${memory.reopened ? ' run__memory-chip--reopened' : ''}`}
+              title={memory.annotation.note || undefined}
+            >
+              {memoryChipLabel}
+            </span>
+          )}
+        </div>
+        <div className="run__finding-actions" aria-label="Review-memory actions">
+          {QUICK_MEMORY_DECISIONS.map((item) => (
+            <button
+              key={item.decision}
+              className="btn btn--ghost run__finding-action"
+              disabled={busy || memory?.annotation.decision === item.decision}
+              onClick={() => {
+                if (decisionRequiresNote(item.decision)) {
+                  setMemoryDraft({
+                    findingId: finding.id,
+                    decision: item.decision,
+                    note: memory?.annotation.note ?? ''
+                  })
+                } else {
+                  void saveFindingDecision(finding, item.decision)
+                }
+              }}
+            >
+              {item.label}
+            </button>
+          ))}
+          {memory && (
+            <button
+              className="btn btn--ghost run__finding-action"
+              disabled={busy}
+              onClick={() => void clearFindingDecision(finding)}
+            >
+              Archive
+            </button>
+          )}
+        </div>
+        {draft && (
+          <div className="run__memory-editor">
+            <input
+              className="field field--grow"
+              value={draft.note}
+              placeholder="Reason for suppressing this repeat finding"
+              disabled={busy}
+              onChange={(event) => setMemoryDraft({ ...draft, note: event.target.value })}
+            />
+            <button
+              className="btn btn--primary"
+              disabled={busy || (decisionRequiresNote(draft.decision) && draft.note.trim() === '')}
+              onClick={() => void saveFindingDecision(finding, draft.decision, draft.note)}
+            >
+              Save
+            </button>
+            <button className="btn btn--ghost" disabled={busy} onClick={() => setMemoryDraft(null)}>
+              Cancel
+            </button>
+          </div>
+        )}
+      </li>
+    )
   }
 
   return (
@@ -275,20 +468,26 @@ function RunView({
       {findings.length > 0 && (
         <div className="run__findings">
           <h4 className="run__findings-head">
-            {findings.length} structured finding{findings.length === 1 ? '' : 's'}
+            {actionableFindings.length} actionable structured finding
+            {actionableFindings.length === 1 ? '' : 's'}
+            {suppressedFindings.length > 0 ? ` · ${suppressedFindings.length} suppressed` : ''}
           </h4>
-          <ul className="run__findings-list">
-            {findings.map((f, i) => (
-              <li key={i} className="run__finding">
-                <span className={`chip sev sev--${f.severity}`}>{f.severity}</span>
-                <code className="run__finding-loc">
-                  {f.file}
-                  {f.line != null ? `:${f.line}` : ''}
-                </code>
-                <span className="run__finding-msg">{f.message}</span>
-              </li>
-            ))}
-          </ul>
+          {memoryError && (
+            <p className="run__memory-error" role="alert">
+              {memoryError}
+            </p>
+          )}
+          {actionableFindings.length > 0 ? (
+            <ul className="run__findings-list">{actionableFindings.map(renderFinding)}</ul>
+          ) : (
+            <p className="empty">All structured findings are suppressed by review memory.</p>
+          )}
+          {suppressedFindings.length > 0 && (
+            <details className="run__suppressed">
+              <summary>Suppressed by review memory ({suppressedFindings.length})</summary>
+              <ul className="run__findings-list">{suppressedFindings.map(renderFinding)}</ul>
+            </details>
+          )}
         </div>
       )}
 
@@ -385,6 +584,7 @@ function RunView({
           targetLabel={postModal.targetLabel}
           initialBody={reviewBody}
           initialTitle={postModal.kind === 'issue' ? issueTitle : undefined}
+          warning={memoryPostWarning}
           mentionLogin={postModal.kind === 'issue' ? null : run.authorLogin}
           busy={posting}
           error={postError}

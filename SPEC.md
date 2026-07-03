@@ -137,6 +137,25 @@ Markdown report with child agent outputs as evidence. Group posting uses the sam
 confirmation rule as a single run, and main derives commit/PR/issue targets from the stored
 group target, never from renderer-supplied routing.
 
+Review memory is local evidence metadata over structured findings. Each finding has a persisted
+occurrence id, exact fingerprint, versioned stable id, and an optional hash-only source-context id.
+Main-process review-memory APIs derive the repo, stable id, and context hash from the finding
+occurrence; the renderer can ask to annotate, archive, export, or import through the typed bridge.
+Matching prefers
+repo-scoped stable id, then global stable id, then repo/global context hash fallback. The context
+fallback stores no source snippet, only a bounded source-window hash. Suppressing decisions
+(`false_positive`, `accepted_risk`, `duplicate`, `dismissed`) collapse repeated findings into
+recoverable local UI sections and are omitted from panel-report finding lists, while `accepted`,
+`fixed`, and `needs_follow_up` remain visible. A repeated `fixed` finding is explicitly marked
+reopened so a regression is not hidden. Suppressing decisions require a local note at the
+main-process service boundary. Settings exposes a per-repo manager for search/filter, status/note
+updates, soft archive, JSON export/import, context/stable ids, and recent audit events; all writes
+append `review_memory_events`. Archived annotations stay exportable but are excluded from future
+matching. LLM prompts may include a bounded changed-file-only review-memory section with explicit
+advisory wording; full repo memory and archived annotations are never injected. Decision notes are
+redacted before persistence and stay local unless the user manually includes them in a GitHub post
+body.
+
 ## 6. Repo mapping & local execution
 
 Each repo carries: `remote_url` (from GitHub), optional `user_local_path` (his
@@ -279,6 +298,18 @@ run_groups(id, repo_id, ref_type['commit'|'pr'|'working-tree'|'project'], ref_id
            started_at, posted_url, local_status['open'|'handled'|'verified'],
            local_status_at, author_login)
 run_group_items(group_id, run_id, agent_id, position)
+findings(id, run_id, tool, rule_id, severity['critical'|'high'|'medium'|'low'|'info'],
+         file, line, message, fingerprint, stable_id, identity_version,
+         context_hash, context_version)
+review_memory_annotations(id, scope_key, scope_kind['repo'|'global'], repo_id, stable_id,
+                          context_hash,
+                          decision['accepted'|'fixed'|'false_positive'|'accepted_risk'|
+                                   'duplicate'|'dismissed'|'needs_follow_up'],
+                          note, source_finding_id, source_run_id, created_at, updated_at,
+                          archived_at)
+review_memory_events(id, annotation_id, event_kind['created'|'updated'|'cleared'], scope_key,
+                     scope_kind['repo'|'global'], repo_id, stable_id, context_hash,
+                     decision, note, source_finding_id, source_run_id, created_at)
 http_cache(key, etag, payload, updated_at)   -- conditional-request (ETag) cache; payload
                                              -- holds the body to replay on a 304 (M8)
 watches(id, repo_id, ref_type['commit'|'pr'], ref, last_seen_sha, last_polled_at)  -- M8

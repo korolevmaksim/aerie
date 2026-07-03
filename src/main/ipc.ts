@@ -8,8 +8,10 @@ import type {
   Agent,
   AgentCandidate,
   AgentInfo,
+  AnnotateFindingParams,
   ApiResult,
   BranchSummary,
+  ClearFindingMemoryParams,
   CommitDetail,
   CommitSummary,
   Paginated,
@@ -22,6 +24,8 @@ import type {
   Prompt,
   ConsensusParams,
   ConsensusResult,
+  ImportReviewMemoryParams,
+  ImportReviewMemoryResult,
   RunGroupReport,
   PipelineRunOutcome,
   PipelineWithRuns,
@@ -32,6 +36,9 @@ import type {
   RepoMapping,
   ReposResult,
   ReviewHistoryItem,
+  ReviewMemoryAnnotation,
+  ReviewMemoryEvent,
+  ReviewMemoryExport,
   RunFinding,
   RunLocalStatus,
   RunRecord,
@@ -39,7 +46,8 @@ import type {
   StartBatchParams,
   StartBatchResult,
   StartRunParams,
-  SystemInfo
+  SystemInfo,
+  UpdateReviewMemoryAnnotationParams
 } from '../shared/types'
 import {
   aggregateRunFindings,
@@ -96,6 +104,17 @@ import { runPipelineForDelta } from './pipelines'
 import { buildCommitDelta, DELTA_META } from './pollerLogic'
 import { resolveRunPostTarget } from './postTarget'
 import { redactText } from './redact'
+import {
+  annotateFindingMemory,
+  clearFindingMemory,
+  exportRepoReviewMemory,
+  importRepoReviewMemory,
+  isReviewMemoryDecision,
+  isReviewMemoryScopeKind,
+  listRepoReviewMemory,
+  listRepoReviewMemoryEvents,
+  updateFindingMemoryAnnotation
+} from './reviewMemory'
 import { isTrustedSender } from './security'
 import { isValidId, isValidSha } from '../shared/validators'
 import {
@@ -888,6 +907,128 @@ export function registerIpcHandlers(): void {
         return ok(getRunGroupReport(p.groupId))
       } catch (error) {
         return fail(error instanceof Error ? error.message : 'Failed to update panel status.')
+      }
+    }
+  )
+
+  ipcMain.handle(
+    CHANNELS.reviewMemoryAnnotateFinding,
+    (event, params: unknown): ApiResult<ReviewMemoryAnnotation> => {
+      if (!isTrustedSender(event)) return fail('Untrusted sender.')
+      const p = params as Partial<AnnotateFindingParams>
+      if (!isValidId(p?.findingId)) return fail('Invalid finding id.')
+      if (!isReviewMemoryDecision(p?.decision)) return fail('Invalid review-memory decision.')
+      if (p.scopeKind !== undefined && !isReviewMemoryScopeKind(p.scopeKind)) {
+        return fail('Invalid review-memory scope.')
+      }
+      if (p.note !== undefined && typeof p.note !== 'string') {
+        return fail('Invalid review-memory note.')
+      }
+      try {
+        return ok(
+          annotateFindingMemory({
+            findingId: p.findingId,
+            decision: p.decision,
+            scopeKind: p.scopeKind,
+            note: p.note
+          })
+        )
+      } catch (error) {
+        return fail(error instanceof Error ? error.message : 'Failed to update review memory.')
+      }
+    }
+  )
+
+  ipcMain.handle(
+    CHANNELS.reviewMemoryClearAnnotation,
+    (event, params: unknown): ApiResult<true> => {
+      if (!isTrustedSender(event)) return fail('Untrusted sender.')
+      const p = params as Partial<ClearFindingMemoryParams>
+      if (!isValidId(p?.annotationId)) return fail('Invalid review-memory annotation id.')
+      try {
+        return clearFindingMemory(p.annotationId)
+          ? ok(true)
+          : fail('Review-memory annotation not found.')
+      } catch (error) {
+        return fail(error instanceof Error ? error.message : 'Failed to clear review memory.')
+      }
+    }
+  )
+
+  ipcMain.handle(
+    CHANNELS.reviewMemoryUpdateAnnotation,
+    (event, params: unknown): ApiResult<ReviewMemoryAnnotation> => {
+      if (!isTrustedSender(event)) return fail('Untrusted sender.')
+      const p = params as Partial<UpdateReviewMemoryAnnotationParams>
+      if (!isValidId(p?.annotationId)) return fail('Invalid review-memory annotation id.')
+      if (!isReviewMemoryDecision(p?.decision)) return fail('Invalid review-memory decision.')
+      if (p.note !== undefined && typeof p.note !== 'string') {
+        return fail('Invalid review-memory note.')
+      }
+      try {
+        return ok(
+          updateFindingMemoryAnnotation({
+            annotationId: p.annotationId,
+            decision: p.decision,
+            note: p.note
+          })
+        )
+      } catch (error) {
+        return fail(error instanceof Error ? error.message : 'Failed to update review memory.')
+      }
+    }
+  )
+
+  ipcMain.handle(
+    CHANNELS.reviewMemoryListRepo,
+    (event, repoId: unknown): ApiResult<ReviewMemoryAnnotation[]> => {
+      if (!isTrustedSender(event)) return fail('Untrusted sender.')
+      if (!isValidId(repoId)) return fail('Invalid repository id.')
+      try {
+        return ok(listRepoReviewMemory(repoId))
+      } catch (error) {
+        return fail(error instanceof Error ? error.message : 'Failed to list review memory.')
+      }
+    }
+  )
+
+  ipcMain.handle(
+    CHANNELS.reviewMemoryListRepoEvents,
+    (event, repoId: unknown): ApiResult<ReviewMemoryEvent[]> => {
+      if (!isTrustedSender(event)) return fail('Untrusted sender.')
+      if (!isValidId(repoId)) return fail('Invalid repository id.')
+      try {
+        return ok(listRepoReviewMemoryEvents(repoId))
+      } catch (error) {
+        return fail(error instanceof Error ? error.message : 'Failed to list review-memory events.')
+      }
+    }
+  )
+
+  ipcMain.handle(
+    CHANNELS.reviewMemoryExportRepo,
+    (event, repoId: unknown): ApiResult<ReviewMemoryExport> => {
+      if (!isTrustedSender(event)) return fail('Untrusted sender.')
+      if (!isValidId(repoId)) return fail('Invalid repository id.')
+      try {
+        return ok(exportRepoReviewMemory(repoId))
+      } catch (error) {
+        return fail(error instanceof Error ? error.message : 'Failed to export review memory.')
+      }
+    }
+  )
+
+  ipcMain.handle(
+    CHANNELS.reviewMemoryImportRepo,
+    (event, params: unknown): ApiResult<ImportReviewMemoryResult> => {
+      if (!isTrustedSender(event)) return fail('Untrusted sender.')
+      const p = params as Partial<ImportReviewMemoryParams>
+      if (!isValidId(p?.repoId)) return fail('Invalid repository id.')
+      if (typeof p.payload !== 'string') return fail('Invalid import payload.')
+      try {
+        return ok(importRepoReviewMemory({ repoId: p.repoId, payload: p.payload }))
+      } catch (error) {
+        return fail(error instanceof Error ? error.message : 'Failed to import review memory.')
       }
     }
   )

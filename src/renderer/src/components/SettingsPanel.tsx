@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { OpenTarget, SettingKey, SystemInfo } from '@shared/types'
 import PresetsSettings from './PresetsSettings'
 import PromptsSettings from './PromptsSettings'
+import ReviewMemorySettings from './ReviewMemorySettings'
 
 /** A labelled boolean toggle backed by a main-process UI setting. */
 function SettingToggle({
@@ -70,7 +71,7 @@ function PathRow({
   )
 }
 
-function SettingsPanel(): React.JSX.Element {
+function SettingsPanel({ accountId }: { accountId: number | null }): React.JSX.Element {
   const [info, setInfo] = useState<SystemInfo | null>(null)
 
   useEffect(() => {
@@ -126,6 +127,7 @@ function SettingsPanel(): React.JSX.Element {
         />
       </div>
 
+      <ReviewMemorySettings accountId={accountId} />
       <PromptsSettings />
       <PresetsSettings />
     </section>

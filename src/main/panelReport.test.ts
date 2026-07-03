@@ -51,12 +51,16 @@ function group(over: Partial<RunGroupHistoryItem> = {}): RunGroupHistoryItem {
 
 function finding(over: Partial<ConsensusFinding> = {}): ConsensusFinding {
   return {
+    id: 1,
     tool: 'codex',
     ruleId: null,
     severity: 'high',
     file: 'src/app.ts',
     line: 42,
     message: 'Broken invariant',
+    fingerprint: 'fingerprint-1',
+    stableId: 'aerie-finding-v1:00000000000000000000000000000001',
+    contextHash: null,
     agreement: 2,
     ...over
   }
@@ -91,6 +95,7 @@ describe('panel report helpers', () => {
       runs: [run({ id: 1, agentId: 'codex' }), run({ id: 2, agentId: 'claude-code' })],
       consensusFindings: [finding()],
       singleSourceFindings: [finding({ agreement: 1, tool: 'claude-code', message: 'Needs test' })],
+      memorySuppressedFindings: [],
       consensusMin: 2,
       totalFindings: 2,
       outputs: new Map([
@@ -120,6 +125,7 @@ describe('panel report helpers', () => {
       ],
       consensusFindings: [],
       singleSourceFindings: [],
+      memorySuppressedFindings: [],
       consensusMin: 2,
       totalFindings: 0,
       outputs: new Map([
@@ -136,5 +142,43 @@ describe('panel report helpers', () => {
     expect(markdown).toContain('Claude completed review')
     expect(markdown).not.toContain('Codex startup failure')
     expect(markdown).not.toContain('Cursor was killed')
+  })
+
+  it('records locally suppressed repeated findings without listing their notes', () => {
+    const markdown = renderPanelReportMarkdown({
+      group: group(),
+      runs: [run({ id: 1, agentId: 'codex' })],
+      consensusFindings: [],
+      singleSourceFindings: [],
+      memorySuppressedFindings: [
+        finding({
+          memory: {
+            suppresses: true,
+            annotation: {
+              id: 4,
+              scopeKind: 'repo',
+              repoId: 7,
+              stableId: 'aerie-finding-v1:00000000000000000000000000000001',
+              contextHash: null,
+              decision: 'false_positive',
+              note: 'Sensitive local rationale',
+              sourceFindingId: 1,
+              sourceRunId: 1,
+              createdAt: '2026-07-03T00:00:00Z',
+              updatedAt: '2026-07-03T00:00:00Z',
+              archivedAt: null
+            },
+            matchedBy: 'stable_id',
+            reopened: false
+          }
+        })
+      ],
+      consensusMin: 2,
+      totalFindings: 1,
+      outputs: new Map([[1, 'Codex report']])
+    })
+
+    expect(markdown).toContain('Review memory suppressed 1 repeated finding locally.')
+    expect(markdown).not.toContain('Sensitive local rationale')
   })
 })

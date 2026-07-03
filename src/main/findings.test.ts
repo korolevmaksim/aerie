@@ -3,6 +3,7 @@ import {
   compareSeverity,
   extractSecrets,
   fingerprintOf,
+  findingContextHashOf,
   inChangedRange,
   parseActionlint,
   parseAgentFindings,
@@ -19,6 +20,7 @@ import {
   redactFinding,
   renderFindingsForPrompt,
   scopeToChanges,
+  stableFindingIdOf,
   type Finding,
   type Severity
 } from './findings'
@@ -60,6 +62,7 @@ describe('parseEslint', () => {
     })
     expect(f[1]).toMatchObject({ ruleId: 'no-debugger', severity: 'medium', line: 3 }) // error (2) → medium
     expect(f[0].fingerprint).toMatch(/^[0-9a-f]{8}$/)
+    expect(f[0].stableId).toMatch(/^aerie-finding-v1:[0-9a-f]{32}$/)
   })
 
   it('returns [] on malformed or non-array input', () => {
@@ -71,6 +74,55 @@ describe('parseEslint', () => {
   it('parseToolOutput dispatches eslint and ignores unknown tools', () => {
     expect(parseToolOutput('eslint', ESLINT_SAMPLE)).toHaveLength(2)
     expect(parseToolOutput('not-a-tool', ESLINT_SAMPLE)).toEqual([])
+  })
+})
+
+describe('finding identities', () => {
+  it('keeps stable ids line-insensitive but message-sensitive', () => {
+    const a = stableFindingIdOf({
+      tool: 'eslint',
+      file: 'src/app.ts',
+      ruleId: 'no-debugger',
+      message: 'Unexpected debugger statement.'
+    })
+    const b = stableFindingIdOf({
+      tool: 'eslint',
+      file: 'src/app.ts',
+      ruleId: 'no-debugger',
+      message: 'Unexpected debugger statement.'
+    })
+    const changedMessage = stableFindingIdOf({
+      tool: 'eslint',
+      file: 'src/app.ts',
+      ruleId: 'no-debugger',
+      message: 'debugger is not allowed'
+    })
+
+    expect(a).toBe(b)
+    expect(a).not.toBe(changedMessage)
+  })
+
+  it('hashes source context without path, line, or message inputs', () => {
+    const a = findingContextHashOf({
+      tool: 'eslint',
+      ruleId: 'no-debugger',
+      snippet: 'function demo() {\n  debugger\n}'
+    })
+    const b = findingContextHashOf({
+      tool: 'ESLINT',
+      ruleId: 'NO-DEBUGGER',
+      snippet: ' function demo() {\n\tdebugger\n } '
+    })
+    const differentRule = findingContextHashOf({
+      tool: 'eslint',
+      ruleId: 'no-alert',
+      snippet: 'function demo() {\n  debugger\n}'
+    })
+
+    expect(a).toMatch(/^aerie-context-v1:[0-9a-f]{32}$/)
+    expect(a).toBe(b)
+    expect(a).not.toBe(differentRule)
+    expect(findingContextHashOf({ tool: 'eslint', ruleId: null, snippet: '   ' })).toBeNull()
   })
 })
 
@@ -422,14 +474,16 @@ describe('parseAgentFindings', () => {
 })
 
 describe('redactFinding', () => {
+  const fakeGithubToken = ['ghp', '0123456789abcdef0123456789abcdef0123'].join('_')
   const f: Finding = {
     tool: 'codex',
     ruleId: 'r',
     severity: 'high',
     file: 'a.ts',
     line: 3,
-    message: 'leaked ghp_0123456789abcdef0123456789abcdef0123 here',
-    fingerprint: 'old'
+    message: `leaked ${fakeGithubToken} here`,
+    fingerprint: 'old',
+    stableId: 'stable-old'
   }
   it('scrubs secrets from the message and re-fingerprints', () => {
     const redact = (s: string): string => s.replace(/ghp_[A-Za-z0-9]+/g, '«redacted»')
@@ -437,6 +491,7 @@ describe('redactFinding', () => {
     expect(r.message).not.toContain('ghp_')
     expect(r.message).toContain('«redacted»')
     expect(r.fingerprint).not.toBe('old') // recomputed from the redacted fields
+    expect(r.stableId).not.toBe('stable-old')
   })
   it('leaves a null ruleId null', () => {
     expect(redactFinding({ ...f, ruleId: null }, (s) => s).ruleId).toBeNull()
@@ -469,6 +524,33 @@ describe('fingerprintOf', () => {
   })
 })
 
+describe('stableFindingIdOf', () => {
+  const base = {
+    tool: 'eslint',
+    file: './src/a.ts',
+    ruleId: 'no-foo',
+    message: 'Bad thing here'
+  }
+
+  it('is versioned and longer than the exact fingerprint', () => {
+    expect(stableFindingIdOf(base)).toMatch(/^aerie-finding-v1:[0-9a-f]{32}$/)
+  })
+
+  it('is line-insensitive because line is not part of the stable identity', () => {
+    expect(stableFindingIdOf(base)).toBe(stableFindingIdOf({ ...base }))
+    expect(fingerprintOf({ ...base, line: 10 })).not.toBe(fingerprintOf({ ...base, line: 11 }))
+  })
+
+  it('differs when source, file, rule, or message differ', () => {
+    expect(stableFindingIdOf(base)).not.toBe(stableFindingIdOf({ ...base, tool: 'biome' }))
+    expect(stableFindingIdOf(base)).not.toBe(stableFindingIdOf({ ...base, file: 'src/b.ts' }))
+    expect(stableFindingIdOf(base)).not.toBe(stableFindingIdOf({ ...base, ruleId: 'no-bar' }))
+    expect(stableFindingIdOf(base)).not.toBe(
+      stableFindingIdOf({ ...base, message: 'Different issue' })
+    )
+  })
+})
+
 describe('renderFindingsForPrompt', () => {
   const findings: Finding[] = [
     {
@@ -478,7 +560,8 @@ describe('renderFindingsForPrompt', () => {
       file: 'x.ts',
       line: 3,
       message: 'debugger',
-      fingerprint: 'a'
+      fingerprint: 'a',
+      stableId: 'stable:a'
     },
     {
       tool: 'gitleaks',
@@ -487,7 +570,8 @@ describe('renderFindingsForPrompt', () => {
       file: 'd.json',
       line: 2,
       message: 'API Key',
-      fingerprint: 'b'
+      fingerprint: 'b',
+      stableId: 'stable:b'
     }
   ]
   it('renders a severity-ordered, compact block', () => {

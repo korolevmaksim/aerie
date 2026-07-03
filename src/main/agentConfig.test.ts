@@ -112,6 +112,38 @@ describe('buildPrompt', () => {
     const p = buildPrompt({ ...base, refType: 'commit', refId: 'deadbeef' })
     expect(p).not.toContain('ground truth')
   })
+
+  it('auto-appends bounded review memory when provided', () => {
+    const p = buildPrompt({
+      ...base,
+      refType: 'commit',
+      refId: 'deadbeef',
+      reviewMemory:
+        '## Local review memory — advisory only\n- false_positive (repo) src/a.ts: noisy'
+    })
+    expect(p).toContain('Local review memory')
+    expect(p).toContain('advisory only')
+    expect(p).toContain('false_positive')
+  })
+
+  it('lets a prompt place {{reviewMemory}} itself without duplicate auto-append', () => {
+    const p = buildPrompt(
+      {
+        ...base,
+        refType: 'commit',
+        refId: 'deadbeef',
+        reviewMemory: 'MEMORY_LINE'
+      },
+      'Use memory here: {{reviewMemory}}'
+    )
+    expect(p).toContain('Use memory here: MEMORY_LINE')
+    expect(p.match(/MEMORY_LINE/g)).toHaveLength(1)
+  })
+
+  it('adds no review-memory section when none is provided', () => {
+    const p = buildPrompt({ ...base, refType: 'commit', refId: 'deadbeef' })
+    expect(p).not.toContain('Local review memory')
+  })
 })
 
 describe('SEED_PROMPTS', () => {

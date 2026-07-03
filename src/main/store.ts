@@ -8,6 +8,11 @@ import type {
   PipelineRunStatus,
   PipelineTrigger,
   RefType,
+  ReviewMemoryAnnotation,
+  ReviewMemoryDecision,
+  ReviewMemoryEvent,
+  ReviewMemoryEventKind,
+  ReviewMemoryScopeKind,
   RunLocalStatus
 } from '../shared/types'
 import {
@@ -16,7 +21,12 @@ import {
   LEGACY_DEFAULT_REVIEW_INSTRUCTIONS,
   SEED_PROMPTS
 } from './agentConfig'
-import type { Finding } from './findings'
+import {
+  FINDING_CONTEXT_VERSION,
+  FINDING_STABLE_ID_VERSION,
+  stableFindingIdOf,
+  type Finding
+} from './findings'
 
 /**
  * SQLite store for Aerie. Lives in the main process only. The DB file sits under
@@ -414,6 +424,102 @@ const MIGRATIONS: ReadonlyArray<(db: Database.Database) => void> = [
       ALTER TABLE pipeline_runs
         ADD COLUMN run_group_id INTEGER REFERENCES run_groups(id) ON DELETE SET NULL;
       CREATE INDEX idx_pipeline_runs_group ON pipeline_runs (run_group_id);
+    `)
+  },
+  // v20 — review-memory identity foundation. Keep the original exact
+  // fingerprint for compatibility, and add a longer line-insensitive stable id
+  // for future per-finding annotations and repeat-noise suppression.
+  (db) => {
+    db.exec(`
+      ALTER TABLE findings ADD COLUMN stable_id TEXT;
+      ALTER TABLE findings
+        ADD COLUMN identity_version TEXT NOT NULL DEFAULT 'legacy-fnv1a-v1';
+      CREATE INDEX idx_findings_stable_id ON findings (stable_id);
+      CREATE INDEX idx_findings_fingerprint ON findings (fingerprint);
+    `)
+  },
+  // v21 — local review-memory evidence ledger. An annotation is the current
+  // decision for one stable finding identity in either a repo or global scope.
+  // Events append the audit trail for created/updated/cleared decisions.
+  (db) => {
+    db.exec(`
+      CREATE TABLE review_memory_annotations (
+        id                INTEGER PRIMARY KEY AUTOINCREMENT,
+        scope_key         TEXT    NOT NULL,
+        scope_kind        TEXT    NOT NULL CHECK (scope_kind IN ('repo','global')),
+        repo_id           INTEGER REFERENCES repos(id) ON DELETE CASCADE,
+        stable_id         TEXT    NOT NULL,
+        decision          TEXT    NOT NULL CHECK (
+          decision IN (
+            'accepted',
+            'fixed',
+            'false_positive',
+            'accepted_risk',
+            'duplicate',
+            'dismissed',
+            'needs_follow_up'
+          )
+        ),
+        note              TEXT    NOT NULL DEFAULT '',
+        source_finding_id INTEGER REFERENCES findings(id) ON DELETE SET NULL,
+        source_run_id     INTEGER REFERENCES runs(id) ON DELETE SET NULL,
+        created_at        TEXT    NOT NULL,
+        updated_at        TEXT    NOT NULL,
+        CHECK (
+          (scope_kind = 'global' AND repo_id IS NULL AND scope_key = 'global')
+          OR
+          (scope_kind = 'repo' AND repo_id IS NOT NULL AND scope_key = 'repo:' || repo_id)
+        ),
+        UNIQUE (scope_key, stable_id)
+      );
+      CREATE INDEX idx_review_memory_repo ON review_memory_annotations (repo_id, updated_at);
+      CREATE INDEX idx_review_memory_stable ON review_memory_annotations (stable_id);
+
+      CREATE TABLE review_memory_events (
+        id                INTEGER PRIMARY KEY AUTOINCREMENT,
+        annotation_id     INTEGER REFERENCES review_memory_annotations(id) ON DELETE SET NULL,
+        event_kind        TEXT    NOT NULL CHECK (event_kind IN ('created','updated','cleared')),
+        scope_key         TEXT    NOT NULL,
+        scope_kind        TEXT    NOT NULL CHECK (scope_kind IN ('repo','global')),
+        repo_id           INTEGER REFERENCES repos(id) ON DELETE SET NULL,
+        stable_id         TEXT    NOT NULL,
+        decision          TEXT,
+        note              TEXT    NOT NULL DEFAULT '',
+        source_finding_id INTEGER REFERENCES findings(id) ON DELETE SET NULL,
+        source_run_id     INTEGER REFERENCES runs(id) ON DELETE SET NULL,
+        created_at        TEXT    NOT NULL
+      );
+      CREATE INDEX idx_review_memory_events_stable ON review_memory_events (stable_id, created_at);
+      CREATE INDEX idx_review_memory_events_repo ON review_memory_events (repo_id, created_at);
+    `)
+  },
+  // v22 — context-hash fallback for review memory. Store only a bounded source-window
+  // hash, never the source snippet, so repeat findings can match after path/message drift
+  // without persisting potentially sensitive code.
+  (db) => {
+    db.exec(`
+      ALTER TABLE findings ADD COLUMN context_hash TEXT;
+      ALTER TABLE findings ADD COLUMN context_version TEXT;
+      CREATE INDEX idx_findings_context_hash ON findings (context_hash);
+
+      ALTER TABLE review_memory_annotations ADD COLUMN context_hash TEXT;
+      CREATE INDEX idx_review_memory_context ON review_memory_annotations (context_hash);
+
+      ALTER TABLE review_memory_events ADD COLUMN context_hash TEXT;
+      CREATE INDEX idx_review_memory_events_context ON review_memory_events (context_hash, created_at);
+    `)
+  },
+  // v23 — archive review-memory annotations instead of deleting them. Archived
+  // annotations leave the matching set but remain exportable with their audit trail.
+  (db) => {
+    db.exec(`
+      ALTER TABLE review_memory_annotations ADD COLUMN archived_at TEXT;
+      CREATE INDEX idx_review_memory_repo_active
+        ON review_memory_annotations (repo_id, archived_at, updated_at);
+      CREATE INDEX idx_review_memory_stable_active
+        ON review_memory_annotations (stable_id, archived_at);
+      CREATE INDEX idx_review_memory_context_active
+        ON review_memory_annotations (context_hash, archived_at);
     `)
   }
 ]
@@ -1063,6 +1169,24 @@ export interface FindingRow {
   line: number | null
   message: string
   fingerprint: string
+  stable_id: string | null
+  identity_version: string
+  context_hash: string | null
+  context_version: string | null
+}
+
+export function stableIdForFindingRow(
+  f: Pick<FindingRow, 'tool' | 'rule_id' | 'file' | 'message' | 'stable_id'>
+): string {
+  return (
+    f.stable_id ??
+    stableFindingIdOf({
+      tool: f.tool,
+      file: f.file,
+      ruleId: f.rule_id,
+      message: f.message
+    })
+  )
 }
 
 /** Persists a run's normalized findings (one transaction). No-op for an empty set. */
@@ -1070,8 +1194,14 @@ export function insertFindings(runId: number, findings: Finding[]): void {
   if (findings.length === 0) return
   const database = requireDb()
   const stmt = database.prepare(
-    `INSERT INTO findings (run_id, tool, rule_id, severity, file, line, message, fingerprint)
-     VALUES (@runId, @tool, @ruleId, @severity, @file, @line, @message, @fingerprint)`
+    `INSERT INTO findings (
+       run_id, tool, rule_id, severity, file, line, message, fingerprint, stable_id,
+       identity_version, context_hash, context_version
+     )
+     VALUES (
+       @runId, @tool, @ruleId, @severity, @file, @line, @message, @fingerprint, @stableId,
+       @identityVersion, @contextHash, @contextVersion
+     )`
   )
   const tx = database.transaction((fs: Finding[]) => {
     for (const f of fs) {
@@ -1083,7 +1213,11 @@ export function insertFindings(runId: number, findings: Finding[]): void {
         file: f.file,
         line: f.line,
         message: f.message,
-        fingerprint: f.fingerprint
+        fingerprint: f.fingerprint,
+        stableId: f.stableId,
+        identityVersion: FINDING_STABLE_ID_VERSION,
+        contextHash: f.contextHash ?? null,
+        contextVersion: f.contextHash ? FINDING_CONTEXT_VERSION : null
       })
     }
   })
@@ -1094,6 +1228,394 @@ export function listFindingsForRun(runId: number): FindingRow[] {
   return requireDb()
     .prepare(`SELECT * FROM findings WHERE run_id = ? ORDER BY id ASC`)
     .all(runId) as FindingRow[]
+}
+
+export function getFindingById(id: number): FindingRow | undefined {
+  return requireDb().prepare(`SELECT * FROM findings WHERE id = ?`).get(id) as
+    | FindingRow
+    | undefined
+}
+
+// --- review memory / evidence ledger -----------------------------------------
+
+export interface ReviewMemoryAnnotationRow {
+  id: number
+  scope_key: string
+  scope_kind: ReviewMemoryScopeKind
+  repo_id: number | null
+  stable_id: string
+  context_hash: string | null
+  decision: ReviewMemoryDecision
+  note: string
+  source_finding_id: number | null
+  source_run_id: number | null
+  created_at: string
+  updated_at: string
+  archived_at: string | null
+}
+
+export interface ReviewMemoryEventRow {
+  id: number
+  annotation_id: number | null
+  event_kind: ReviewMemoryEventKind
+  scope_key: string
+  scope_kind: ReviewMemoryScopeKind
+  repo_id: number | null
+  stable_id: string
+  context_hash: string | null
+  decision: ReviewMemoryDecision | null
+  note: string
+  source_finding_id: number | null
+  source_run_id: number | null
+  created_at: string
+}
+
+export interface UpsertReviewMemoryAnnotationInput {
+  scopeKind: ReviewMemoryScopeKind
+  repoId: number | null
+  stableId: string
+  contextHash: string | null
+  decision: ReviewMemoryDecision
+  note: string
+  sourceFindingId: number | null
+  sourceRunId: number | null
+  now: string
+}
+
+export interface UpdateReviewMemoryAnnotationInput {
+  annotationId: number
+  decision: ReviewMemoryDecision
+  note: string
+  now: string
+}
+
+function reviewMemoryScopeKey(scopeKind: ReviewMemoryScopeKind, repoId: number | null): string {
+  if (scopeKind === 'global') return 'global'
+  if (repoId === null) throw new Error('Repository-scoped review memory requires a repository id.')
+  return `repo:${repoId}`
+}
+
+function rowToReviewMemoryAnnotation(row: ReviewMemoryAnnotationRow): ReviewMemoryAnnotation {
+  return {
+    id: row.id,
+    scopeKind: row.scope_kind,
+    repoId: row.repo_id,
+    stableId: row.stable_id,
+    contextHash: row.context_hash,
+    decision: row.decision,
+    note: row.note,
+    sourceFindingId: row.source_finding_id,
+    sourceRunId: row.source_run_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    archivedAt: row.archived_at
+  }
+}
+
+function rowToReviewMemoryEvent(row: ReviewMemoryEventRow): ReviewMemoryEvent {
+  return {
+    id: row.id,
+    annotationId: row.annotation_id,
+    eventKind: row.event_kind,
+    scopeKind: row.scope_kind,
+    repoId: row.repo_id,
+    stableId: row.stable_id,
+    contextHash: row.context_hash,
+    decision: row.decision,
+    note: row.note,
+    sourceFindingId: row.source_finding_id,
+    sourceRunId: row.source_run_id,
+    createdAt: row.created_at
+  }
+}
+
+function insertReviewMemoryEvent(
+  database: Database.Database,
+  event: {
+    annotationId: number | null
+    eventKind: 'created' | 'updated' | 'cleared'
+    scopeKey: string
+    scopeKind: ReviewMemoryScopeKind
+    repoId: number | null
+    stableId: string
+    contextHash: string | null
+    decision: ReviewMemoryDecision | null
+    note: string
+    sourceFindingId: number | null
+    sourceRunId: number | null
+    createdAt: string
+  }
+): void {
+  database
+    .prepare(
+      `INSERT INTO review_memory_events (
+         annotation_id, event_kind, scope_key, scope_kind, repo_id, stable_id, context_hash,
+         decision, note, source_finding_id, source_run_id, created_at
+       )
+       VALUES (
+         @annotationId, @eventKind, @scopeKey, @scopeKind, @repoId, @stableId, @contextHash,
+         @decision, @note, @sourceFindingId, @sourceRunId, @createdAt
+       )`
+    )
+    .run(event)
+}
+
+export function upsertReviewMemoryAnnotation(
+  input: UpsertReviewMemoryAnnotationInput
+): ReviewMemoryAnnotation {
+  const database = requireDb()
+  const scopeKey = reviewMemoryScopeKey(input.scopeKind, input.repoId)
+  const tx = database.transaction((): ReviewMemoryAnnotation => {
+    const existing = database
+      .prepare(`SELECT * FROM review_memory_annotations WHERE scope_key = ? AND stable_id = ?`)
+      .get(scopeKey, input.stableId) as ReviewMemoryAnnotationRow | undefined
+
+    let id: number
+    let eventKind: 'created' | 'updated'
+    if (existing) {
+      id = existing.id
+      eventKind = 'updated'
+      database
+        .prepare(
+          `UPDATE review_memory_annotations
+           SET decision = @decision,
+               note = @note,
+               context_hash = @contextHash,
+               source_finding_id = @sourceFindingId,
+               source_run_id = @sourceRunId,
+               updated_at = @updatedAt,
+               archived_at = NULL
+           WHERE id = @id`
+        )
+        .run({
+          id,
+          decision: input.decision,
+          note: input.note,
+          contextHash: input.contextHash,
+          sourceFindingId: input.sourceFindingId,
+          sourceRunId: input.sourceRunId,
+          updatedAt: input.now
+        })
+    } else {
+      eventKind = 'created'
+      const result = database
+        .prepare(
+          `INSERT INTO review_memory_annotations (
+             scope_key, scope_kind, repo_id, stable_id, context_hash, decision, note,
+             source_finding_id, source_run_id, created_at, updated_at
+           )
+           VALUES (
+             @scopeKey, @scopeKind, @repoId, @stableId, @contextHash, @decision, @note,
+             @sourceFindingId, @sourceRunId, @createdAt, @updatedAt
+           )`
+        )
+        .run({
+          scopeKey,
+          scopeKind: input.scopeKind,
+          repoId: input.repoId,
+          stableId: input.stableId,
+          contextHash: input.contextHash,
+          decision: input.decision,
+          note: input.note,
+          sourceFindingId: input.sourceFindingId,
+          sourceRunId: input.sourceRunId,
+          createdAt: input.now,
+          updatedAt: input.now
+        })
+      id = Number(result.lastInsertRowid)
+    }
+
+    insertReviewMemoryEvent(database, {
+      annotationId: id,
+      eventKind,
+      scopeKey,
+      scopeKind: input.scopeKind,
+      repoId: input.repoId,
+      stableId: input.stableId,
+      contextHash: input.contextHash,
+      decision: input.decision,
+      note: input.note,
+      sourceFindingId: input.sourceFindingId,
+      sourceRunId: input.sourceRunId,
+      createdAt: input.now
+    })
+
+    const row = database
+      .prepare(`SELECT * FROM review_memory_annotations WHERE id = ?`)
+      .get(id) as ReviewMemoryAnnotationRow
+    return rowToReviewMemoryAnnotation(row)
+  })
+  return tx()
+}
+
+export function clearReviewMemoryAnnotation(id: number, now: string): boolean {
+  const database = requireDb()
+  const tx = database.transaction((): boolean => {
+    const row = database.prepare(`SELECT * FROM review_memory_annotations WHERE id = ?`).get(id) as
+      | ReviewMemoryAnnotationRow
+      | undefined
+    if (!row) return false
+
+    if (row.archived_at !== null) return false
+
+    database
+      .prepare(
+        `UPDATE review_memory_annotations
+         SET archived_at = @archivedAt,
+             updated_at = @updatedAt
+         WHERE id = @id`
+      )
+      .run({ id, archivedAt: now, updatedAt: now })
+    insertReviewMemoryEvent(database, {
+      annotationId: row.id,
+      eventKind: 'cleared',
+      scopeKey: row.scope_key,
+      scopeKind: row.scope_kind,
+      repoId: row.repo_id,
+      stableId: row.stable_id,
+      contextHash: row.context_hash,
+      decision: row.decision,
+      note: row.note,
+      sourceFindingId: row.source_finding_id,
+      sourceRunId: row.source_run_id,
+      createdAt: now
+    })
+    return true
+  })
+  return tx()
+}
+
+export function updateReviewMemoryAnnotation(
+  input: UpdateReviewMemoryAnnotationInput
+): ReviewMemoryAnnotation | undefined {
+  const database = requireDb()
+  const tx = database.transaction((): ReviewMemoryAnnotation | undefined => {
+    const existing = database
+      .prepare(`SELECT * FROM review_memory_annotations WHERE id = ?`)
+      .get(input.annotationId) as ReviewMemoryAnnotationRow | undefined
+    if (!existing) return undefined
+    if (existing.archived_at !== null) return undefined
+
+    database
+      .prepare(
+        `UPDATE review_memory_annotations
+         SET decision = @decision,
+             note = @note,
+             updated_at = @updatedAt
+         WHERE id = @id`
+      )
+      .run({
+        id: input.annotationId,
+        decision: input.decision,
+        note: input.note,
+        updatedAt: input.now
+      })
+
+    insertReviewMemoryEvent(database, {
+      annotationId: input.annotationId,
+      eventKind: 'updated',
+      scopeKey: existing.scope_key,
+      scopeKind: existing.scope_kind,
+      repoId: existing.repo_id,
+      stableId: existing.stable_id,
+      contextHash: existing.context_hash,
+      decision: input.decision,
+      note: input.note,
+      sourceFindingId: existing.source_finding_id,
+      sourceRunId: existing.source_run_id,
+      createdAt: input.now
+    })
+
+    const row = database
+      .prepare(`SELECT * FROM review_memory_annotations WHERE id = ?`)
+      .get(input.annotationId) as ReviewMemoryAnnotationRow
+    return rowToReviewMemoryAnnotation(row)
+  })
+  return tx()
+}
+
+export function listReviewMemoryAnnotationsForRepo(
+  repoId: number,
+  limit = 200
+): ReviewMemoryAnnotation[] {
+  const repoKey = reviewMemoryScopeKey('repo', repoId)
+  return requireDb()
+    .prepare(
+      `SELECT * FROM review_memory_annotations
+       WHERE scope_key IN ('global', ?)
+         AND archived_at IS NULL
+       ORDER BY updated_at DESC, id DESC
+       LIMIT ?`
+    )
+    .all(repoKey, limit)
+    .map((row) => rowToReviewMemoryAnnotation(row as ReviewMemoryAnnotationRow))
+}
+
+export function listAllReviewMemoryAnnotationsForRepo(repoId: number): ReviewMemoryAnnotation[] {
+  const repoKey = reviewMemoryScopeKey('repo', repoId)
+  return requireDb()
+    .prepare(
+      `SELECT * FROM review_memory_annotations
+       WHERE scope_key IN ('global', ?)
+       ORDER BY archived_at IS NOT NULL ASC, updated_at DESC, id DESC`
+    )
+    .all(repoKey)
+    .map((row) => rowToReviewMemoryAnnotation(row as ReviewMemoryAnnotationRow))
+}
+
+export function listReviewMemoryEventsForRepo(repoId: number, limit = 100): ReviewMemoryEvent[] {
+  const repoKey = reviewMemoryScopeKey('repo', repoId)
+  return requireDb()
+    .prepare(
+      `SELECT * FROM review_memory_events
+       WHERE scope_key IN ('global', ?)
+       ORDER BY created_at DESC, id DESC
+       LIMIT ?`
+    )
+    .all(repoKey, limit)
+    .map((row) => rowToReviewMemoryEvent(row as ReviewMemoryEventRow))
+}
+
+export function listReviewMemoryAnnotationsForStableIds(
+  repoId: number,
+  stableIds: string[]
+): ReviewMemoryAnnotation[] {
+  const uniqueStableIds = Array.from(new Set(stableIds.filter((id) => id.trim().length > 0)))
+  if (uniqueStableIds.length === 0) return []
+  const repoKey = reviewMemoryScopeKey('repo', repoId)
+  const placeholders = uniqueStableIds.map(() => '?').join(', ')
+  return requireDb()
+    .prepare(
+      `SELECT * FROM review_memory_annotations
+       WHERE stable_id IN (${placeholders})
+         AND scope_key IN (?, 'global')
+         AND archived_at IS NULL
+       ORDER BY CASE scope_key WHEN ? THEN 0 ELSE 1 END, updated_at DESC, id DESC`
+    )
+    .all(...uniqueStableIds, repoKey, repoKey)
+    .map((row) => rowToReviewMemoryAnnotation(row as ReviewMemoryAnnotationRow))
+}
+
+export function listReviewMemoryAnnotationsForContextHashes(
+  repoId: number,
+  contextHashes: string[]
+): ReviewMemoryAnnotation[] {
+  const uniqueContextHashes = Array.from(
+    new Set(contextHashes.filter((hash) => hash.trim().length > 0))
+  )
+  if (uniqueContextHashes.length === 0) return []
+  const repoKey = reviewMemoryScopeKey('repo', repoId)
+  const placeholders = uniqueContextHashes.map(() => '?').join(', ')
+  return requireDb()
+    .prepare(
+      `SELECT * FROM review_memory_annotations
+       WHERE context_hash IN (${placeholders})
+         AND scope_key IN (?, 'global')
+         AND archived_at IS NULL
+       ORDER BY CASE scope_key WHEN ? THEN 0 ELSE 1 END, updated_at DESC, id DESC`
+    )
+    .all(...uniqueContextHashes, repoKey, repoKey)
+    .map((row) => rowToReviewMemoryAnnotation(row as ReviewMemoryAnnotationRow))
 }
 
 // --- settings (Stage 7) ------------------------------------------------------

@@ -6,6 +6,7 @@ import type {
   AddAccountInput,
   AgentCandidate,
   AgentInfo,
+  AnnotateFindingParams,
   ApiResult,
   PollerStatus,
   BranchSummary,
@@ -29,6 +30,12 @@ import type {
   ReposResult,
   ConsensusParams,
   ConsensusResult,
+  ClearFindingMemoryParams,
+  ImportReviewMemoryParams,
+  ImportReviewMemoryResult,
+  ReviewMemoryAnnotation,
+  ReviewMemoryEvent,
+  ReviewMemoryExport,
   RunFinding,
   RunGroupReport,
   ReviewHistoryItem,
@@ -41,7 +48,8 @@ import type {
   StartBatchResult,
   StartRunParams,
   SystemInfo,
-  TrayOpenRun
+  TrayOpenRun,
+  UpdateReviewMemoryAnnotationParams
 } from '../shared/types'
 
 /**
@@ -192,6 +200,26 @@ const api = {
       ipcRenderer.on(CHANNELS.runnerStatus, listener)
       return () => ipcRenderer.removeListener(CHANNELS.runnerStatus, listener)
     }
+  },
+
+  /** Local review-memory decisions for structured findings. Main derives the stable identity. */
+  reviewMemory: {
+    annotateFinding: (params: AnnotateFindingParams): Promise<ApiResult<ReviewMemoryAnnotation>> =>
+      ipcRenderer.invoke(CHANNELS.reviewMemoryAnnotateFinding, params),
+    updateAnnotation: (
+      params: UpdateReviewMemoryAnnotationParams
+    ): Promise<ApiResult<ReviewMemoryAnnotation>> =>
+      ipcRenderer.invoke(CHANNELS.reviewMemoryUpdateAnnotation, params),
+    clearAnnotation: (params: ClearFindingMemoryParams): Promise<ApiResult<true>> =>
+      ipcRenderer.invoke(CHANNELS.reviewMemoryClearAnnotation, params),
+    listRepo: (repoId: number): Promise<ApiResult<ReviewMemoryAnnotation[]>> =>
+      ipcRenderer.invoke(CHANNELS.reviewMemoryListRepo, repoId),
+    listRepoEvents: (repoId: number): Promise<ApiResult<ReviewMemoryEvent[]>> =>
+      ipcRenderer.invoke(CHANNELS.reviewMemoryListRepoEvents, repoId),
+    exportRepo: (repoId: number): Promise<ApiResult<ReviewMemoryExport>> =>
+      ipcRenderer.invoke(CHANNELS.reviewMemoryExportRepo, repoId),
+    importRepo: (params: ImportReviewMemoryParams): Promise<ApiResult<ImportReviewMemoryResult>> =>
+      ipcRenderer.invoke(CHANNELS.reviewMemoryImportRepo, params)
   },
 
   /** Saved review presets (agent + model + reasoning bundles). */

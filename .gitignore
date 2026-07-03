@@ -11,3 +11,6 @@ release
 
 # Local Claude Code tooling state (never project source)
 .claude/
+
+# Local Codex/research notes (never project source)
+.codex-local/

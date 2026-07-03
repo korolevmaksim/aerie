@@ -1,8 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { PostKind, RunGroupHistoryItem, RunGroupReport, RunLocalStatus } from '@shared/types'
+import type {
+  ConsensusFinding,
+  PostKind,
+  ReviewMemoryDecision,
+  RunGroupHistoryItem,
+  RunGroupReport,
+  RunLocalStatus
+} from '@shared/types'
 import { formatRelativeTime } from '../lib/format'
 import { runRefLabel } from '../lib/runConsole'
 import PostConfirmModal from './PostConfirmModal'
+import ReviewMemoryFindingActions from './ReviewMemoryFindingActions'
 import RunView from './RunView'
 
 function isTerminal(status: string): boolean {
@@ -13,6 +21,55 @@ function localStatusLabel(status: RunLocalStatus): string {
   if (status === 'handled') return 'Handled locally'
   if (status === 'verified') return 'Verified locally'
   return 'Open'
+}
+
+function decisionLabel(decision: ReviewMemoryDecision): string {
+  if (decision === 'false_positive') return 'false positive'
+  if (decision === 'accepted_risk') return 'accepted risk'
+  if (decision === 'needs_follow_up') return 'needs follow-up'
+  return decision
+}
+
+function memoryLabel(finding: ConsensusFinding): string | null {
+  const memory = finding.memory
+  if (!memory) return null
+  const parts = [`memory: ${decisionLabel(memory.annotation.decision)}`]
+  if (memory.reopened) parts.push('reopened')
+  if (memory.matchedBy === 'context_hash') parts.push('via context')
+  return parts.join(' · ')
+}
+
+function FindingRow({
+  finding,
+  onMemoryChanged
+}: {
+  finding: ConsensusFinding
+  onMemoryChanged: () => Promise<void>
+}): React.JSX.Element {
+  return (
+    <li
+      className={`run__finding run__finding--managed${finding.memory?.suppresses ? ' run__finding--suppressed' : ''}`}
+    >
+      <div className="run__finding-main">
+        <span className="chip">{finding.agreement}×</span>
+        <span className={`chip sev sev--${finding.severity}`}>{finding.severity}</span>
+        <code className="run__finding-loc">
+          {finding.file}
+          {finding.line != null ? `:${finding.line}` : ''}
+        </code>
+        <span className="run__finding-msg">{finding.message}</span>
+        {finding.memory && (
+          <span
+            className={`chip run__memory-chip${finding.memory.suppresses ? ' run__memory-chip--suppressed' : ''}${finding.memory.reopened ? ' run__memory-chip--reopened' : ''}`}
+            title={finding.memory.annotation.note || undefined}
+          >
+            {memoryLabel(finding)}
+          </span>
+        )}
+      </div>
+      <ReviewMemoryFindingActions finding={finding} onChanged={onMemoryChanged} />
+    </li>
+  )
 }
 
 function PanelReportView({
@@ -184,6 +241,10 @@ function PanelReportView({
           <span className="muted">Findings</span>
           <strong>{report?.totalFindings ?? 0}</strong>
         </div>
+        <div>
+          <span className="muted">Suppressed</span>
+          <strong>{report?.memorySuppressedFindings.length ?? 0}</strong>
+        </div>
       </div>
 
       {error && (
@@ -225,15 +286,7 @@ function PanelReportView({
             ) : (
               <ul className="run__findings-list">
                 {report.consensusFindings.map((finding, index) => (
-                  <li key={index} className="run__finding">
-                    <span className="chip">{finding.agreement}×</span>
-                    <span className={`chip sev sev--${finding.severity}`}>{finding.severity}</span>
-                    <code className="run__finding-loc">
-                      {finding.file}
-                      {finding.line != null ? `:${finding.line}` : ''}
-                    </code>
-                    <span className="run__finding-msg">{finding.message}</span>
-                  </li>
+                  <FindingRow key={finding.id || index} finding={finding} onMemoryChanged={load} />
                 ))}
               </ul>
             )}
@@ -246,19 +299,30 @@ function PanelReportView({
             ) : (
               <ul className="run__findings-list">
                 {report.singleSourceFindings.map((finding, index) => (
-                  <li key={index} className="run__finding">
-                    <span className="chip">{finding.agreement}×</span>
-                    <span className={`chip sev sev--${finding.severity}`}>{finding.severity}</span>
-                    <code className="run__finding-loc">
-                      {finding.file}
-                      {finding.line != null ? `:${finding.line}` : ''}
-                    </code>
-                    <span className="run__finding-msg">{finding.message}</span>
-                  </li>
+                  <FindingRow key={finding.id || index} finding={finding} onMemoryChanged={load} />
                 ))}
               </ul>
             )}
           </section>
+
+          {report.memorySuppressedFindings.length > 0 && (
+            <section className="panel-report__section">
+              <details className="run__suppressed">
+                <summary>
+                  Suppressed by review memory ({report.memorySuppressedFindings.length})
+                </summary>
+                <ul className="run__findings-list">
+                  {report.memorySuppressedFindings.map((finding, index) => (
+                    <FindingRow
+                      key={finding.id || index}
+                      finding={finding}
+                      onMemoryChanged={load}
+                    />
+                  ))}
+                </ul>
+              </details>
+            </section>
+          )}
 
           {finished && (
             <div className="run__local">

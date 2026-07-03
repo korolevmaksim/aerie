@@ -72,11 +72,19 @@ export function renderPanelReportMarkdown(args: {
   runs: RunHistoryItem[]
   consensusFindings: ConsensusFinding[]
   singleSourceFindings: ConsensusFinding[]
+  memorySuppressedFindings: ConsensusFinding[]
   consensusMin: number
   totalFindings: number
   outputs: Map<number, string>
 }): string {
-  const { group, consensusFindings, singleSourceFindings, consensusMin, totalFindings } = args
+  const {
+    group,
+    consensusFindings,
+    singleSourceFindings,
+    memorySuppressedFindings,
+    consensusMin,
+    totalFindings
+  } = args
   const successfulRuns = sortPanelRuns(args.runs).filter((run) => run.status === 'done')
   const successfulAgentIds = successfulRuns.map((run) => run.agentId)
   const lines: string[] = [
@@ -90,6 +98,12 @@ export function renderPanelReportMarkdown(args: {
   ]
 
   lines.push('## Consolidated findings', '')
+  if (memorySuppressedFindings.length > 0) {
+    lines.push(
+      `Review memory suppressed ${memorySuppressedFindings.length} repeated finding${memorySuppressedFindings.length === 1 ? '' : 's'} locally.`,
+      ''
+    )
+  }
   if (consensusFindings.length > 0) {
     lines.push(`Findings agreed by at least ${consensusMin} agents:`, '')
     lines.push(...consensusFindings.map(findingLine), '')

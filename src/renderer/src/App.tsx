@@ -451,7 +451,7 @@ function App(): React.JSX.Element {
             onConsumed={() => setPendingHistoryTarget(null)}
           />
         ) : view === 'settings' ? (
-          <SettingsPanel />
+          <SettingsPanel accountId={selectedId} />
         ) : openRepo ? (
           <RepoView accountId={selectedId} repo={openRepo} onBack={() => setOpenRepo(null)} />
         ) : (

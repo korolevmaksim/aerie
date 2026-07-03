@@ -13,6 +13,29 @@ same change set.
 
 ### Added
 
+- **Review memory / evidence ledger**: persisted structured findings now carry a
+  renderer-visible occurrence id, exact fingerprint, and versioned stable id. A new local SQLite
+  ledger stores repo/global finding decisions (`accepted`, `fixed`, `false_positive`,
+  `accepted_risk`, `duplicate`, `dismissed`, `needs_follow_up`) with append-only audit events.
+  Run findings, manual consensus, and panel reports match repeat findings by stable id, then fall
+  back to a hash-only source-context id when path/message drift would otherwise miss the prior
+  decision. Suppressing decisions collapse repeat noise into recoverable local UI sections and are
+  omitted from panel finding lists while retaining visible suppressed counts; repeated `fixed`
+  findings stay actionable and are marked reopened. New typed IPC/preload methods let the renderer
+  annotate, update, archive, export, or import review-memory records without supplying raw stable
+  ids or context keys.
+  Settings adds a per-repo Review memory manager with search, decision/scope filters, editable
+  notes/statuses, stable/context ids, soft archive controls, selected-row bulk archive, JSON
+  export/import, and a recent audit-event timeline. Panel reports expose the same quick finding actions on consensus,
+  single-source, and suppressed rows. Single-run GitHub posting now warns when review memory has
+  locally suppressed structured findings, so suppressed noise is reviewed before the exact draft is
+  posted. LLM review prompts receive a bounded changed-file-only advisory memory section, with run
+  transcript counts and no archived/full-repo memory injection. Archived decisions leave future
+  matching but remain exportable.
+  `smoke:store` verifies migration, repo/global precedence, context fallback, reopened `fixed`
+  repeats, note redaction before persistence, required notes for suppressions, updates, archive
+  events, export/import, and suppression policy.
+
 - **Loading state clarity**: Review Cockpit now shows loading-safe metric and rail placeholders
   during first load or account switches instead of stale zeros, while Accounts, review launchers,
   prompt/preset settings, and panel reports avoid false empty states before their data arrives.

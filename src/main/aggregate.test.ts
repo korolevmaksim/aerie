@@ -10,7 +10,8 @@ function f(over: { tool: string; fingerprint: string } & Partial<Finding>): Find
     file: over.file ?? 'a.ts',
     line: over.line === undefined ? 1 : over.line, // respect an explicit null
     message: over.message ?? 'msg',
-    fingerprint: over.fingerprint
+    fingerprint: over.fingerprint,
+    stableId: over.stableId ?? `stable:${over.fingerprint}`
   }
 }
 

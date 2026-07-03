@@ -1,3 +1,5 @@
+import { createHash } from 'crypto'
+
 // Pure normalization of tool/agent output into a common Finding shape, plus
 // diff-scoping (ROADMAP M4). Electron-free so it is unit-testable. The runner/store
 // (persistence + redaction) and the remaining tool parsers (gitleaks/ruff/biome/tsc)
@@ -18,7 +20,21 @@ export interface Finding {
   message: string
   /** Stable across runs/sources for the same issue — the dedup key (M6). */
   fingerprint: string
+  /**
+   * Versioned, longer-lived issue identity for review memory. Unlike the exact
+   * fingerprint, this intentionally ignores line number so a finding can still
+   * match after nearby edits move the code.
+   */
+  stableId: string
+  /**
+   * Optional line-context identity for review-memory fallback matching. This is a
+   * hash only; source snippets are never persisted.
+   */
+  contextHash?: string | null
 }
+
+export const FINDING_STABLE_ID_VERSION = 'aerie-finding-v1'
+export const FINDING_CONTEXT_VERSION = 'aerie-context-v1'
 
 const SEVERITY_ORDER: Record<Severity, number> = {
   critical: 5,
@@ -45,6 +61,59 @@ function fnv1a(s: string): string {
 
 function normalizeMessage(m: string): string {
   return m.trim().replace(/\s+/g, ' ').toLowerCase()
+}
+
+function normalizePathForIdentity(file: string): string {
+  return file.trim().replace(/\\/g, '/').replace(/^\.\//, '')
+}
+
+function sha256Hex(s: string): string {
+  return createHash('sha256').update(s).digest('hex')
+}
+
+/** Versioned, line-insensitive issue id for review memory matching. */
+export function stableFindingIdOf(parts: {
+  tool: string
+  file: string
+  ruleId: string | null
+  message: string
+}): string {
+  const body = [
+    parts.tool.trim().toLowerCase(),
+    normalizePathForIdentity(parts.file),
+    parts.ruleId?.trim().toLowerCase() ?? '',
+    normalizeMessage(parts.message)
+  ].join('\u0000')
+  return `${FINDING_STABLE_ID_VERSION}:${sha256Hex(body).slice(0, 32)}`
+}
+
+function normalizeContextSnippet(snippet: string): string {
+  return snippet
+    .split(/\r?\n/)
+    .map((line) => line.trim().replace(/[ \t]+/g, ' '))
+    .join('\n')
+    .trim()
+}
+
+/**
+ * Hashes a bounded source window for lower-confidence review-memory fallback
+ * matching. It intentionally omits file path, line, and message so line drift,
+ * file moves, and wording changes can still match. Tool/rule stay in the key to
+ * avoid broad cross-tool suppressions.
+ */
+export function findingContextHashOf(parts: {
+  tool: string
+  ruleId: string | null
+  snippet: string
+}): string | null {
+  const snippet = normalizeContextSnippet(parts.snippet)
+  if (!snippet) return null
+  const body = [
+    parts.tool.trim().toLowerCase(),
+    parts.ruleId?.trim().toLowerCase() ?? '',
+    snippet
+  ].join('\u0000')
+  return `${FINDING_CONTEXT_VERSION}:${sha256Hex(body).slice(0, 32)}`
 }
 
 /** A stable fingerprint for "the same issue" across runs/sources (the dedup key). */
@@ -78,7 +147,18 @@ function makeFinding(
     file: f.file,
     line: f.line,
     message: f.message,
-    fingerprint: fingerprintOf({ file: f.file, line: f.line, ruleId: f.ruleId, message: f.message })
+    fingerprint: fingerprintOf({
+      file: f.file,
+      line: f.line,
+      ruleId: f.ruleId,
+      message: f.message
+    }),
+    stableId: stableFindingIdOf({
+      tool,
+      file: f.file,
+      ruleId: f.ruleId,
+      message: f.message
+    })
   }
 }
 
@@ -495,7 +575,8 @@ export function redactFinding(f: Finding, redact: (s: string) => string): Findin
     file,
     ruleId,
     message,
-    fingerprint: fingerprintOf({ file, line: f.line, ruleId, message })
+    fingerprint: fingerprintOf({ file, line: f.line, ruleId, message }),
+    stableId: stableFindingIdOf({ tool: f.tool, file, ruleId, message })
   }
 }
 
