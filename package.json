@@ -59,7 +59,7 @@
     "@octokit/plugin-retry": "^8.1.0",
     "@octokit/plugin-throttling": "^11.0.3",
     "@octokit/rest": "^22.0.1",
-    "better-sqlite3": "^12.11.1",
+    "better-sqlite3": "^13.0.1",
     "simple-git": "^3.36.0"
   },
   "devDependencies": {
